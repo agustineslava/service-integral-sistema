@@ -1,0 +1,15 @@
+# Evitar subir credenciales y configuración sensible
+.env
+backend/.env
+
+# Evitar subir dependencias instaladas (se descargan con npm install)
+node_modules/
+backend/node_modules/
+
+# Evitar subir los backups automáticos que generamos
+backend/backups/
+backups/
+
+# Archivos temporales o del sistema operativo
+.DS_Store
+Thumbs.db

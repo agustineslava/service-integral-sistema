@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Integral - Gestion de Stock</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <section class="barra-cabecera">
+            <div class="logo">
+                <img src="logos/logo.jpg" href="index.html" alt="Logo de la empresa">
+                <div class="servidor-estado">Servidor Local: <span class="badge-online">Conectado</span></div>
+            </div>
+            <nav class="menu-navegacion">
+                <ul>
+                    <li><a href="index.html" class="activo" id="nav-stock">Stock</a></li>
+                    <li><a href="#" id="nav-ventas">Ventas</a></li>
+                    <li><a href="pedidos.html" id="nav-pedidos">Pedidos</a></li>
+                    
+                </ul>
+            </nav>
+        </section>
+    </header>
+    <main class="contenedor-principal">
+        <section class="contenedor-principal">
+            <h1>Bienvenido a Service Integral</h1>
+            <p>Gestión de Stock y Ventas</p>
+        </section>
+
+        <div class="alerta-stock" id="alerta-stock-minimo" style="display: none;">
+            <strong>⚠️ Alerta de Stock Crítico:</strong> Los siguientes artículos están por debajo del límite mínimo:
+                <ul id="lista-critica">
+                    </ul>
+        </div>
+
+        <section class="panel-formulario">
+            <h2>Nuevo Producto</h2>
+            <form id="form-producto">
+                <div class="fila-formulario">
+                    <div class="campo w-50">
+                        <label for="nombre">Nombre del Producto:</label>
+                        <input type="text" id="nombre" name="nombre" required>
+                    </div>
+                    <div class="campo w-25">
+                        <label for="precio">Precio Costo ($)</label>
+                        <input type="number" id="precio" min="0" step="0.01" placeholder="0.0" required>
+                    </div>
+                    <div class="campo w-25">
+                        <label for="stock">Stock Inicial</label>
+                        <input type="number" id="stock" min="0" value="0" required>
+                    </div>
+                </div>
+
+                <div class="fila-formulario">
+                    <div class="campo w-33">
+                        <label for="stockMinimo">Stock Mínimo</label>
+                        <input type="number" id="stockMinimo" min="0" value="0" required>
+                    </div>
+                    <div class="campo w-33">
+                        <label for="categoria">Categoría</label>
+                        <select id="categoria">
+                            <option value="Lavarropas">Lavarropas</option>
+                            <option value="Heladeras">Heladeras</option>
+                            <option value="Lavavajillas">Lavavajillas</option>
+                            <option value="Secarropas">Secarropas</option>
+                            <option value="Otros">Otros</option>
+                        </select>
+                    </div>
+                    <div class="campo w-33">
+                        <label for="distribuidor">Proveedor / Distribuidor</label>
+                        <input type="text" id="distribuidor" placeholder="Seleccione o escriba proveedor">
+                    </div>
+                </div>
+
+                <div class="fila-formulario">
+                    <div class="campo w-50">
+                        <label for="codigoDistribuidor">Código Distribuidor</label>
+                        <input type="text" id="codigoDistribuidor" placeholder="Ej: WW02A00278">
+                    </div>
+                    <div class="campo w-50">
+                        <label for="descripcion">Descripción / Notas</label>
+                        <input type="text" id="descripcion" placeholder="Ej: Traba tensor para centrífuga">
+                    </div>
+                </div>
+
+                <div class="campo-imagenes-seccion">
+                    <label>Imágenes del Producto (Máx. 3 - Autocomprimidas)</label>
+                    <div class="slots-imagenes-contenedor">
+                        
+                        <!-- Slot 1 Alta -->
+                        <div class="slot-foto-sistema" id="slot-crear-1">
+                            <span class="slot-etiqueta">Foto 1</span>
+                            <div class="preview-wrapper">
+                                <img id="crear-preview-1" src="" alt="Vista previa 1" class="imagen-preview-control" style="display: none;">
+                                <div class="placeholder-vacio" onclick="document.getElementById('file-crear-1').click()">
+                                    <span class="icono-subida">➕</span>
+                                    <span class="texto-subida">Subir Foto</span>
+                                </div>
+                                <!-- 🔍 LUPA DE ZOOM -->
+                                <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-1')" style="display: none;">🔍</button>
+                            </div>
+                            <input type="file" id="file-crear-1" accept="image/*" style="display:none;" onchange="subirFotoDirecto(1, 'crear',event)">
+                            <input type="hidden" id="crear-img-url-1">
+                            <button type="button" class="btn-accion-foto btn-borrar-foto" onclick="eliminarFotoCrear(1)">Eliminar</button>
+                        </div>
+
+                        <!-- Slot 2 Alta -->
+                        <div class="slot-foto-sistema" id="slot-crear-2">
+                            <span class="slot-etiqueta">Foto 2</span>
+                            <div class="preview-wrapper">
+                                <img id="crear-preview-2" src="" alt="Vista previa 2" class="imagen-preview-control" style="display: none;">
+                                <div class="placeholder-vacio" onclick="document.getElementById('file-crear-2').click()">
+                                    <span class="icono-subida">➕</span>
+                                    <span class="texto-subida">Subir Foto</span>
+                                </div>
+                                <!-- 🔍 LUPA DE ZOOM -->
+                                <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-2')" style="display: none;">🔍</button>
+                            </div>
+                            <input type="file" id="file-crear-2" accept="image/*" style="display:none;" onchange="subirFotoDirecto(2, 'crear',event)">
+                            <input type="hidden" id="crear-img-url-2">
+                            <button type="button" class="btn-accion-foto btn-borrar-foto" onclick="eliminarFotoCrear(2)">Eliminar</button>
+                        </div>
+
+                        <!-- Slot 3 Alta -->
+                        <div class="slot-foto-sistema" id="slot-crear-3">
+                            <span class="slot-etiqueta">Foto 3</span>
+                            <div class="preview-wrapper">
+                                <img id="crear-preview-3" src="" alt="Vista previa 3" class="imagen-preview-control" style="display: none;">
+                                <div class="placeholder-vacio" onclick="document.getElementById('file-crear-3').click()">
+                                    <span class="icono-subida">➕</span>
+                                    <span class="texto-subida">Subir Foto</span>
+                                </div>
+                                <!-- 🔍 LUPA DE ZOOM -->
+                                <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-3')" style="display: none;">🔍</button>
+                            </div>
+                            <input type="file" id="file-crear-3" accept="image/*" style="display:none;" onchange="subirFotoDirecto(3, 'crear', event)">
+                            <input type="hidden" id="crear-img-url-3">
+                            <button type="button" class="btn-accion-foto btn-borrar-foto" onclick="eliminarFotoCrear(3)">Eliminar</button>
+                        </div>
+
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-crear">Crear Producto</button>
+            </form>
+        </section>
+           
+        <section class="seccion-busqueda">
+            <div class="buscador-avanzado">
+                <label for="select-filtro">Buscar por:</label>
+                <select id="select-filtro">
+                    <option value="nombre">Nombre / Componente</option>
+                    <option value="id">ID de Producto</option>
+                    <option value="codigoDistribuidor">Código Distribuidor</option>
+                    <option value="distribuidor">Proveedor</option>
+                    <option value="categoria">Categoría</option>
+                </select>
+                <input type="text" id="input-buscador" placeholder="Escriba los términos de búsqueda...">
+            </div>
+        </section>
+<section class="panel-tabla">
+            <h2>Lista de Productos</h2>
+            <div class="tabla-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Precio</th>
+                            <th>Stock</th>
+                            <th>Stock Mín</th>
+                            <th>Proveedor</th>
+                            <th>Código</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-cuerpo">
+                       </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <div id="modal-info" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar-modal" onclick="cerrarModal('modal-info')">&times;</span>
+            <h2 id="modal-titulo">Detalles del Producto</h2>
+            
+            <div class="modal-layout">
+                <div class="modal-datos">
+                    <p><strong>Nombre:</strong> <span id="info-nombre">Traba Tensor Centrífuga Mabe</span></p>
+                    <p><strong>Precio:</strong> $<span id="info-precio">117.31</span></p>
+                    <p><strong>Stock actual:</strong> <span id="info-stock">3</span></p>
+                    <p class="fila-inline">
+                    <p><strong>Stock Mínimo:</strong> 
+                       <input type="number" id="info-stock-min-input" min="0" class="input-mini" disabled>
+                    </p>
+                    <p><strong>Proveedor:</strong> <span id="info-proveedor">Mabe Córdoba</span></p>
+                    <p><strong>Código de Distribuidor:</strong> <code id="info-codigo">WW02A00278</code></p>
+                    <p><strong>Descripción:</strong> <span id="info-descripcion">Traba tensor compatible con múltiples modelos de centrífuga.</span></p>
+                    <div class="modal-botones">
+                        <button class="btn btn-actualizar" id="btn-modificar-datos">Actualizar datos</button>
+                        <button class="btn btn-crear" id="btn-modificar-minimo">Modificar stock mínimo</button>                    </div>
+                </div>
+                
+                <div class="modal-galeria">
+                    <h3>Imágenes del Componente</h3>
+                    <div class="imagenes-grid">
+                        
+                        <!-- Contenedor Foto 1 Info -->
+                        <div class="info-img-container">
+                            <img id="img-detalle-1" src="" alt="Vista 1" style="display: none;">
+                            <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-1" onclick="abrirZoom('img-detalle-1')" style="display: none;">🔍</button>
+                        </div>
+
+                        <!-- Contenedor Foto 2 Info -->
+                        <div class="info-img-container">
+                            <img id="img-detalle-2" src="" alt="Vista 2" style="display: none;">
+                            <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-2" onclick="abrirZoom('img-detalle-2')" style="display: none;">🔍</button>
+                        </div>
+
+                        <!-- Contenedor Foto 3 Info -->
+                        <div class="info-img-container">
+                            <img id="img-detalle-3" src="" alt="Vista 3" style="display: none;">
+                            <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-3" onclick="abrirZoom('img-detalle-3')" style="display: none;">🔍</button>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-editar" class="modal">
+    <div class="modal-contenido modal-chico">
+        <span class="cerrar-modal" onclick="cerrarModal('modal-editar')">&times;</span>
+        <h2>Editar Producto</h2>
+        
+        <form id="form-editar-producto">
+            
+            <div class="form-scroll-zona">
+                <div class="campo">
+                    <label for="edit-nombre">Nombre del Producto:</label>
+                    <input type="text" id="edit-nombre" required>
+                </div>
+                <div class="fila-formulario">
+                    <div class="campo w-50">
+                        <label for="edit-precio">Precio Costo ($)</label>
+                        <input type="number" id="edit-precio" min="0" step="0.01" required>
+                    </div>
+                    <div class="campo w-50">
+                        <label for="edit-stock">Stock Actual</label>
+                        <input type="number" id="edit-stock" min="0" required>
+                    </div>
+                </div>
+                <div class="fila-formulario">
+                    <div class="campo w-50">
+                        <label for="edit-distribuidor">Proveedor / Distribuidor</label>
+                        <input type="text" id="edit-distribuidor">
+                    </div>
+                    <div class="campo w-50">
+                        <label for="edit-codigo">Código Distribuidor</label>
+                        <input type="text" id="edit-codigo">
+                    </div>
+                </div>
+                <div class="campo">
+                    <label for="edit-descripcion">Descripción / Notas</label>
+                    <input type="text" id="edit-descripcion">
+                </div>
+
+               <div class="edit-imagenes-seccion">
+                        <h3>Gestión de Imágenes (Máx. 3 - Autocompresión)</h3>
+                        <div class="slots-imagenes-grid">
+                            <!-- Slot 1 Edición -->
+                            <div class="slot-foto">
+                                <span>Foto 1</span>
+                                <div class="preview-wrapper">
+                                    <img id="edit-preview-1" src="" alt="Slot 1" class="imagen-preview-control" style="display: none;">
+                                    <div class="placeholder-vacio" onclick="document.getElementById('file-edit-1').click()">
+                                        <span class="icono-subida">➕</span>
+                                        <span class="texto-subida">Subir Foto</span>
+                                    </div>
+                                    <!-- LUPA DE ZOOM -->
+                                    <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-1')" style="display: none;">🔍</button>
+                                </div>
+                                <input type="file" id="file-edit-1" accept="image/*" style="display:none;" onchange="subirFotoDirecto(1, 'edit', event)">
+                                <input type="hidden" id="edit-img-url-1">
+                                <button type="button" class="btn-accion-foto btn-borrar-foto" onclick="eliminarFotoSlot(1)">Eliminar</button>
+                            </div>
+
+                            <!-- Slot 2 Edición -->
+                            <div class="slot-foto">
+                                <span>Foto 2</span>
+                                <div class="preview-wrapper">
+                                    <img id="edit-preview-2" src="" alt="Slot 2" class="imagen-preview-control" style="display: none;">
+                                    <div class="placeholder-vacio" onclick="document.getElementById('file-edit-2').click()">
+                                        <span class="icono-subida">➕</span>
+                                        <span class="texto-subida">Subir Foto</span>
+                                    </div>
+                                    <!-- LUPA DE ZOOM -->
+                                    <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-2')" style="display: none;">🔍</button>
+                                </div>
+                                <input type="file" id="file-edit-2" accept="image/*" style="display:none;" onchange="subirFotoDirecto(2, 'edit', event)">
+                                <input type="hidden" id="edit-img-url-2">
+                                <button type="button" class="btn-accion-foto btn-borrar-foto" onclick="eliminarFotoSlot(2)">Eliminar</button>
+                            </div>
+
+                            <!-- Slot 3 Edición -->
+                            <div class="slot-foto">
+                                <span>Foto 3</span>
+                                <div class="preview-wrapper">
+                                    <img id="edit-preview-3" src="" alt="Slot 3" class="imagen-preview-control" style="display: none;">
+                                    <div class="placeholder-vacio" onclick="document.getElementById('file-edit-3').click()">
+                                        <span class="icono-subida">➕</span>
+                                        <span class="texto-subida">Subir Foto</span>
+                                    </div>
+                                    <!-- LUPA DE ZOOM -->
+                                    <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-3')" style="display: none;">🔍</button>
+                                </div>
+                                <input type="file" id="file-edit-3" accept="image/*" style="display:none;" onchange="subirFotoDirecto(3, 'edit', event)">
+                                <input type="hidden" id="edit-img-url-3">
+                                <button type="button" class="btn-accion-foto btn-borrar-foto" onclick="eliminarFotoSlot(3)">Eliminar</button>
+                            </div>
+
+                        </div>
+                    </div>
+                </div> 
+            <button type="submit" class="btn btn-actualizar">Guardar Cambios</button>
+        </form>
+    </div>
+</div>
+<script src="utils-imagenes.js"></script>
+<script src="app.js"></script>
+<div id="modal-zoom-visor" class="modal-zoom" onclick="cerrarZoom()">
+    <span class="cerrar-zoom">&times;</span>
+    <img class="modal-zoom-contenido" id="imagen-zoom-gigante" src="">
+</div>
+</body>
+</html>

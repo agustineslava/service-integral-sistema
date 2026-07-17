@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Integral - Gestión de Pedidos</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <section class="barra-cabecera">
+            <div class="logo">
+                <img src="logos/logo.jpg" alt="Logo de la empresa">
+                <div class="servidor-estado">Servidor Local: <span class="badge-online">Conectado</span></div>
+            </div>
+            <nav class="menu-navegacion">
+                <ul>
+                    <li><a href="index.html" id="nav-stock">Stock</a></li>
+                    <li><a href="#" id="nav-ventas">Ventas</a></li>
+                    <li><a href="pedidos.html" class="activo" id="nav-pedidos">Pedidos</a></li>
+                </ul>
+            </nav>
+        </section>
+    </header>
+    <main class="contenedor-principal">
+        <div class="titulo-seccion">
+            <h1>Generar Pedido a Proveedores</h1>
+            <p>Armá la lista de repuestos y componentes faltantes para enviar al distribuidor.</p>
+        </div>
+
+        <div class="layout-pedidos">
+            
+            <section class="panel-agregar-pedido">
+                <div class="tarjeta-control">
+                    <h2>Buscar y Añadir Repuesto</h2>
+                    <div class="campo">
+                        <label for="buscar-pedido-art">Buscar por Nombre o Código:</label>
+                        <input type="text" id="buscar-pedido-art" placeholder="Ej: Traba Tensor Mabe...">
+                    </div>
+                    
+                    <div class="resultados-busqueda-pedido" id="lista-sugerencias-pedido">
+                        <p class="texto-vacio">Escribí para buscar repuestos disponibles...</p>
+                    </div>
+                </div>
+
+                <div class="tarjeta-control alerta-critica-pedidos">
+                    <h2>⚠️ Sugerencias por Stock Mínimo</h2>
+                    <p>Los siguientes artículos alcanzaron o superaron el límite crítico:</p>
+                    <ul id="sugerencias-stock-critico" class="lista-sugerencias-criticas">
+                        <li>Cargando sugerencias de stock crítico...</li>
+                    </ul>
+                </div>
+            </section>
+
+            <section class="panel-lista-pedido">
+                <div class="tarjeta-control lista-final-tarjeta">
+                    <div class="encabezado-lista-pedido">
+                        <h2>Lista de Pedido Actual</h2>
+                        <button class="btn btn-eliminar" id="btn-vaciar-lista" style="padding: 0.5rem 1rem;">Vaciar Lista</button>
+                    </div>
+
+                    <div class="tabla-contenedor-pedido">
+                        <table class="tabla-sistema">
+                            <thead>
+                                <tr>
+                                    <th>Cód. Fábrica</th>
+                                    <th>Descripción / Componente</th>
+                                    <th>Proveedor</th>
+                                    <th style="width: 100px;">Cantidad</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-pedido-cuerpo">
+                                <tr>
+                                    <td colspan="5" style="text-align: center;" class="texto-vacio">
+                                        La lista está vacía. Añadí repuestos desde el panel izquierdo.
+                                    </td>
+                               </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="acciones-pedido-final">
+                        <div class="campo-nota">
+                            <label for="notas-pedido">Notas para el Proveedor:</label>
+                            <textarea id="notas-pedido" placeholder="Ej: Enviar por colectivo, Factura A, etc..." rows="2"></textarea>
+                        </div>
+                        <div class="grupo-botones-pedido">
+                            <button class="btn btn-info" id="btn-copiar-pedido">📋 Copiar Lista</button>
+                            <button class="btn btn-actualizar" id="btn-exportar-pedido">💾 Guardar Pedido</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+    <section class="seccion-historial-pedidos" style="margin-top: 2rem;">
+            <div class="tarjeta-control">
+                <h2>📋 Historial de Pedidos Recientes (Últimos 2 meses)</h2>
+                <div class="tabla-contenedor-pedido">
+                    <table class="tabla-sistema">
+                        <thead>
+                            <tr>
+                                <th>Nº Pedido</th>
+                                <th>Fecha y Hora</th>
+                                <th>Notas / Observaciones</th>
+                                <th style="text-align: center;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-historial-cuerpo">
+                            <tr>
+                                <td colspan="4" style="text-align: center;" class="texto-vacio">Cargando historial...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+    <div id="modal-detalle-pedido" class="modal">
+        <div class="modal-contenido modal-chico" style="height: auto; max-height: 80%;">
+            <span class="cerrar-modal" onclick="cerrarModal('modal-detalle-pedido')">&times;</span>
+            <h2 id="pedido-modal-titulo">Detalle del Pedido #</h2>
+            <p><small id="pedido-modal-fecha" style="color: #6c757d;"></small></p>
+            
+            <div class="tabla-contenedor-pedido" style="margin-top: 1rem; max-height: 15rem;">
+                <table class="tabla-sistema">
+                    <thead>
+                        <tr>
+                            <th>Repuesto</th>
+                            <th>Cód. Distribuidor</th>
+                            <th style="text-align: center;">Cantidad</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-modal-items-cuerpo">
+                        </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top: 1rem; border-top: 1px solid #dee2e6; padding-top: 1rem;">
+                <strong>Notas asociadas:</strong>
+                <p id="pedido-modal-notas" style="font-style: italic; color: #555; background: #f8f9fa; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">Sin notas.</p>
+            </div>
+            
+            <button class="btn btn-info w-100" style="margin-top: 1rem;" onclick="cerrarModal('modal-detalle-pedido')">Entendido</button>
+        </div>
+    </div>
+
+    <script src="pedidos.js"></script>
+</body>
+</html>
