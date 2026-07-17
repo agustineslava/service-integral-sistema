@@ -1,48 +1,90 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Integral - Gestion de Stock</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Service Integral - Gestión de Stock</title>
+    <!-- 💾 ?v=1.2 obliga al navegador a limpiar el caché y cargar el último diseño adaptativo -->
+    <link rel="stylesheet" href="style.css?v=1.2">
 </head>
 <body>
+
+    <!-- ==========================================================================
+       1. CABECERA (HEADER) Y NAVEGACIÓN PRINCIPAL
+       ========================================================================== -->
     <header>
         <section class="barra-cabecera">
+            <!-- Bloque de Identidad de Marca -->
             <div class="logo">
-                <img src="logos/logo.jpg" href="index.html" alt="Logo de la empresa">
-                <div class="servidor-estado">Servidor Local: <span class="badge-online">Conectado</span></div>
+                <img src="logos/logo.jpg" alt="Logo de Service Integral">
+                <div class="servidor-estado">
+                    Servidor Local: <span class="badge-online">Conectado</span>
+                </div>
             </div>
+            <!-- Menú de navegación interactivo -->
             <nav class="menu-navegacion">
                 <ul>
-                    <li><a href="index.html" class="activo" id="nav-stock">Stock</a></li>
+                    <li><a href="index.html" class="active" id="nav-stock">Stock</a></li>
                     <li><a href="#" id="nav-ventas">Ventas</a></li>
                     <li><a href="pedidos.html" id="nav-pedidos">Pedidos</a></li>
-                    
+                    <!-- Botón de cambio rápido para Modo Claro / Oscuro -->
+                    <li>
+                        <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema de color">
+                                <!-- SVG del Sol (Se muestra cuando estamos en Modo Oscuro para pasar a Claro) -->
+                                <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="4"></circle>
+                                    <path d="M12 2v2"></path>
+                                    <path d="M12 20v2"></path>
+                                    <path d="m4.93 4.93 1.41 1.41"></path>
+                                    <path d="m17.66 17.66 1.41 1.41"></path>
+                                    <path d="M2 12h2"></path>
+                                    <path d="M20 12h2"></path>
+                                    <path d="m6.34 17.66-1.41 1.41"></path>
+                                    <path d="m19.07 4.93-1.41 1.41"></path>
+                                </svg>
+                                
+                                <!-- SVG de la Luna (Se muestra cuando estamos en Modo Claro para pasar a Oscuro) -->
+                                <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+                                </svg>
+                        </button>                    
+                    </li>
                 </ul>
             </nav>
         </section>
     </header>
+
+    <!-- ==========================================================================
+       2. CONTENEDOR PRINCIPAL DE LA APLICACIÓN
+       ========================================================================== -->
     <main class="contenedor-principal">
-        <section class="contenedor-principal">
+        
+        <!-- Cartel de bienvenida principal -->
+        <section class="bienvenida">
             <h1>Bienvenido a Service Integral</h1>
             <p>Gestión de Stock y Ventas</p>
         </section>
 
+        <!-- Sistema automático de Alertas de Stock Mínimo (Manejado por app.js) -->
         <div class="alerta-stock" id="alerta-stock-minimo" style="display: none;">
             <strong>⚠️ Alerta de Stock Crítico:</strong> Los siguientes artículos están por debajo del límite mínimo:
-                <ul id="lista-critica">
-                    </ul>
+            <ul id="lista-critica">
+                <!-- Se rellena dinámicamente desde JavaScript -->
+            </ul>
         </div>
 
+        <!-- ==========================================================================
+           3. PANEL DE FORMULARIO: REGISTRO DE NUEVOS REPUESTOS
+           ========================================================================== -->
         <section class="panel-formulario">
             <h2>Nuevo Producto</h2>
             <form id="form-producto">
+                
+                <!-- Fila 1: Datos principales -->
                 <div class="fila-formulario">
                     <div class="campo w-50">
                         <label for="nombre">Nombre del Producto:</label>
-                        <input type="text" id="nombre" name="nombre" required>
-                    </div>
+                        <input type="text" id="nombre" name="nombre" placeholder="Ej: Bomba de desagote Whirlpool" autocomplete="off" required>                    </div>
                     <div class="campo w-25">
                         <label for="precio">Precio Costo ($)</label>
                         <input type="number" id="precio" min="0" step="0.01" placeholder="0.0" required>
@@ -53,6 +95,7 @@
                     </div>
                 </div>
 
+                <!-- Fila 2: Configuración de Stock, Categoría y Proveedor -->
                 <div class="fila-formulario">
                     <div class="campo w-33">
                         <label for="stockMinimo">Stock Mínimo</label>
@@ -70,10 +113,10 @@
                     </div>
                     <div class="campo w-33">
                         <label for="distribuidor">Proveedor / Distribuidor</label>
-                        <input type="text" id="distribuidor" placeholder="Seleccione o escriba proveedor">
-                    </div>
+                        <input type="text" id="distribuidor" placeholder="Seleccione o escriba proveedor">                    </div>
                 </div>
 
+                <!-- Fila 3: Códigos de referencia y notas de taller -->
                 <div class="fila-formulario">
                     <div class="campo w-50">
                         <label for="codigoDistribuidor">Código Distribuidor</label>
@@ -81,15 +124,16 @@
                     </div>
                     <div class="campo w-50">
                         <label for="descripcion">Descripción / Notas</label>
-                        <input type="text" id="descripcion" placeholder="Ej: Traba tensor para centrífuga">
+                        <input type="text" id="descripcion" placeholder="Ej: Traba tensor para centrífuga" autocomplete="off">
                     </div>
                 </div>
 
+                <!-- Fila 4: Slots de imágenes con previsualización inteligente -->
                 <div class="campo-imagenes-seccion">
                     <label>Imágenes del Producto (Máx. 3 - Autocomprimidas)</label>
                     <div class="slots-imagenes-contenedor">
                         
-                        <!-- Slot 1 Alta -->
+                        <!-- Slot Foto 1 -->
                         <div class="slot-foto-sistema" id="slot-crear-1">
                             <span class="slot-etiqueta">Foto 1</span>
                             <div class="preview-wrapper">
@@ -98,15 +142,14 @@
                                     <span class="icono-subida">➕</span>
                                     <span class="texto-subida">Subir Foto</span>
                                 </div>
-                                <!-- 🔍 LUPA DE ZOOM -->
                                 <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-1')" style="display: none;">🔍</button>
                             </div>
-                            <input type="file" id="file-crear-1" accept="image/*" style="display:none;" onchange="subirFotoDirecto(1, 'crear',event)">
+                            <input type="file" id="file-crear-1" accept="image/*" style="display:none;" onchange="subirFotoDirecto(1, 'crear', event)">
                             <input type="hidden" id="crear-img-url-1">
                             <button type="button" class="btn-accion-foto btn-borrar-foto" onclick="eliminarFotoCrear(1)">Eliminar</button>
                         </div>
 
-                        <!-- Slot 2 Alta -->
+                        <!-- Slot Foto 2 -->
                         <div class="slot-foto-sistema" id="slot-crear-2">
                             <span class="slot-etiqueta">Foto 2</span>
                             <div class="preview-wrapper">
@@ -115,15 +158,14 @@
                                     <span class="icono-subida">➕</span>
                                     <span class="texto-subida">Subir Foto</span>
                                 </div>
-                                <!-- 🔍 LUPA DE ZOOM -->
                                 <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-2')" style="display: none;">🔍</button>
                             </div>
-                            <input type="file" id="file-crear-2" accept="image/*" style="display:none;" onchange="subirFotoDirecto(2, 'crear',event)">
+                            <input type="file" id="file-crear-2" accept="image/*" style="display:none;" onchange="subirFotoDirecto(2, 'crear', event)">
                             <input type="hidden" id="crear-img-url-2">
                             <button type="button" class="btn-accion-foto btn-borrar-foto" onclick="eliminarFotoCrear(2)">Eliminar</button>
                         </div>
 
-                        <!-- Slot 3 Alta -->
+                        <!-- Slot Foto 3 -->
                         <div class="slot-foto-sistema" id="slot-crear-3">
                             <span class="slot-etiqueta">Foto 3</span>
                             <div class="preview-wrapper">
@@ -132,7 +174,6 @@
                                     <span class="icono-subida">➕</span>
                                     <span class="texto-subida">Subir Foto</span>
                                 </div>
-                                <!-- 🔍 LUPA DE ZOOM -->
                                 <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-3')" style="display: none;">🔍</button>
                             </div>
                             <input type="file" id="file-crear-3" accept="image/*" style="display:none;" onchange="subirFotoDirecto(3, 'crear', event)">
@@ -142,10 +183,14 @@
 
                     </div>
                 </div>
+                
                 <button type="submit" class="btn btn-crear">Crear Producto</button>
             </form>
         </section>
            
+        <!-- ==========================================================================
+           4. BUSCADOR DINÁMICO AVANZADO
+           ========================================================================== -->
         <section class="seccion-busqueda">
             <div class="buscador-avanzado">
                 <label for="select-filtro">Buscar por:</label>
@@ -159,7 +204,11 @@
                 <input type="text" id="input-buscador" placeholder="Escriba los términos de búsqueda...">
             </div>
         </section>
-<section class="panel-tabla">
+
+        <!-- ==========================================================================
+           5. TABLA INVENTARIO GENERAL
+           ========================================================================== -->
+        <section class="panel-tabla">
             <h2>Lista de Productos</h2>
             <div class="tabla-wrapper">
                 <table>
@@ -176,51 +225,61 @@
                         </tr>
                     </thead>
                     <tbody id="tabla-cuerpo">
-                       </tbody>
+                        <!-- Las filas dinámicas con alertas se renderizan desde app.js -->
+                    </tbody>
                 </table>
             </div>
         </section>
     </main>
 
+    <!-- ==========================================================================
+       6. VENTANAS EMERGENTES (MODALES)
+       ========================================================================== -->
+
+    <!-- --- MODAL A: VER DETALLES DEL PRODUCTO ("INFO") --- -->
     <div id="modal-info" class="modal">
         <div class="modal-contenido">
             <span class="cerrar-modal" onclick="cerrarModal('modal-info')">&times;</span>
             <h2 id="modal-titulo">Detalles del Producto</h2>
             
             <div class="modal-layout">
+                <!-- Columna Datos Técnicos -->
                 <div class="modal-datos">
-                    <p><strong>Nombre:</strong> <span id="info-nombre">Traba Tensor Centrífuga Mabe</span></p>
-                    <p><strong>Precio:</strong> $<span id="info-precio">117.31</span></p>
-                    <p><strong>Stock actual:</strong> <span id="info-stock">3</span></p>
-                    <p class="fila-inline">
-                    <p><strong>Stock Mínimo:</strong> 
-                       <input type="number" id="info-stock-min-input" min="0" class="input-mini" disabled>
-                    </p>
-                    <p><strong>Proveedor:</strong> <span id="info-proveedor">Mabe Córdoba</span></p>
-                    <p><strong>Código de Distribuidor:</strong> <code id="info-codigo">WW02A00278</code></p>
-                    <p><strong>Descripción:</strong> <span id="info-descripcion">Traba tensor compatible con múltiples modelos de centrífuga.</span></p>
+                    <p><strong>Nombre:</strong> <span id="info-nombre">Cargando...</span></p>
+                    <p><strong>Precio:</strong> $<span id="info-precio">0.00</span></p>
+                    <p><strong>Stock actual:</strong> <span id="info-stock">0</span></p>
+                    <div class="fila-inline" style="margin-bottom: 12px;">
+                        <strong>Stock Mínimo:</strong> 
+                        <input type="number" id="info-stock-min-input" min="0" class="input-mini" disabled>
+                    </div>
+                    <p><strong>Proveedor:</strong> <span id="info-proveedor">No asignado</span></p>
+                    <p><strong>Código de Distribuidor:</strong> <code id="info-codigo">N/A</code></p>
+                    <p><strong>Descripción:</strong> <span id="info-descripcion">Sin notas adicionales.</span></p>
+                    
                     <div class="modal-botones">
                         <button class="btn btn-actualizar" id="btn-modificar-datos">Actualizar datos</button>
-                        <button class="btn btn-crear" id="btn-modificar-minimo">Modificar stock mínimo</button>                    </div>
+                        <button class="btn btn-crear" id="btn-modificar-minimo">Modificar stock mínimo</button>
+                    </div>
                 </div>
                 
+                <!-- Columna Galería Fotográfica de Consulta -->
                 <div class="modal-galeria">
                     <h3>Imágenes del Componente</h3>
                     <div class="imagenes-grid">
                         
-                        <!-- Contenedor Foto 1 Info -->
+                        <!-- Caja Foto 1 Info -->
                         <div class="info-img-container">
                             <img id="img-detalle-1" src="" alt="Vista 1" style="display: none;">
                             <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-1" onclick="abrirZoom('img-detalle-1')" style="display: none;">🔍</button>
                         </div>
 
-                        <!-- Contenedor Foto 2 Info -->
+                        <!-- Caja Foto 2 Info -->
                         <div class="info-img-container">
                             <img id="img-detalle-2" src="" alt="Vista 2" style="display: none;">
                             <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-2" onclick="abrirZoom('img-detalle-2')" style="display: none;">🔍</button>
                         </div>
 
-                        <!-- Contenedor Foto 3 Info -->
+                        <!-- Caja Foto 3 Info -->
                         <div class="info-img-container">
                             <img id="img-detalle-3" src="" alt="Vista 3" style="display: none;">
                             <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-3" onclick="abrirZoom('img-detalle-3')" style="display: none;">🔍</button>
@@ -232,46 +291,49 @@
         </div>
     </div>
 
+    <!-- --- MODAL B: FORMULARIO DE EDICIÓN COMPACTO --- -->
     <div id="modal-editar" class="modal">
-    <div class="modal-contenido modal-chico">
-        <span class="cerrar-modal" onclick="cerrarModal('modal-editar')">&times;</span>
-        <h2>Editar Producto</h2>
-        
-        <form id="form-editar-producto">
+        <div class="modal-contenido modal-chico">
+            <span class="cerrar-modal" onclick="cerrarModal('modal-editar')">&times;</span>
+            <h2>Editar Producto</h2>
             
-            <div class="form-scroll-zona">
-                <div class="campo">
-                    <label for="edit-nombre">Nombre del Producto:</label>
-                    <input type="text" id="edit-nombre" required>
-                </div>
-                <div class="fila-formulario">
-                    <div class="campo w-50">
-                        <label for="edit-precio">Precio Costo ($)</label>
-                        <input type="number" id="edit-precio" min="0" step="0.01" required>
+            <form id="form-editar-producto">
+                <!-- Zona scrolleable interna para celulares o resoluciones compactas -->
+                <div class="form-scroll-zona">
+                    <div class="campo">
+                        <label for="edit-nombre">Nombre del Producto:</label>
+                        <input type="text" id="edit-nombre" required>
                     </div>
-                    <div class="campo w-50">
-                        <label for="edit-stock">Stock Actual</label>
-                        <input type="number" id="edit-stock" min="0" required>
+                    <div class="fila-formulario">
+                        <div class="campo w-50">
+                            <label for="edit-precio">Precio Costo ($)</label>
+                            <input type="number" id="edit-precio" min="0" step="0.01" required>
+                        </div>
+                        <div class="campo w-50">
+                            <label for="edit-stock">Stock Actual</label>
+                            <input type="number" id="edit-stock" min="0" required>
+                        </div>
                     </div>
-                </div>
-                <div class="fila-formulario">
-                    <div class="campo w-50">
-                        <label for="edit-distribuidor">Proveedor / Distribuidor</label>
-                        <input type="text" id="edit-distribuidor">
+                    <div class="fila-formulario">
+                        <div class="campo w-50">
+                            <label for="edit-distribuidor">Proveedor / Distribuidor</label>
+                            <input type="text" id="edit-distribuidor">
+                        </div>
+                        <div class="campo w-50">
+                            <label for="edit-codigo">Código Distribuidor</label>
+                            <input type="text" id="edit-codigo">
+                        </div>
                     </div>
-                    <div class="campo w-50">
-                        <label for="edit-codigo">Código Distribuidor</label>
-                        <input type="text" id="edit-codigo">
+                    <div class="campo">
+                        <label for="edit-descripcion">Descripción / Notas</label>
+                        <input type="text" id="edit-descripcion">
                     </div>
-                </div>
-                <div class="campo">
-                    <label for="edit-descripcion">Descripción / Notas</label>
-                    <input type="text" id="edit-descripcion">
-                </div>
 
-               <div class="edit-imagenes-seccion">
+                    <!-- Panel de edición y reemplazo de fotos -->
+                    <div class="edit-imagenes-seccion">
                         <h3>Gestión de Imágenes (Máx. 3 - Autocompresión)</h3>
                         <div class="slots-imagenes-grid">
+                            
                             <!-- Slot 1 Edición -->
                             <div class="slot-foto">
                                 <span>Foto 1</span>
@@ -281,7 +343,6 @@
                                         <span class="icono-subida">➕</span>
                                         <span class="texto-subida">Subir Foto</span>
                                     </div>
-                                    <!-- LUPA DE ZOOM -->
                                     <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-1')" style="display: none;">🔍</button>
                                 </div>
                                 <input type="file" id="file-edit-1" accept="image/*" style="display:none;" onchange="subirFotoDirecto(1, 'edit', event)">
@@ -298,7 +359,6 @@
                                         <span class="icono-subida">➕</span>
                                         <span class="texto-subida">Subir Foto</span>
                                     </div>
-                                    <!-- LUPA DE ZOOM -->
                                     <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-2')" style="display: none;">🔍</button>
                                 </div>
                                 <input type="file" id="file-edit-2" accept="image/*" style="display:none;" onchange="subirFotoDirecto(2, 'edit', event)">
@@ -315,7 +375,6 @@
                                         <span class="icono-subida">➕</span>
                                         <span class="texto-subida">Subir Foto</span>
                                     </div>
-                                    <!-- LUPA DE ZOOM -->
                                     <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-3')" style="display: none;">🔍</button>
                                 </div>
                                 <input type="file" id="file-edit-3" accept="image/*" style="display:none;" onchange="subirFotoDirecto(3, 'edit', event)">
@@ -326,15 +385,21 @@
                         </div>
                     </div>
                 </div> 
-            <button type="submit" class="btn btn-actualizar">Guardar Cambios</button>
-        </form>
+                <button type="submit" class="btn btn-actualizar">Guardar Cambios</button>
+            </form>
+        </div>
     </div>
-</div>
-<script src="utils-imagenes.js"></script>
-<script src="app.js"></script>
-<div id="modal-zoom-visor" class="modal-zoom" onclick="cerrarZoom()">
-    <span class="cerrar-zoom">&times;</span>
-    <img class="modal-zoom-contenido" id="imagen-zoom-gigante" src="">
-</div>
+
+    <!-- --- VISOR GIGANTE (LIGHTBOX INTERACTIVO) --- -->
+    <div id="modal-zoom-visor" class="modal-zoom" onclick="cerrarZoom()">
+        <span class="cerrar-zoom">&times;</span>
+        <img class="modal-zoom-contenido" id="imagen-zoom-gigante" src="" alt="Zoom componente">
+    </div>
+
+    <!-- ==========================================================================
+       7. SCRIPTS DE CONTROL JAVASCRIPT
+       ========================================================================== -->
+    <script src="utils-imagenes.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>

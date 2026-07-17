@@ -1,36 +1,76 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Integral - Gestión de Pedidos</title>
-    <link rel="stylesheet" href="style.css">
+    <!-- 💾 ?v=1.2 obliga al navegador a limpiar el caché y cargar el último diseño adaptativo -->
+    <link rel="stylesheet" href="style.css?v=1.2">
 </head>
 <body>
+
+    <!-- ==========================================================================
+       1. CABECERA (HEADER) Y NAVEGACIÓN PRINCIPAL
+       ========================================================================== -->
     <header>
         <section class="barra-cabecera">
+            <!-- Bloque de Identidad de Marca -->
             <div class="logo">
-                <img src="logos/logo.jpg" alt="Logo de la empresa">
-                <div class="servidor-estado">Servidor Local: <span class="badge-online">Conectado</span></div>
+                <img src="logos/logo.jpg" alt="Logo de Service Integral">
+                <div class="servidor-estado">
+                    Servidor Local: <span class="badge-online">Conectado</span>
+                </div>
             </div>
+            <!-- Menú de navegación interactivo -->
             <nav class="menu-navegacion">
                 <ul>
                     <li><a href="index.html" id="nav-stock">Stock</a></li>
                     <li><a href="#" id="nav-ventas">Ventas</a></li>
-                    <li><a href="pedidos.html" class="activo" id="nav-pedidos">Pedidos</a></li>
+                    <li><a href="pedidos.html" class="active" id="nav-pedidos">Pedidos</a></li>
+                    <!-- 🌟 BOTÓN DE TEMA CON SVGS INTERACTIVOS (Sincronizado con index) -->
+                    <li>
+                        <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema de color">
+                            <!-- SVG del Sol (Se muestra en Modo Oscuro para pasar a Claro) -->
+                            <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="4"></circle>
+                                <path d="M12 2v2"></path>
+                                <path d="M12 20v2"></path>
+                                <path d="m4.93 4.93 1.41 1.41"></path>
+                                <path d="m17.66 17.66 1.41 1.41"></path>
+                                <path d="M2 12h2"></path>
+                                <path d="M20 12h2"></path>
+                                <path d="m6.34 17.66-1.41 1.41"></path>
+                                <path d="m19.07 4.93-1.41 1.41"></path>
+                            </svg>
+                            
+                            <!-- SVG de la Luna (Se muestra en Modo Claro para pasar a Oscuro) -->
+                            <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+                            </svg>
+                        </button>
+                    </li>
                 </ul>
             </nav>
         </section>
     </header>
+
+    <!-- ==========================================================================
+       2. CONTENEDOR PRINCIPAL: CONTROL DE PEDIDOS
+       ========================================================================== -->
     <main class="contenedor-principal">
-        <div class="titulo-seccion">
+        
+        <!-- Cartel de bienvenida y contexto -->
+        <div class="titulo-seccion" style="margin-bottom: 25px;">
             <h1>Generar Pedido a Proveedores</h1>
             <p>Armá la lista de repuestos y componentes faltantes para enviar al distribuidor.</p>
         </div>
 
+        <!-- Layout en dos columnas: Buscador/Alertas a la izquierda, Lista a la derecha -->
         <div class="layout-pedidos">
             
+            <!-- --- COLUMNA IZQUIERDA: AGREGAR E IDEAS --- -->
             <section class="panel-agregar-pedido">
+                <!-- Tarjeta de Búsqueda de Artículos -->
                 <div class="tarjeta-control">
                     <h2>Buscar y Añadir Repuesto</h2>
                     <div class="campo">
@@ -38,27 +78,30 @@
                         <input type="text" id="buscar-pedido-art" placeholder="Ej: Traba Tensor Mabe...">
                     </div>
                     
-                    <div class="resultados-busqueda-pedido" id="lista-sugerencias-pedido">
+                    <div class="resultados-busqueda-pedido" id="lista-sugerencias-pedido" style="margin-top: 12px;">
                         <p class="texto-vacio">Escribí para buscar repuestos disponibles...</p>
                     </div>
                 </div>
 
-                <div class="tarjeta-control alerta-critica-pedidos">
+                <!-- Tarjeta de sugerencias por Stock Crítico -->
+                <div class="tarjeta-control alerta-critica-pedidos" style="margin-top: 20px;">
                     <h2>⚠️ Sugerencias por Stock Mínimo</h2>
-                    <p>Los siguientes artículos alcanzaron o superaron el límite crítico:</p>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Los siguientes artículos alcanzaron o superaron el límite crítico:</p>
                     <ul id="sugerencias-stock-critico" class="lista-sugerencias-criticas">
                         <li>Cargando sugerencias de stock crítico...</li>
                     </ul>
                 </div>
             </section>
 
+            <!-- --- COLUMNA DERECHA: PLANILLA DE PEDIDO ACTUAL --- -->
             <section class="panel-lista-pedido">
                 <div class="tarjeta-control lista-final-tarjeta">
                     <div class="encabezado-lista-pedido">
                         <h2>Lista de Pedido Actual</h2>
-                        <button class="btn btn-eliminar" id="btn-vaciar-lista" style="padding: 0.5rem 1rem;">Vaciar Lista</button>
+                        <button class="btn btn-eliminar" id="btn-vaciar-lista" style="padding: 6px 12px; font-size: 13px;">Vaciar Lista</button>
                     </div>
 
+                    <!-- Tabla de pre-pedido -->
                     <div class="tabla-contenedor-pedido">
                         <table class="tabla-sistema">
                             <thead>
@@ -75,11 +118,12 @@
                                     <td colspan="5" style="text-align: center;" class="texto-vacio">
                                         La lista está vacía. Añadí repuestos desde el panel izquierdo.
                                     </td>
-                               </tr>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
 
+                    <!-- Bloque de cierre del pedido (Notas y Exportación) -->
                     <div class="acciones-pedido-final">
                         <div class="campo-nota">
                             <label for="notas-pedido">Notas para el Proveedor:</label>
@@ -94,10 +138,13 @@
             </section>
         </div>
 
-    <section class="seccion-historial-pedidos" style="margin-top: 2rem;">
+        <!-- ==========================================================================
+           3. HISTORIAL DE COMPRAS/PEDIDOS REALIZADOS
+           ========================================================================== -->
+        <section class="seccion-historial-pedidos" style="margin-top: 2rem;">
             <div class="tarjeta-control">
                 <h2>📋 Historial de Pedidos Recientes (Últimos 2 meses)</h2>
-                <div class="tabla-contenedor-pedido">
+                <div class="tabla-contenedor-pedido" style="margin-top: 15px;">
                     <table class="tabla-sistema">
                         <thead>
                             <tr>
@@ -117,13 +164,19 @@
             </div>
         </section>
     </main>
+
+    <!-- ==========================================================================
+       4. VENTANAS EMERGENTES (MODALES)
+       ========================================================================== -->
+
+    <!-- --- MODAL DE DETALLE DEL PEDIDO --- -->
     <div id="modal-detalle-pedido" class="modal">
-        <div class="modal-contenido modal-chico" style="height: auto; max-height: 80%;">
+        <div class="modal-contenido modal-chico" style="height: auto; max-height: 85%;">
             <span class="cerrar-modal" onclick="cerrarModal('modal-detalle-pedido')">&times;</span>
             <h2 id="pedido-modal-titulo">Detalle del Pedido #</h2>
-            <p><small id="pedido-modal-fecha" style="color: #6c757d;"></small></p>
+            <p style="margin-top: 4px;"><small id="pedido-modal-fecha" style="color: var(--text-muted); font-weight: bold;"></small></p>
             
-            <div class="tabla-contenedor-pedido" style="margin-top: 1rem; max-height: 15rem;">
+            <div class="tabla-contenedor-pedido" style="margin-top: 1.5rem; max-height: 18rem; border: 1px solid var(--border-color); border-radius: 6px;">
                 <table class="tabla-sistema">
                     <thead>
                         <tr>
@@ -133,19 +186,23 @@
                         </tr>
                     </thead>
                     <tbody id="tabla-modal-items-cuerpo">
-                        </tbody>
+                        <!-- Renderizado dinámico de los artículos comprados -->
+                    </tbody>
                 </table>
             </div>
 
-            <div style="margin-top: 1rem; border-top: 1px solid #dee2e6; padding-top: 1rem;">
-                <strong>Notas asociadas:</strong>
-                <p id="pedido-modal-notas" style="font-style: italic; color: #555; background: #f8f9fa; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">Sin notas.</p>
+            <div style="margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                <strong>Notas asociadas al envío:</strong>
+                <p id="pedido-modal-notas" style="font-style: italic; color: var(--text-muted); background: var(--bg-body); padding: 10px; border-radius: 6px; margin-top: 0.5rem; border: 1.5px dashed var(--border-color);">Sin notas.</p>
             </div>
             
-            <button class="btn btn-info w-100" style="margin-top: 1rem;" onclick="cerrarModal('modal-detalle-pedido')">Entendido</button>
+            <button class="btn btn-info w-100" style="margin-top: 1.5rem;" onclick="cerrarModal('modal-detalle-pedido')">Entendido</button>
         </div>
     </div>
 
+    <!-- ==========================================================================
+       5. SCRIPTS DE CONTROL JAVASCRIPT
+       ========================================================================== -->
     <script src="pedidos.js"></script>
 </body>
 </html>

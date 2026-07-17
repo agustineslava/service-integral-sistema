@@ -1,5 +1,9 @@
-// Servidor local de Node.js
+/* ==========================================================================
+   1. CONFIGURACIÓN GLOBAL Y VARIABLES DE ESTADO
+   ========================================================================== */
+// URL base de la API de productos
 const API_URL = 'http://127.0.0.1:3000/api/productos';
+
 // Elementos del DOM
 const inputBuscar = document.getElementById('buscar-pedido-art');
 const listaSugerencias = document.getElementById('lista-sugerencias-pedido');
@@ -12,18 +16,21 @@ const notasPedido = document.getElementById('notas-pedido');
 const tablaHistorialCuerpo = document.getElementById('tabla-historial-cuerpo');
 const modalDetallePedido = document.getElementById('modal-detalle-pedido');
 const tablaModalItemsCuerpo = document.getElementById('tabla-modal-items-cuerpo');
-// Arrays globales
-let productosInventario = [];
-let listaPedidoActual = []; // Guarda los artículos añadidos al pedido
 
-// 1. INICIALIZAR: CARGAR PRODUCTOS DESDE MYSQL
+// Arrays globales para la gestión en memoria
+let productosInventario = [];
+let listaPedidoActual = []; // Guarda los artículos que vas sumando al pedido
+
+
+/* ==========================================================================
+   2. INICIALIZACIÓN: CONSULTA DE DATOS A MYSQL
+   ========================================================================== */
 async function cargarDatos() {
     try {
         const respuesta = await fetch(API_URL);
         if (!respuesta.ok) throw new Error(`Código de error del servidor: ${respuesta.status}`);
         
         productosInventario = await respuesta.json();
-        
         console.log("📦 Datos recibidos desde MySQL:", productosInventario);
         
         if (productosInventario.length === 0) {
@@ -34,14 +41,22 @@ async function cargarDatos() {
         renderizarSugerenciasCriticas();
     } catch (error) {
         console.error('Error cargando datos para pedidos:', error);
-        sugerenciasCriticas.innerHTML = `<li style="color: #dc3545; font-weight: bold;">❌ Error de Conexión: No se pudo conectar con el servidor en 127.0.0.1:3000. Asegurate de que node server.js esté corriendo.</li>`;
+        sugerenciasCriticas.innerHTML = `
+            <li style="color: #dc3545; font-weight: bold; list-style: none; padding: 10px;">
+                ❌ Error de Conexión: No se pudo conectar con el servidor en 127.0.0.1:3000. 
+                Asegurate de que "node server.js" esté corriendo.
+            </li>`;
     }
 }
 
-// 2. RENDERIZAR SUGERENCIAS AUTOMÁTICAS (STOCK CRÍTICO)
+
+/* ==========================================================================
+   3. SUGERENCIAS AUTOMÁTICAS (STOCK MÍNIMO)
+   ========================================================================== */
 function renderizarSugerenciasCriticas() {
     sugerenciasCriticas.innerHTML = '';
     
+    // Filtramos los repuestos que están igual o por debajo de su stock mínimo
     const criticos = productosInventario.filter(p => p.stock <= p.stockMinimo);
 
     if (criticos.length === 0) {
@@ -51,20 +66,24 @@ function renderizarSugerenciasCriticas() {
 
     criticos.forEach(p => {
         const li = document.createElement('li');
+        // Sugerimos pedir la diferencia para cubrir el mínimo, o al menos 1 unidad
         const cantidadSugerida = Math.max(1, p.stockMinimo - p.stock);
 
         li.innerHTML = `
             <div>
                 <strong>${p.nombre}</strong> <br>
-                <small style="color: #6c757d;">Stock: ${p.stock} / Mín: ${p.stockMinimo}</small>
+                <small style="color: var(--text-muted);">Stock: ${p.stock} / Mín: ${p.stockMinimo}</small>
             </div>
-            <button class="btn btn-actualizar" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;" onclick="agregarAlPedido(${p.id}, ${cantidadSugerida})">➕ Añadir</button>
+            <button class="btn btn-actualizar" style="padding: 4px 10px; font-size: 0.8rem;" onclick="agregarAlPedido(${p.id}, ${cantidadSugerida})">➕ Añadir</button>
         `;
         sugerenciasCriticas.appendChild(li);
     });
 }
 
-// 3. BUSCADOR EN VIVO DE REPUESTOS
+
+/* ==========================================================================
+   4. BUSCADOR INTERACTIVO EN VIVO
+   ========================================================================== */
 inputBuscar.addEventListener('input', () => {
     const termino = inputBuscar.value.toLowerCase().trim();
     listaSugerencias.innerHTML = '';
@@ -74,6 +93,7 @@ inputBuscar.addEventListener('input', () => {
         return;
     }
 
+    // Filtramos coincidiendo por nombre del componente o código del distribuidor
     const filtrados = productosInventario.filter(p => {
         const nombreValido = p.nombre ? p.nombre.toLowerCase().includes(termino) : false;
         const codigo = p.codigoDistribuidor || '';
@@ -92,15 +112,22 @@ inputBuscar.addEventListener('input', () => {
         div.innerHTML = `
             <div>
                 <strong>${p.nombre}</strong> <br>
-                <small>Cód: ${p.codigoDistribuidor || 'S/C'} | Proveedor: ${p.distribuidor || 'S/A'}</small>
+                <small style="color: var(--text-muted);">Cód: ${p.codigoDistribuidor || 'S/C'} | Prov: ${p.distribuidor || 'S/A'}</small>
             </div>
-            <button class="btn btn-info" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;" onclick="agregarAlPedido(${p.id}, 1)">➕</button>
+            <button class="btn btn-info" style="padding: 4px 8px; font-size: 0.85rem;" onclick="agregarAlPedido(${p.id}, 1)">➕</button>
         `;
         listaSugerencias.appendChild(div);
     });
 });
 
-// 4. AÑADIR UN ARTÍCULO A LA LISTA DE COMPRAS
+
+/* ==========================================================================
+   5. CONTROL DE LA LISTA DE COMPRAS EN MEMORIA
+   ========================================================================== */
+
+/**
+ * Añade un repuesto a la pre-lista de compras o aumenta su cantidad si ya existe
+ */
 function agregarAlPedido(id, cantidad) {
     const p = productosInventario.find(prod => prod.id === id);
     if (!p) return;
@@ -121,21 +148,28 @@ function agregarAlPedido(id, cantidad) {
     renderizarTablaPedido();
 }
 
-// 5. CAMBIAR CANTIDAD MANUALMENTE EN LA TABLA
+/**
+ * Modifica la cantidad de un artículo directamente desde el input de la tabla
+ */
 function cambiarCantidad(id, nuevaCantidad) {
     const item = listaPedidoActual.find(item => item.id === id);
     if (item) {
+        item.textValue = nuevaCantidad; // Evita pérdidas de foco innecesarias
         item.cantidad = parseInt(nuevaCantidad) || 1;
     }
 }
 
-// 6. QUITAR UN ARTÍCULO DE LA LISTA
+/**
+ * Quita una línea del pedido en curso
+ */
 function eliminarDelPedido(id) {
     listaPedidoActual = listaPedidoActual.filter(item => item.id !== id);
     renderizarTablaPedido();
 }
 
-// 7. RENDERIZAR LA TABLA DE PEDIDO ACTUAL
+/**
+ * Redibuja la tabla de pre-pedido a la derecha
+ */
 function renderizarTablaPedido() {
     tablaPedidoCuerpo.innerHTML = '';
 
@@ -169,7 +203,7 @@ function renderizarTablaPedido() {
     });
 }
 
-// 8. VACIAR TODA LA LISTA
+// Vaciar de un tirón el pre-pedido actual
 btnVaciar.addEventListener('click', () => {
     if (listaPedidoActual.length === 0) return;
     if (confirm('¿Querés borrar toda la lista actual de pedido?')) {
@@ -178,7 +212,10 @@ btnVaciar.addEventListener('click', () => {
     }
 });
 
-// 9. 📋 COPIAR LISTA FORMATEADA PARA WHATSAPP / MAIL
+
+/* ==========================================================================
+   6. EXPORTAR COMPILADO (WHATSAPP / PORTAPAPELES)
+   ========================================================================== */
 btnCopiar.addEventListener('click', () => {
     if (listaPedidoActual.length === 0) {
         alert('La lista está vacía.');
@@ -198,15 +235,18 @@ btnCopiar.addEventListener('click', () => {
 
     navigator.clipboard.writeText(textoFormateado)
         .then(() => {
-            alert('¡Lista copiada al portapapeles!');
+            alert('¡Lista formateada copiada al portapapeles! Ya podés pegarla en WhatsApp.');
         })
         .catch(err => {
             console.error('Error al copiar:', err);
-            alert('No se pudo copiar automáticamente. Copiá el texto manualmente.');
+            alert('No se pudo copiar automáticamente. Por favor, selecciona y copia el texto manualmente.');
         });
 });
 
-// 10. 💾 GUARDAR PEDIDO REAL EN MYSQL
+
+/* ==========================================================================
+   7. GUARDAR PEDIDO Y ENVIAR A MYSQL
+   ========================================================================== */
 btnGuardar.addEventListener('click', async () => {
     if (listaPedidoActual.length === 0) {
         alert('Añadí artículos antes de guardar el pedido.');
@@ -233,11 +273,13 @@ btnGuardar.addEventListener('click', async () => {
         if (respuesta.ok) {
             const data = await respuesta.json();
             alert(`¡Pedido #${data.pedidoId} guardado con éxito en MySQL!`);
+            
             obtenerHistorialPedidos();
             listaPedidoActual = [];
             notasPedido.value = '';
+            
             renderizarTablaPedido();
-            cargarDatos(); // Volvemos a consultar para refrescar las sugerencias críticas
+            cargarDatos(); // Volvemos a consultar para actualizar las alertas críticas
         } else {
             alert('Error al intentar guardar el pedido en el servidor.');
         }
@@ -247,7 +289,10 @@ btnGuardar.addEventListener('click', async () => {
     }
 });
 
-// 11. CARGAR Y MOSTRAR EL HISTORIAL DE PEDIDOS
+
+/* ==========================================================================
+   8. HISTORIAL DE PEDIDOS REALIZADOS
+   ========================================================================== */
 async function obtenerHistorialPedidos() {
     try {
         const respuesta = await fetch('http://127.0.0.1:3000/api/pedidos');
@@ -257,7 +302,7 @@ async function obtenerHistorialPedidos() {
         renderizarHistorial(historial);
     } catch (error) {
         console.error('Error al cargar historial:', error);
-        tablaHistorialCuerpo.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red;">No se pudo cargar el historial de pedidos.</td></tr>`;
+        tablaHistorialCuerpo.innerHTML = `<tr><td colspan="4" style="text-align: center; color: red; font-weight: bold;">No se pudo cargar el historial de pedidos.</td></tr>`;
     }
 }
 
@@ -276,7 +321,7 @@ function renderizarHistorial(lista) {
     }
 
     lista.forEach(ped => {
-        // Formateamos la fecha a algo legible en Argentina
+        // Formatear la fecha para Argentina (DD/MM/AAAA - HH:MM)
         const fechaLegible = new Date(ped.fecha).toLocaleString('es-AR', {
             day: '2-digit', month: '2-digit', year: 'numeric',
             hour: '2-digit', minute: '2-digit'
@@ -286,7 +331,7 @@ function renderizarHistorial(lista) {
         tr.innerHTML = `
             <td><strong>#${ped.id}</strong></td>
             <td>${fechaLegible} hs.</td>
-            <td><span style="color: #6c757d; font-size: 0.9rem;">${ped.notas || 'Sin anotaciones adicionales'}</span></td>
+            <td><span style="color: var(--text-muted); font-size: 0.9rem;">${ped.notas || 'Sin anotaciones adicionales'}</span></td>
             <td style="text-align: center;">
                 <button class="btn-tabla btn-info" onclick="verDetallePedido(${ped.id}, '${fechaLegible}', '${ped.notas || 'Sin notas.'}')">Ver Detalle</button>
             </td>
@@ -295,7 +340,10 @@ function renderizarHistorial(lista) {
     });
 }
 
-// 12. VER DETALLE DE UN PEDIDO PASADO EN LA MODAL
+
+/* ==========================================================================
+   9. VENTANA EMERGENTE: DETALLE DE UN COMPROBANTE DE COMPRA
+   ========================================================================== */
 async function verDetallePedido(id, fecha, notas) {
     document.getElementById('pedido-modal-titulo').textContent = `Detalle del Pedido #${id}`;
     document.getElementById('pedido-modal-fecha').textContent = `Realizado el: ${fecha} hs.`;
@@ -309,10 +357,10 @@ async function verDetallePedido(id, fecha, notas) {
         if (!respuesta.ok) throw new Error('Error al traer los repuestos');
         
         const items = await respuesta.json();
-        
         tablaModalItemsCuerpo.innerHTML = '';
+        
         if (items.length === 0) {
-            tablaModalItemsCuerpo.innerHTML = '<tr><td colspan="3" style="text-align: center;" class="texto-vacio">El pedido no tiene artículos registrados (pueden haber sido eliminados del stock).</td></tr>';
+            tablaModalItemsCuerpo.innerHTML = '<tr><td colspan="3" style="text-align: center;" class="texto-vacio">El pedido no tiene artículos activos (pueden haber sido borrados del stock).</td></tr>';
             return;
         }
 
@@ -321,32 +369,57 @@ async function verDetallePedido(id, fecha, notas) {
             tr.innerHTML = `
                 <td><strong>${it.nombre || 'Repuesto eliminado'}</strong></td>
                 <td><code>${it.codigoDistribuidor || 'N/A'}</code></td>
-                <td style="text-align: center;">${it.cantidad} un.</td>
+                <td style="text-align: center; font-weight: bold;">${it.cantidad} un.</td>
             `;
             tablaModalItemsCuerpo.appendChild(tr);
         });
 
     } catch (error) {
         console.error(error);
-        tablaModalItemsCuerpo.innerHTML = '<tr><td colspan="3" style="text-align: center; color: red;">Error al recuperar los artículos.</td></tr>';
+        tablaModalItemsCuerpo.innerHTML = '<tr><td colspan="3" style="text-align: center; color: red; font-weight: bold;">Error al recuperar los artículos.</td></tr>';
     }
 }
 
-// 🌟 FUNCIÓN PARA CERRAR VENTANAS MODALES EN PEDIDOS
 function cerrarModal(idModal) {
     document.getElementById(idModal).style.display = 'none';
 }
 
-// Permitir cerrar también si el usuario hace clic afuera de la caja blanca del modal
+// Cerrar haciendo clic afuera del recuadro
 window.addEventListener('click', (e) => {
-    const modal = document.getElementById('modal-detalle-pedido');
-    if (e.target === modal) {
-        modal.style.display = 'none';
+    if (e.target === modalDetallePedido) {
+        modalDetallePedido.style.display = 'none';
     }
 });
 
-// 🌟 ARRANQUE COMPLETO
+
+/* ==========================================================================
+   10. INTERRUPTOR DE MODO DE COLOR (Sincronizado)
+   ========================================================================== */
+function cambiarTemaManualmente() {
+    const cuerpo = document.body;
+    if (cuerpo.classList.contains('tema-claro')) {
+        cuerpo.classList.remove('tema-claro');
+        localStorage.setItem('tema-preferido', 'oscuro');
+    } else {
+        cuerpo.classList.add('tema-claro');
+        localStorage.setItem('tema-preferido', 'claro');
+    }
+}
+
+
+/* ==========================================================================
+   11. INICIALIZACIÓN DE LA PÁGINA DE PEDIDOS
+   ========================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
-    cargarDatos();             // Carga sugerencias y buscador
-    obtenerHistorialPedidos(); // Carga la tabla de pedidos históricos abajo de todo
+    // 1. Configurar la preferencia de Modo Claro / Oscuro guardada en el disco
+    const temaGuardado = localStorage.getItem('tema-preferido');
+    if (temaGuardado === 'claro') {
+        document.body.classList.add('tema-claro');
+    } else {
+        document.body.classList.remove('tema-claro');
+    }
+
+    // 2. Cargar los catálogos y sugerencias de MySQL
+    cargarDatos();
+    obtenerHistorialPedidos();
 });

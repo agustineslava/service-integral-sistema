@@ -1,7 +1,10 @@
-// Servidor local de Node.js
+/* ==========================================================================
+   1. CONFIGURACIÓN GLOBAL Y VARIABLES DE ESTADO
+   ========================================================================== */
+// URL base de la API en el backend local
 const API_URL = 'http://localhost:3000/api/productos';
 
-// Elementos del DOM
+// Elementos de la interfaz (DOM)
 const tablaCuerpo = document.getElementById('tabla-cuerpo');
 const inputBuscador = document.getElementById('input-buscador');
 const selectFiltro = document.getElementById('select-filtro');
@@ -10,11 +13,19 @@ const alertaStock = document.getElementById('alerta-stock-minimo');
 const listaCritica = document.getElementById('lista-critica');
 const modalInfo = document.getElementById('modal-info');
 
-// Array global para guardar los productos cargados
+// Array local para almacenar la copia de los productos de la base de datos
 let productosLocales = [];
+// ID del producto que está siendo seleccionado para Ver Detalle o Modificar
 let idProductoSeleccionado = null;
 
-// 1. CARGAR Y MOSTRAR ARTÍCULOS DESDE MYSQL
+
+/* ==========================================================================
+   2. RENDIMIENTO Y CONTROL DE LA TABLA PRINCIPAL
+   ========================================================================== */
+
+/**
+ * Consulta la API para traer todos los repuestos registrados en MySQL
+ */
 async function obtenerProductos() {
     try {
         const respuesta = await fetch(API_URL);
@@ -28,8 +39,12 @@ async function obtenerProductos() {
     }
 }
 
+/**
+ * Genera el cuerpo dinámico de la tabla HTML con los productos cargados
+ * @param {Array} lista - Listado de productos a renderizar
+ */
 function renderizarTabla(lista) {
-    tablaCuerpo.innerHTML = ''; // Limpiar filas viejas
+    tablaCuerpo.innerHTML = ''; // Limpiar las filas viejas del inventario
     
     if (lista.length === 0) {
         tablaCuerpo.innerHTML = `<tr><td colspan="8" style="text-align:center;">No se encontraron artículos</td></tr>`;
@@ -39,9 +54,9 @@ function renderizarTabla(lista) {
     lista.forEach(p => {
         const tr = document.createElement('tr');
         
-        // Si el stock actual es menor o igual al mínimo, se destaca visualmente
+        // 🌟 CLASE ADAPTATIVA: Si el stock actual es crítico, añadimos la clase de alerta CSS
         if (p.stock <= p.stockMinimo) {
-            tr.style.backgroundColor = '#fff3cd'; // Fondo amarillento sutil
+            tr.classList.add('fila-alerta-critica'); 
         }
 
         tr.innerHTML = `
@@ -64,7 +79,9 @@ function renderizarTabla(lista) {
     });
 }
 
-// ESCUCHADOR DE EVENTOS DELEGADO PARA ACCIONES EN LA TABLA
+/**
+ * Delegación de eventos para la tabla principal (Optimiza el uso de memoria en el navegador)
+ */
 tablaCuerpo.addEventListener('click', (e) => {
     const boton = e.target.closest('.btn-tabla');
     if (!boton) return; 
@@ -81,7 +98,10 @@ tablaCuerpo.addEventListener('click', (e) => {
     }
 });
 
-// 2. BUSCADOR INTERACTIVO AVANZADO (Por Columna)
+
+/* ==========================================================================
+   3. BUSCADOR INTERACTIVO AVANZADO
+   ========================================================================== */
 inputBuscador.addEventListener('input', () => {
     const termino = inputBuscador.value.toLowerCase().trim();
     const columnaFiltro = selectFiltro.value; 
@@ -94,7 +114,10 @@ inputBuscador.addEventListener('input', () => {
     renderizarTabla(filtrados);
 });
 
-// 3. CONTROL DE ALERTA DE STOCK MÍNIMO
+
+/* ==========================================================================
+   4. PANEL DE ADVERTENCIAS Y ALERTAS DE STOCK MÍNIMO
+   ========================================================================== */
 function verificarStockMinimo(lista) {
     listaCritica.innerHTML = '';
     const criticos = lista.filter(p => p.stock <= p.stockMinimo);
@@ -111,14 +134,22 @@ function verificarStockMinimo(lista) {
     }
 }
 
-// 4. VENTANA MODAL: VER DETALLE ("INFO") CON LAS 3 IMÁGENES Y LUPAS
+
+/* ==========================================================================
+   5. MÓDULO DE CONSULTA DETALLADA (MODAL INFO)
+   ========================================================================== */
+
+/**
+ * Carga todos los datos del producto seleccionado en el modal de Info
+ * @param {number} id - ID único del producto
+ */
 function verDetalle(id) {
     const p = productosLocales.find(prod => prod.id === id);
     if (!p) return;
     
     idProductoSeleccionado = id;
 
-    // Rellenar textos del modal
+    // Rellenar la información de texto en el modal
     document.getElementById('modal-titulo').textContent = `Detalles del Producto: ${p.nombre}`;
     document.getElementById('info-nombre').textContent = p.nombre;
     document.getElementById('info-precio').textContent = parseFloat(p.precio).toFixed(2);
@@ -127,13 +158,13 @@ function verDetalle(id) {
     document.getElementById('info-codigo').textContent = p.codigoDistribuidor || 'N/A';
     document.getElementById('info-descripcion').textContent = p.descripcion || 'Sin descripción adicional';
 
-    // Seteamos el valor actual en el INPUT numérico del stock mínimo
+    // Setear el valor en el input numérico para cambios rápidos del mínimo
     document.getElementById('info-stock-min-input').value = p.stockMinimo;
     document.getElementById('info-stock-min-input').disabled = true; 
     document.getElementById('btn-modificar-minimo').textContent = 'Modificar stock mínimo'; 
     document.getElementById('btn-modificar-minimo').style.backgroundColor = ''; 
 
-    // Rellenar imágenes de detalle y activar lupas si existen
+    // Renderizar las 3 imágenes opcionales y activar sus botones de zoom flotantes
     for (let i = 1; i <= 3; i++) {
         const urlImagen = p[`imagen_${i}`];
         const imgDetalle = document.getElementById(`img-detalle-${i}`);
@@ -150,22 +181,23 @@ function verDetalle(id) {
         }
     }
 
-    // Mostrar el modal
     modalInfo.style.display = 'block';
 }
 
-// CAMBIO DIRECTO DE STOCK MÍNIMO DESDE LA MISMA VENTANA DE INFO
+/**
+ * Modificación express de stock mínimo desde la propia modal de consulta
+ */
 document.getElementById('btn-modificar-minimo').addEventListener('click', async function() {
     if (!idProductoSeleccionado) return;
     
     const inputMinimo = document.getElementById('info-stock-min-input');
-    const botonAzul = this; 
+    const botonMinimo = this; 
 
     if (inputMinimo.disabled) {
         inputMinimo.disabled = false;
         inputMinimo.focus(); 
         inputMinimo.select(); 
-        botonAzul.textContent = 'Guardar stock mínimo'; 
+        botonMinimo.textContent = 'Guardar stock mínimo'; 
     } else {
         const nuevoMinimo = parseInt(inputMinimo.value) || 0;
 
@@ -180,8 +212,8 @@ document.getElementById('btn-modificar-minimo').addEventListener('click', async 
                 alert('¡Límite de stock mínimo actualizado!');
                 
                 inputMinimo.disabled = true;
-                botonAzul.textContent = 'Modificar stock mínimo';
-                botonAzul.style.backgroundColor = ''; 
+                botonMinimo.textContent = 'Modificar stock mínimo';
+                botonMinimo.style.backgroundColor = ''; 
                 
                 cerrarModal('modal-info');
                 obtenerProductos(); 
@@ -194,7 +226,15 @@ document.getElementById('btn-modificar-minimo').addEventListener('click', async 
     }
 });
 
-// ABRE EL MODAL DE EDICIÓN CARGANDO LOS DATOS ORIGINALES EN LOS INPUTS Y SLOTS
+
+/* ==========================================================================
+   6. MÓDULO DE GESTIÓN Y EDICIÓN DE PRODUCTOS (C.R.U.D.)
+   ========================================================================== */
+
+/**
+ * Carga los datos existentes de MySQL en el modal chico para editarlos
+ * @param {number} id - ID del producto a modificar
+ */
 async function prepararActualizacion(id) {
     try {
         const respuesta = await fetch(`http://127.0.0.1:3000/api/productos`);
@@ -204,7 +244,7 @@ async function prepararActualizacion(id) {
         if (!p) return;
         idProductoSeleccionado = id;
 
-        // Cargamos los inputs del modal con la data de la fila seleccionada
+        // Rellenar campos de texto
         document.getElementById('edit-nombre').value = p.nombre;
         document.getElementById('edit-precio').value = p.precio;
         document.getElementById('edit-stock').value = p.stock;
@@ -212,7 +252,7 @@ async function prepararActualizacion(id) {
         document.getElementById('edit-codigo').value = p.codigoDistribuidor || '';
         document.getElementById('edit-descripcion').value = p.descripcion || '';
 
-        // Cargamos las imágenes existentes de Cloudinary en las vistas previas controlando placeholders y lupas
+        // Seteo dinámico de imágenes con sus respectivos wrappers y lupas
         for (let i = 1; i <= 3; i++) {
             const urlImagen = p[`imagen_${i}`];
             const previewImg = document.getElementById(`edit-preview-${i}`);
@@ -235,10 +275,8 @@ async function prepararActualizacion(id) {
             }
         }
 
-        // Guardamos de forma temporal el ID del producto que estamos editando
+        // Marcar el formulario con el ID del producto que se está editando
         document.getElementById('form-editar-producto').setAttribute('data-id', id);
-        
-        // Abrimos la modal
         document.getElementById('modal-editar').style.display = 'block';
 
     } catch (error) {
@@ -246,29 +284,26 @@ async function prepararActualizacion(id) {
     }
 }
 
-// Redirecciona el botón "Actualizar datos" de la ventana de Info al formulario HTML de edición
+// Vincula el botón de "Actualizar datos" del modal de Info con el modal de Edición
 document.getElementById('btn-modificar-datos').addEventListener('click', () => {
     if (idProductoSeleccionado) prepararActualizacion(idProductoSeleccionado);
 });
 
-// PROCESAR EL ENVÍO DEL FORMULARIO DE EDICIÓN (PUT) - CORREGIDO REFRESCO EN VIVO Y EVITADO RECARGAS FALSAS
+// Guardar los cambios del producto (Método PUT)
 document.getElementById('form-editar-producto').addEventListener('submit', async (e) => {
     e.preventDefault();
     e.stopPropagation();
     
     const id = e.target.getAttribute('data-id');
 
+    // Normalizamos cadenas y números antes de enviarlos a Node.js
     const datosActualizados = {
-        // 🌟 Normalizamos con la primera letra en mayúscula al editar
         nombre: capitalizarPrimeraLetra(document.getElementById('edit-nombre').value),
         precio: parseFloat(document.getElementById('edit-precio').value) || 0.00,
         stock: parseInt(document.getElementById('edit-stock').value) || 0,
         distribuidor: capitalizarPrimeraLetra(document.getElementById('edit-distribuidor').value),
         descripcion: capitalizarPrimeraLetra(document.getElementById('edit-descripcion').value),
-        
-        // El código lo pasamos a mayúsculas
         codigoDistribuidor: document.getElementById('edit-codigo').value ? document.getElementById('edit-codigo').value.trim().toUpperCase() : null,
-        
         imagen_1: document.getElementById('edit-img-url-1').value || null,
         imagen_2: document.getElementById('edit-img-url-2').value || null,
         imagen_3: document.getElementById('edit-img-url-3').value || null
@@ -294,19 +329,7 @@ document.getElementById('form-editar-producto').addEventListener('submit', async
     }
 });
 
-// Funciones para cerrar las ventanas modales
-function cerrarModal(idModal) {
-    document.getElementById(idModal).style.display = 'none';
-}
-
-// Cerrar haciendo clic afuera de la caja del modal activo
-window.addEventListener('click', (e) => {
-    if (e.target.classList.contains('modal')) {
-        e.target.style.display = 'none';
-    }
-});
-
-// 5. GUARDAR NUEVO PRODUCTO DESDE EL FORMULARIO GENERAL
+// Registrar un nuevo producto desde el panel general (Método POST)
 formProducto.addEventListener('submit', async (e) => {
     e.preventDefault();
     const precioInput = document.getElementById('precio').value;
@@ -315,7 +338,6 @@ formProducto.addEventListener('submit', async (e) => {
     const descripcionInput = document.getElementById('descripcion').value;
 
     const nuevoProducto = {
-        // 🌟 Normalizamos con la primera letra en mayúscula
         nombre: capitalizarPrimeraLetra(document.getElementById('nombre').value),
         precio: precioInput ? parseFloat(precioInput) : 0.00,
         stock: parseInt(document.getElementById('stock').value) || 0,
@@ -323,10 +345,7 @@ formProducto.addEventListener('submit', async (e) => {
         categoria: document.getElementById('categoria').value,
         distribuidor: capitalizarPrimeraLetra(distribuidorInput),
         descripcion: capitalizarPrimeraLetra(descripcionInput),
-        
-        // El código de distribuidor nos conviene guardarlo siempre todo en MAYÚSCULAS
         codigoDistribuidor: codigoInput.trim() !== "" ? codigoInput.trim().toUpperCase() : null,
-        
         imagen_1: document.getElementById('crear-img-url-1').value || null,
         imagen_2: document.getElementById('crear-img-url-2').value || null,
         imagen_3: document.getElementById('crear-img-url-3').value || null
@@ -354,16 +373,14 @@ formProducto.addEventListener('submit', async (e) => {
     }
 });
 
-
-// 6. ELIMINAR COMPONENTE (MySQL + Limpieza física de Cloudinary)
+// Eliminar un repuesto completo (Borrado físico en Cloudinary + Borrado de fila en MySQL)
 async function eliminarProducto(id) {
     if (!confirm('¿Seguro que querés eliminar este repuesto del stock?')) return;
 
-    // Buscamos el producto en nuestro array local para saber si tiene fotos
     const productoABorrar = productosLocales.find(p => p.id === id);
 
     try {
-        // Si el producto tiene imágenes asociadas, las borramos primero de Cloudinary
+        // 1. Borrar todas las fotos activas en Cloudinary asociadas a este registro
         if (productoABorrar) {
             const fotosABorrar = [productoABorrar.imagen_1, productoABorrar.imagen_2, productoABorrar.imagen_3];
             
@@ -382,7 +399,7 @@ async function eliminarProducto(id) {
             }
         }
 
-        // Una vez limpiada la nube, procedemos a borrar el registro de MySQL
+        // 2. Borrar de la base de datos MySQL una vez saneada la nube
         const respuesta = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
         if (respuesta.ok) {
             alert('Artículo y sus archivos multimedia eliminados.');
@@ -395,7 +412,14 @@ async function eliminarProducto(id) {
     }
 }
 
-// 🌟 SUBIR FOTO DIRECTO A CLOUDINARY (Con compresión previa y sin propagación del submit)
+
+/* ==========================================================================
+   7. GESTIÓN FOTOGRÁFICA (SUBIDAS, RESETS Y COMPRESIÓN)
+   ========================================================================== */
+
+/**
+ * Procesa la imagen del input, la comprime de forma asíncrona y la sube a Cloudinary
+ */
 async function subirFotoDirecto(slotNum, contexto = 'crear', evento) {
     if (evento) {
         evento.preventDefault();
@@ -410,7 +434,7 @@ async function subirFotoDirecto(slotNum, contexto = 'crear', evento) {
     const file = inputElement.files[0];
     if (!file) return;
 
-    previewImg.style.opacity = '0.5';
+    previewImg.style.opacity = '0.5'; // Opacidad de carga
     
     try {
         const fotoComprimida = await comprimirImagen(file, 200);
@@ -443,7 +467,9 @@ async function subirFotoDirecto(slotNum, contexto = 'crear', evento) {
     }
 }
 
-// RESETEAR SLOT DE FOTO (Evita íconos rotos)
+/**
+ * Borra la imagen de un slot en Cloudinary y limpia la previsualización
+ */
 async function resetearSlot(slotNum, contexto) {
     const previewImg = document.getElementById(`${contexto}-preview-${slotNum}`);
     const placeholder = previewImg.parentElement.querySelector('.placeholder-vacio');
@@ -453,7 +479,6 @@ async function resetearSlot(slotNum, contexto) {
 
     const urlEliminar = hiddenUrlInput.value;
 
-    // Si el slot ya tenía una imagen cargada, le pedimos al backend que la borre físicamente de la nube
     if (urlEliminar && urlEliminar.trim() !== "" && !urlEliminar.includes('placeholder')) {
         try {
             console.log(`Solicitando eliminación física de: ${urlEliminar}`);
@@ -473,7 +498,7 @@ async function resetearSlot(slotNum, contexto) {
         }
     }
 
-    // Limpiamos la interfaz como lo hacíamos habitualmente
+    // Limpieza de estados visuales
     previewImg.src = '';
     previewImg.style.display = 'none';
     if (placeholder) placeholder.style.display = 'flex';
@@ -490,7 +515,10 @@ function eliminarFotoSlot(slotNum) {
     resetearSlot(slotNum, 'edit');
 }
 
-// ABRIR IMAGEN EN COMPLETA (Zoom / Lightbox)
+
+/* ==========================================================================
+   8. VISOR DE LUPA INTERACTIVO (ZOOM / LIGHTBOX)
+   ========================================================================== */
 function abrirZoom(imgElementId) {
     const srcImgOriginal = document.getElementById(imgElementId).src;
     if (!srcImgOriginal || srcImgOriginal.includes('placeholder') || srcImgOriginal === window.location.href) return;
@@ -502,11 +530,14 @@ function abrirZoom(imgElementId) {
     modalVisor.style.display = 'flex';
 }
 
-// CERRAR ZOOM
 function cerrarZoom() {
     document.getElementById('modal-zoom-visor').style.display = 'none';
 }
 
+
+/* ==========================================================================
+   9. UTILIDADES Y AUXILIARES
+   ========================================================================== */
 function capitalizarPrimeraLetra(texto) {
     if (!texto) return null;
     const limpio = texto.trim();
@@ -514,7 +545,46 @@ function capitalizarPrimeraLetra(texto) {
     return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 
+function cerrarModal(idModal) {
+    document.getElementById(idModal).style.display = 'none';
+}
+
+// Cerrar cualquier modal al hacer clic en el espacio vacío exterior
+window.addEventListener('click', (e) => {
+    if (e.target.classList.contains('modal')) {
+        e.target.style.display = 'none';
+    }
+});
 
 
-// Inicializar el sistema al cargar la página
-document.addEventListener('DOMContentLoaded', obtenerProductos);
+/* ==========================================================================
+   10. INTERRUPTOR DE MODO DE COLOR (CLARO / OSCURO)
+   ========================================================================== */
+function cambiarTemaManualmente() {
+    const cuerpo = document.body;
+    
+    if (cuerpo.classList.contains('tema-claro')) {
+        cuerpo.classList.remove('tema-claro');
+        localStorage.setItem('tema-preferido', 'oscuro');
+    } else {
+        cuerpo.classList.add('tema-claro');
+        localStorage.setItem('tema-preferido', 'claro');
+    }
+}
+
+
+/* ==========================================================================
+   11. INICIALIZACIÓN SÍNCRONA DE LA APLICACIÓN
+   ========================================================================== */
+document.addEventListener('DOMContentLoaded', () => {
+    // Configurar la preferencia guardada de Modo Claro / Oscuro al arrancar
+    const temaGuardado = localStorage.getItem('tema-preferido');
+    if (temaGuardado === 'claro') {
+        document.body.classList.add('tema-claro');
+    } else {
+        document.body.classList.remove('tema-claro');
+    }
+
+    // Traer el catálogo de repuestos de MySQL
+    obtenerProductos();
+});
