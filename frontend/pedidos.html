@@ -70,6 +70,16 @@
             
             <!-- --- COLUMNA IZQUIERDA: AGREGAR E IDEAS --- -->
             <section class="panel-agregar-pedido">
+                <div class="tarjeta-control">
+                    <h2>1. Seleccionar Proveedor</h2>
+                    <div class="campo">
+                        <label for="select-proveedor-pedido">Filtrar por Proveedor / Distribuidor:</label>
+                        <select id="select-proveedor-pedido">
+                            <option value="TODOS">-- Todos los Proveedores --</option>
+                            <!-- Se llena automáticamente con los proveedores reales de tu MySQL -->
+                        </select>
+                    </div>
+                </div>
                 <!-- Tarjeta de Búsqueda de Artículos -->
                 <div class="tarjeta-control">
                     <h2>Buscar y Añadir Repuesto</h2>
@@ -130,8 +140,14 @@
                             <textarea id="notas-pedido" placeholder="Ej: Enviar por colectivo, Factura A, etc..." rows="2"></textarea>
                         </div>
                         <div class="grupo-botones-pedido">
-                            <button class="btn btn-info" id="btn-copiar-pedido">📋 Copiar Lista</button>
-                            <button class="btn btn-actualizar" id="btn-exportar-pedido">💾 Guardar Pedido</button>
+                            <button class="btn btn-info btn-svg-icono" id="btn-copiar-pedido">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                Copiar Lista
+                            </button>
+                            <button class="btn btn-actualizar btn-svg-icono" id="btn-exportar-pedido">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                Guardar Pedido
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -143,7 +159,13 @@
            ========================================================================== -->
         <section class="seccion-historial-pedidos" style="margin-top: 2rem;">
             <div class="tarjeta-control">
-                <h2>📋 Historial de Pedidos Recientes (Últimos 2 meses)</h2>
+                <h2 class="btn-svg-icono" style="justify-content: flex-start; color: var(--si-blue-vibrant); margin-bottom: 1rem;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 22px; height: 22px;">
+                        <path d="M12 8v4l3 3"></path>
+                        <path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"></path>
+                    </svg>
+                    Historial de Pedidos Recientes (Últimos 2 meses)
+                </h2>
                 <div class="tabla-contenedor-pedido" style="margin-top: 15px;">
                     <table class="tabla-sistema">
                         <thead>

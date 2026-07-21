@@ -183,59 +183,74 @@ app.post('/api/productos/:id/stock-minimo', (req, res) => {
 app.post('/api/pedidos', (req, res) => {
     const { notas, items } = req.body;
 
-    // Iniciamos transacción para evitar registros incoherentes si falla la inserción
-    db.beginTransaction((err) => {
+    // Solicitamos una conexión individual del pool para la transacción
+    db.getConnection((err, connection) => {
         if (err) {
-            console.error('❌ Error al iniciar transacción:', err);
+            console.error('❌ Error al obtener conexión del Pool:', err);
             return res.status(500).json({ error: 'Error al procesar el pedido' });
         }
 
-        // Paso A: Guardar cabecera del pedido (Notas y fecha)
-        const sqlPedido = 'INSERT INTO pedidos (notas) VALUES (?)';
-        db.query(sqlPedido, [notes = notas], (err, result) => {
+        // Iniciamos la transacción en la conexión obtenida
+        connection.beginTransaction((err) => {
             if (err) {
-                return db.rollback(() => {
-                    console.error('❌ Error al insertar pedido:', err);
-                    res.status(500).json({ error: 'Error al registrar el pedido' });
-                });
+                connection.release(); // Liberamos la conexión si falla al arrancar
+                console.error('❌ Error al iniciar transacción:', err);
+                return res.status(500).json({ error: 'Error al procesar el pedido' });
             }
 
-            const pedidoId = result.insertId;
-
-            // Paso B: Mapear y guardar la relación de artículos del pre-pedido
-            const sqlItems = 'INSERT INTO pedido_items (pedido_id, producto_id, cantidad) VALUES ?';
-            const valoresItems = items.map(item => [pedidoId, item.id, item.cantidad]);
-
-            db.query(sqlItems, [valoresItems], (err) => {
+            // Paso A: Guardar cabecera del pedido (Notas y fecha)
+            const sqlPedido = 'INSERT INTO pedidos (notas) VALUES (?)';
+            connection.query(sqlPedido, [notas], (err, result) => {
                 if (err) {
-                    return db.rollback(() => {
-                        console.error('❌ Error al insertar artículos del pedido:', err);
-                        res.status(500).json({ error: 'Error al registrar los repuestos' });
+                    return connection.rollback(() => {
+                        connection.release();
+                        console.error('❌ Error al insertar pedido:', err);
+                        res.status(500).json({ error: 'Error al registrar el pedido' });
                     });
                 }
 
-                // Paso C: Confirmar la transacción completa
-                db.commit((err) => {
+                const pedidoId = result.insertId;
+
+                // Paso B: Mapear y guardar la relación de artículos del pre-pedido
+                const sqlItems = 'INSERT INTO pedido_items (pedido_id, producto_id, cantidad) VALUES ?';
+                const valoresItems = items.map(item => [pedidoId, item.id, item.cantidad]);
+
+                connection.query(sqlItems, [valoresItems], (err) => {
                     if (err) {
-                        return db.rollback(() => {
-                            console.error('❌ Error en commit:', err);
-                            res.status(500).json({ error: 'Error al finalizar el pedido' });
+                        return connection.rollback(() => {
+                            connection.release();
+                            console.error('❌ Error al insertar artículos del pedido:', err);
+                            res.status(500).json({ error: 'Error al registrar los repuestos' });
                         });
                     }
 
-                    console.log(`✅ Pedido #${pedidoId} guardado con éxito.`);
-
-                    // Paso D: Optimización de Base de Datos (Limpieza automática de pedidos de más de 2 meses)
-                    const sqlLimpieza = 'DELETE FROM pedidos WHERE fecha < NOW() - INTERVAL 2 MONTH';
-                    db.query(sqlLimpieza, (errLimpieza, resultLimpieza) => {
-                        if (errLimpieza) {
-                            console.error('⚠️ Error al limpiar pedidos viejos:', errLimpieza);
-                        } else if (resultLimpieza.affectedRows > 0) {
-                            console.log(`🧹 Limpieza: Se eliminaron ${resultLimpieza.affectedRows} pedidos viejos de más de 2 meses.`);
+                    // Paso C: Confirmar la transacción completa (Commit)
+                    connection.commit((err) => {
+                        if (err) {
+                            return connection.rollback(() => {
+                                connection.release();
+                                console.error('❌ Error en commit:', err);
+                                res.status(500).json({ error: 'Error al finalizar el pedido' });
+                            });
                         }
-                    });
 
-                    res.status(201).json({ mensaje: 'Pedido guardado y base de datos optimizada', pedidoId });
+                        //  Liberamos la conexión para que vuelva al pool
+                        connection.release();
+
+                        console.log(`✅ Pedido #${pedidoId} guardado con éxito.`);
+
+                        // Paso D: Optimización de Base de Datos (Limpieza automática de pedidos de más de 2 meses)
+                        const sqlLimpieza = 'DELETE FROM pedidos WHERE fecha < NOW() - INTERVAL 2 MONTH';
+                        db.query(sqlLimpieza, (errLimpieza, resultLimpieza) => {
+                            if (errLimpieza) {
+                                console.error('⚠️ Error al limpiar pedidos viejos:', errLimpieza);
+                            } else if (resultLimpieza.affectedRows > 0) {
+                                console.log(`🧹 Limpieza: Se eliminaron ${resultLimpieza.affectedRows} pedidos viejos de más de 2 meses.`);
+                            }
+                        });
+
+                        res.status(201).json({ mensaje: 'Pedido guardado y base de datos optimizada', pedidoId });
+                    });
                 });
             });
         });

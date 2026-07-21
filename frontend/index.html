@@ -30,24 +30,23 @@
                     <!-- Botón de cambio rápido para Modo Claro / Oscuro -->
                     <li>
                         <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema de color">
-                                <!-- SVG del Sol (Se muestra cuando estamos en Modo Oscuro para pasar a Claro) -->
-                                <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="4"></circle>
-                                    <path d="M12 2v2"></path>
-                                    <path d="M12 20v2"></path>
-                                    <path d="m4.93 4.93 1.41 1.41"></path>
-                                    <path d="m17.66 17.66 1.41 1.41"></path>
-                                    <path d="M2 12h2"></path>
-                                    <path d="M20 12h2"></path>
-                                    <path d="m6.34 17.66-1.41 1.41"></path>
-                                    <path d="m19.07 4.93-1.41 1.41"></path>
-                                </svg>
-                                
-                                <!-- SVG de la Luna (Se muestra cuando estamos en Modo Claro para pasar a Oscuro) -->
-                                <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
-                                </svg>
-                        </button>                    
+                            <!-- SVG del Sol -->
+                            <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="4"></circle>
+                                <path d="M12 2v2"></path>
+                                <path d="M12 20v2"></path>
+                                <path d="m4.93 4.93 1.41 1.41"></path>
+                                <path d="m17.66 17.66 1.41 1.41"></path>
+                                <path d="M2 12h2"></path>
+                                <path d="M20 12h2"></path>
+                                <path d="m6.34 17.66-1.41 1.41"></path>
+                                <path d="m19.07 4.93-1.41 1.41"></path>
+                            </svg>
+                            <!-- SVG de la Luna -->
+                            <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+                            </svg>
+                        </button>
                     </li>
                 </ul>
             </nav>
@@ -65,12 +64,10 @@
             <p>Gestión de Stock y Ventas</p>
         </section>
 
-        <!-- Sistema automático de Alertas de Stock Mínimo (Manejado por app.js) -->
+        <!-- Sistema automático de Alertas de Stock Mínimo -->
         <div class="alerta-stock" id="alerta-stock-minimo" style="display: none;">
             <strong>⚠️ Alerta de Stock Crítico:</strong> Los siguientes artículos están por debajo del límite mínimo:
-            <ul id="lista-critica">
-                <!-- Se rellena dinámicamente desde JavaScript -->
-            </ul>
+            <ul id="lista-critica"></ul>
         </div>
 
         <!-- ==========================================================================
@@ -84,7 +81,8 @@
                 <div class="fila-formulario">
                     <div class="campo w-50">
                         <label for="nombre">Nombre del Producto:</label>
-                        <input type="text" id="nombre" name="nombre" placeholder="Ej: Bomba de desagote Whirlpool" autocomplete="off" required>                    </div>
+                        <input type="text" id="nombre" name="nombre" placeholder="Ej: Bomba de desagote Whirlpool" autocomplete="off" required>
+                    </div>
                     <div class="campo w-25">
                         <label for="precio">Precio Costo ($)</label>
                         <input type="number" id="precio" min="0" step="0.01" placeholder="0.0" required>
@@ -113,14 +111,16 @@
                     </div>
                     <div class="campo w-33">
                         <label for="distribuidor">Proveedor / Distribuidor</label>
-                        <input type="text" id="distribuidor" placeholder="Seleccione o escriba proveedor">                    </div>
-                </div>
+                        <input type="text" id="distribuidor" list="lista-proveedores-existentes" placeholder="Seleccione o escriba uno nuevo..." autocomplete="off">
+                        <datalist id="lista-proveedores-existentes"></datalist>
+                    </div>
+                </div> 
 
                 <!-- Fila 3: Códigos de referencia y notas de taller -->
                 <div class="fila-formulario">
                     <div class="campo w-50">
                         <label for="codigoDistribuidor">Código Distribuidor</label>
-                        <input type="text" id="codigoDistribuidor" placeholder="Ej: WW02A00278">
+                        <input type="text" id="codigoDistribuidor" placeholder="Ej: WW02A00278" autocomplete="off">
                     </div>
                     <div class="campo w-50">
                         <label for="descripcion">Descripción / Notas</label>
@@ -128,7 +128,7 @@
                     </div>
                 </div>
 
-                <!-- Fila 4: Slots de imágenes con previsualización inteligente -->
+                <!-- Fila 4: Slots de imágenes -->
                 <div class="campo-imagenes-seccion">
                     <label>Imágenes del Producto (Máx. 3 - Autocomprimidas)</label>
                     <div class="slots-imagenes-contenedor">
@@ -142,7 +142,9 @@
                                     <span class="icono-subida">➕</span>
                                     <span class="texto-subida">Subir Foto</span>
                                 </div>
-                                <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-1')" style="display: none;">🔍</button>
+                                <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-1')" style="display: none;" title="Ampliar imagen">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                                </button>
                             </div>
                             <input type="file" id="file-crear-1" accept="image/*" style="display:none;" onchange="subirFotoDirecto(1, 'crear', event)">
                             <input type="hidden" id="crear-img-url-1">
@@ -158,7 +160,9 @@
                                     <span class="icono-subida">➕</span>
                                     <span class="texto-subida">Subir Foto</span>
                                 </div>
-                                <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-2')" style="display: none;">🔍</button>
+                                <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-2')" style="display: none;" title="Ampliar imagen">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                                </button>
                             </div>
                             <input type="file" id="file-crear-2" accept="image/*" style="display:none;" onchange="subirFotoDirecto(2, 'crear', event)">
                             <input type="hidden" id="crear-img-url-2">
@@ -174,7 +178,9 @@
                                     <span class="icono-subida">➕</span>
                                     <span class="texto-subida">Subir Foto</span>
                                 </div>
-                                <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-3')" style="display: none;">🔍</button>
+                                <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('crear-preview-3')" style="display: none;" title="Ampliar imagen">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                                </button>
                             </div>
                             <input type="file" id="file-crear-3" accept="image/*" style="display:none;" onchange="subirFotoDirecto(3, 'crear', event)">
                             <input type="hidden" id="crear-img-url-3">
@@ -201,7 +207,7 @@
                     <option value="distribuidor">Proveedor</option>
                     <option value="categoria">Categoría</option>
                 </select>
-                <input type="text" id="input-buscador" placeholder="Escriba los términos de búsqueda...">
+                <input type="text" id="input-buscador" placeholder="Escriba los términos de búsqueda..." autocomplete="off">
             </div>
         </section>
 
@@ -224,9 +230,7 @@
                             <th>Acciones</th>
                         </tr>
                     </thead>
-                    <tbody id="tabla-cuerpo">
-                        <!-- Las filas dinámicas con alertas se renderizan desde app.js -->
-                    </tbody>
+                    <tbody id="tabla-cuerpo"></tbody>
                 </table>
             </div>
         </section>
@@ -243,7 +247,6 @@
             <h2 id="modal-titulo">Detalles del Producto</h2>
             
             <div class="modal-layout">
-                <!-- Columna Datos Técnicos -->
                 <div class="modal-datos">
                     <p><strong>Nombre:</strong> <span id="info-nombre">Cargando...</span></p>
                     <p><strong>Precio:</strong> $<span id="info-precio">0.00</span></p>
@@ -262,29 +265,27 @@
                     </div>
                 </div>
                 
-                <!-- Columna Galería Fotográfica de Consulta -->
                 <div class="modal-galeria">
                     <h3>Imágenes del Componente</h3>
                     <div class="imagenes-grid">
-                        
-                        <!-- Caja Foto 1 Info -->
                         <div class="info-img-container">
                             <img id="img-detalle-1" src="" alt="Vista 1" style="display: none;">
-                            <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-1" onclick="abrirZoom('img-detalle-1')" style="display: none;">🔍</button>
+                            <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-1" onclick="abrirZoom('img-detalle-1')" style="display: none;" title="Ampliar imagen">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                            </button>
                         </div>
-
-                        <!-- Caja Foto 2 Info -->
                         <div class="info-img-container">
                             <img id="img-detalle-2" src="" alt="Vista 2" style="display: none;">
-                            <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-2" onclick="abrirZoom('img-detalle-2')" style="display: none;">🔍</button>
+                            <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-2" onclick="abrirZoom('img-detalle-2')" style="display: none;" title="Ampliar imagen">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                            </button>
                         </div>
-
-                        <!-- Caja Foto 3 Info -->
                         <div class="info-img-container">
                             <img id="img-detalle-3" src="" alt="Vista 3" style="display: none;">
-                            <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-3" onclick="abrirZoom('img-detalle-3')" style="display: none;">🔍</button>
+                            <button type="button" class="btn-lupa-zoom" id="btn-zoom-info-3" onclick="abrirZoom('img-detalle-3')" style="display: none;" title="Ampliar imagen">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                            </button>
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -298,11 +299,10 @@
             <h2>Editar Producto</h2>
             
             <form id="form-editar-producto">
-                <!-- Zona scrolleable interna para celulares o resoluciones compactas -->
                 <div class="form-scroll-zona">
                     <div class="campo">
                         <label for="edit-nombre">Nombre del Producto:</label>
-                        <input type="text" id="edit-nombre" required>
+                        <input type="text" id="edit-nombre" autocomplete="off" required>
                     </div>
                     <div class="fila-formulario">
                         <div class="campo w-50">
@@ -317,19 +317,18 @@
                     <div class="fila-formulario">
                         <div class="campo w-50">
                             <label for="edit-distribuidor">Proveedor / Distribuidor</label>
-                            <input type="text" id="edit-distribuidor">
+                            <input type="text" id="edit-distribuidor" autocomplete="off">
                         </div>
                         <div class="campo w-50">
                             <label for="edit-codigo">Código Distribuidor</label>
-                            <input type="text" id="edit-codigo">
+                            <input type="text" id="edit-codigo" autocomplete="off">
                         </div>
                     </div>
                     <div class="campo">
                         <label for="edit-descripcion">Descripción / Notas</label>
-                        <input type="text" id="edit-descripcion">
+                        <input type="text" id="edit-descripcion" autocomplete="off">
                     </div>
 
-                    <!-- Panel de edición y reemplazo de fotos -->
                     <div class="edit-imagenes-seccion">
                         <h3>Gestión de Imágenes (Máx. 3 - Autocompresión)</h3>
                         <div class="slots-imagenes-grid">
@@ -343,7 +342,9 @@
                                         <span class="icono-subida">➕</span>
                                         <span class="texto-subida">Subir Foto</span>
                                     </div>
-                                    <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-1')" style="display: none;">🔍</button>
+                                    <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-1')" style="display: none;" title="Ampliar imagen">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                                    </button>
                                 </div>
                                 <input type="file" id="file-edit-1" accept="image/*" style="display:none;" onchange="subirFotoDirecto(1, 'edit', event)">
                                 <input type="hidden" id="edit-img-url-1">
@@ -359,7 +360,9 @@
                                         <span class="icono-subida">➕</span>
                                         <span class="texto-subida">Subir Foto</span>
                                     </div>
-                                    <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-2')" style="display: none;">🔍</button>
+                                    <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-2')" style="display: none;" title="Ampliar imagen">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                                    </button>
                                 </div>
                                 <input type="file" id="file-edit-2" accept="image/*" style="display:none;" onchange="subirFotoDirecto(2, 'edit', event)">
                                 <input type="hidden" id="edit-img-url-2">
@@ -375,7 +378,9 @@
                                         <span class="icono-subida">➕</span>
                                         <span class="texto-subida">Subir Foto</span>
                                     </div>
-                                    <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-3')" style="display: none;">🔍</button>
+                                    <button type="button" class="btn-lupa-zoom" onclick="abrirZoom('edit-preview-3')" style="display: none;" title="Ampliar imagen">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                                    </button>
                                 </div>
                                 <input type="file" id="file-edit-3" accept="image/*" style="display:none;" onchange="subirFotoDirecto(3, 'edit', event)">
                                 <input type="hidden" id="edit-img-url-3">

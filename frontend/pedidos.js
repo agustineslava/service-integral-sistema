@@ -6,6 +6,7 @@ const API_URL = 'http://127.0.0.1:3000/api/productos';
 
 // Elementos del DOM
 const inputBuscar = document.getElementById('buscar-pedido-art');
+const selectProveedor = document.getElementById('select-proveedor-pedido'); 
 const listaSugerencias = document.getElementById('lista-sugerencias-pedido');
 const sugerenciasCriticas = document.getElementById('sugerencias-stock-critico');
 const tablaPedidoCuerpo = document.getElementById('tabla-pedido-cuerpo');
@@ -19,7 +20,7 @@ const tablaModalItemsCuerpo = document.getElementById('tabla-modal-items-cuerpo'
 
 // Arrays globales para la gestión en memoria
 let productosInventario = [];
-let listaPedidoActual = []; // Guarda los artículos que vas sumando al pedido
+let listaPedidoActual = [];
 
 
 /* ==========================================================================
@@ -38,7 +39,10 @@ async function cargarDatos() {
             return;
         }
         
+        // 🌟 Carga dinámica de proveedores y renderizado
+        cargarSelectProveedores();
         renderizarSugerenciasCriticas();
+
     } catch (error) {
         console.error('Error cargando datos para pedidos:', error);
         sugerenciasCriticas.innerHTML = `
@@ -51,32 +55,63 @@ async function cargarDatos() {
 
 
 /* ==========================================================================
-   3. SUGERENCIAS AUTOMÁTICAS (STOCK MÍNIMO)
+   3. SELECTOR DE PROVEEDORES Y SUGERENCIAS FILTRADAS
    ========================================================================== */
+function cargarSelectProveedores() {
+    if (!selectProveedor) return;
+
+    const proveedoresUnicos = [...new Set(
+        productosInventario
+            .map(p => p.distribuidor)
+            .filter(d => d && d.trim() !== '')
+    )].sort();
+
+    selectProveedor.innerHTML = `<option value="TODOS">-- Todos los Proveedores --</option>`;
+    
+    proveedoresUnicos.forEach(prov => {
+        const option = document.createElement('option');
+        option.value = prov;
+        option.textContent = prov;
+        selectProveedor.appendChild(option);
+    });
+}
+
 function renderizarSugerenciasCriticas() {
     sugerenciasCriticas.innerHTML = '';
-    
-    // Filtramos los repuestos que están igual o por debajo de su stock mínimo
-    const criticos = productosInventario.filter(p => p.stock <= p.stockMinimo);
+    const proveedorSeleccionado = selectProveedor ? selectProveedor.value : 'TODOS';
+
+    let criticos = productosInventario.filter(p => p.stock <= p.stockMinimo);
+
+    if (proveedorSeleccionado !== 'TODOS') {
+        criticos = criticos.filter(p => p.distribuidor === proveedorSeleccionado);
+    }
 
     if (criticos.length === 0) {
-        sugerenciasCriticas.innerHTML = `<li class="texto-vacio">Todo al día. No hay repuestos bajo el stock mínimo.</li>`;
+        sugerenciasCriticas.innerHTML = `<li class="texto-vacio">No hay repuestos bajo el stock mínimo para este proveedor.</li>`;
         return;
     }
 
     criticos.forEach(p => {
         const li = document.createElement('li');
-        // Sugerimos pedir la diferencia para cubrir el mínimo, o al menos 1 unidad
         const cantidadSugerida = Math.max(1, p.stockMinimo - p.stock);
 
         li.innerHTML = `
             <div>
                 <strong>${p.nombre}</strong> <br>
-                <small style="color: var(--text-muted);">Stock: ${p.stock} / Mín: ${p.stockMinimo}</small>
+                <small style="color: var(--text-muted);">Stock: ${p.stock} / Mín: ${p.stockMinimo} | Prov: ${p.distribuidor || 'S/A'}</small>
             </div>
             <button class="btn btn-actualizar" style="padding: 4px 10px; font-size: 0.8rem;" onclick="agregarAlPedido(${p.id}, ${cantidadSugerida})">➕ Añadir</button>
         `;
         sugerenciasCriticas.appendChild(li);
+    });
+}
+
+// Escuchar cambios de proveedor
+if (selectProveedor) {
+    selectProveedor.addEventListener('change', () => {
+        renderizarSugerenciasCriticas();
+        inputBuscar.value = '';
+        listaSugerencias.innerHTML = `<p class="texto-vacio">Escribí para buscar repuestos disponibles...</p>`;
     });
 }
 
@@ -93,12 +128,14 @@ inputBuscar.addEventListener('input', () => {
         return;
     }
 
-    // Filtramos coincidiendo por nombre del componente o código del distribuidor
+    const proveedorSeleccionado = selectProveedor ? selectProveedor.value : 'TODOS';
+
     const filtrados = productosInventario.filter(p => {
+        const coincideProveedor = (proveedorSeleccionado === 'TODOS') || (p.distribuidor === proveedorSeleccionado);
         const nombreValido = p.nombre ? p.nombre.toLowerCase().includes(termino) : false;
         const codigo = p.codigoDistribuidor || '';
         const codigoValido = codigo.toLowerCase().includes(termino);
-        return nombreValido || codigoValido;
+        return coincideProveedor && (nombreValido || codigoValido);
     });
 
     if (filtrados.length === 0) {
@@ -124,10 +161,6 @@ inputBuscar.addEventListener('input', () => {
 /* ==========================================================================
    5. CONTROL DE LA LISTA DE COMPRAS EN MEMORIA
    ========================================================================== */
-
-/**
- * Añade un repuesto a la pre-lista de compras o aumenta su cantidad si ya existe
- */
 function agregarAlPedido(id, cantidad) {
     const p = productosInventario.find(prod => prod.id === id);
     if (!p) return;
@@ -148,28 +181,18 @@ function agregarAlPedido(id, cantidad) {
     renderizarTablaPedido();
 }
 
-/**
- * Modifica la cantidad de un artículo directamente desde el input de la tabla
- */
 function cambiarCantidad(id, nuevaCantidad) {
     const item = listaPedidoActual.find(item => item.id === id);
     if (item) {
-        item.textValue = nuevaCantidad; // Evita pérdidas de foco innecesarias
         item.cantidad = parseInt(nuevaCantidad) || 1;
     }
 }
 
-/**
- * Quita una línea del pedido en curso
- */
 function eliminarDelPedido(id) {
     listaPedidoActual = listaPedidoActual.filter(item => item.id !== id);
     renderizarTablaPedido();
 }
 
-/**
- * Redibuja la tabla de pre-pedido a la derecha
- */
 function renderizarTablaPedido() {
     tablaPedidoCuerpo.innerHTML = '';
 
@@ -203,7 +226,6 @@ function renderizarTablaPedido() {
     });
 }
 
-// Vaciar de un tirón el pre-pedido actual
 btnVaciar.addEventListener('click', () => {
     if (listaPedidoActual.length === 0) return;
     if (confirm('¿Querés borrar toda la lista actual de pedido?')) {
@@ -239,7 +261,7 @@ btnCopiar.addEventListener('click', () => {
         })
         .catch(err => {
             console.error('Error al copiar:', err);
-            alert('No se pudo copiar automáticamente. Por favor, selecciona y copia el texto manualmente.');
+            alert('No se pudo copiar automáticamente. Copiá el texto manualmente.');
         });
 });
 
@@ -279,7 +301,7 @@ btnGuardar.addEventListener('click', async () => {
             notasPedido.value = '';
             
             renderizarTablaPedido();
-            cargarDatos(); // Volvemos a consultar para actualizar las alertas críticas
+            cargarDatos();
         } else {
             alert('Error al intentar guardar el pedido en el servidor.');
         }
@@ -321,7 +343,6 @@ function renderizarHistorial(lista) {
     }
 
     lista.forEach(ped => {
-        // Formatear la fecha para Argentina (DD/MM/AAAA - HH:MM)
         const fechaLegible = new Date(ped.fecha).toLocaleString('es-AR', {
             day: '2-digit', month: '2-digit', year: 'numeric',
             hour: '2-digit', minute: '2-digit'
@@ -333,7 +354,13 @@ function renderizarHistorial(lista) {
             <td>${fechaLegible} hs.</td>
             <td><span style="color: var(--text-muted); font-size: 0.9rem;">${ped.notas || 'Sin anotaciones adicionales'}</span></td>
             <td style="text-align: center;">
-                <button class="btn-tabla btn-info" onclick="verDetallePedido(${ped.id}, '${fechaLegible}', '${ped.notas || 'Sin notas.'}')">Ver Detalle</button>
+                <button class="btn-tabla btn-info btn-svg-icono" onclick="verDetallePedido(${ped.id}, '${fechaLegible}', '${ped.notas || 'Sin notas.'}')" style="padding: 4px 10px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+                        <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    Ver Detalle
+                </button>
             </td>
         `;
         tablaHistorialCuerpo.appendChild(tr);
@@ -384,7 +411,6 @@ function cerrarModal(idModal) {
     document.getElementById(idModal).style.display = 'none';
 }
 
-// Cerrar haciendo clic afuera del recuadro
 window.addEventListener('click', (e) => {
     if (e.target === modalDetallePedido) {
         modalDetallePedido.style.display = 'none';
@@ -393,7 +419,7 @@ window.addEventListener('click', (e) => {
 
 
 /* ==========================================================================
-   10. INTERRUPTOR DE MODO DE COLOR (Sincronizado)
+   10. INTERRUPTOR DE MODO DE COLOR
    ========================================================================== */
 function cambiarTemaManualmente() {
     const cuerpo = document.body;
@@ -408,10 +434,9 @@ function cambiarTemaManualmente() {
 
 
 /* ==========================================================================
-   11. INICIALIZACIÓN DE LA PÁGINA DE PEDIDOS
+   11. INICIALIZACIÓN DE LA PÁGINA
    ========================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Configurar la preferencia de Modo Claro / Oscuro guardada en el disco
     const temaGuardado = localStorage.getItem('tema-preferido');
     if (temaGuardado === 'claro') {
         document.body.classList.add('tema-claro');
@@ -419,7 +444,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.remove('tema-claro');
     }
 
-    // 2. Cargar los catálogos y sugerencias de MySQL
     cargarDatos();
     obtenerHistorialPedidos();
 });

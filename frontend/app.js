@@ -34,6 +34,7 @@ async function obtenerProductos() {
         productosLocales = await respuesta.json();
         renderizarTabla(productosLocales);
         verificarStockMinimo(productosLocales);
+        actualizarSugerenciasProveedores();
     } catch (error) {
         console.error('Error cargando inventario:', error);
     }
@@ -98,6 +99,28 @@ tablaCuerpo.addEventListener('click', (e) => {
     }
 });
 
+/* ==========================================================================
+3. FILTRO PROVEEDORES EXISTENTES 
+   ========================================================================== */
+function actualizarSugerenciasProveedores() {
+    const datalist = document.getElementById('lista-proveedores-existentes');
+    if (!datalist) return;
+
+    // Obtenemos los proveedores únicos ya existentes, ignorando vacíos
+    const proveedoresUnicos = [...new Set(
+        productosLocales
+            .map(p => p.distribuidor)
+            .filter(d => d && d.trim() !== '')
+    )].sort();
+
+    datalist.innerHTML = '';
+    
+    proveedoresUnicos.forEach(prov => {
+        const option = document.createElement('option');
+        option.value = prov;
+        datalist.appendChild(option);
+    });
+}
 
 /* ==========================================================================
    3. BUSCADOR INTERACTIVO AVANZADO

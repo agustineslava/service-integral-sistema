@@ -397,6 +397,22 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
 .btn-actualizar { background-color: var(--color-success); }
 .btn-eliminar { background-color: var(--color-danger); }
 
+.btn-svg-icono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-svg-icono svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2;
+    fill: none;
+    stroke: currentColor;
+    flex-shrink: 0;
+}
+
 /* ==========================================================================
    8. VENTANAS MODALES GENERALES
    ========================================================================== */
@@ -760,6 +776,14 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 .btn-lupa-zoom:hover {
     transform: scale(1.15);
     background-color: rgba(0, 159, 227, 0.9); /* Cambia al azul de tu marca al hacer hover */
+}
+
+.btn-lupa-zoom svg {
+    width: 16px;
+    height: 16px;
+    stroke: #ffffff;
+    stroke-width: 2;
+    fill: none;
 }
 
 /* Visor oscuro de pantalla completa */
