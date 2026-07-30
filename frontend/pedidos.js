@@ -2,7 +2,7 @@
    1. CONFIGURACIÓN GLOBAL Y VARIABLES DE ESTADO
    ========================================================================== */
 // URL base de la API de productos
-const API_URL = 'http://127.0.0.1:3000/api/productos';
+const API_URL = `${window.location.origin}/api/productos`;
 
 // Elementos del DOM
 const inputBuscar = document.getElementById('buscar-pedido-art');
@@ -47,7 +47,7 @@ async function cargarDatos() {
         console.error('Error cargando datos para pedidos:', error);
         sugerenciasCriticas.innerHTML = `
             <li style="color: #dc3545; font-weight: bold; list-style: none; padding: 10px;">
-                ❌ Error de Conexión: No se pudo conectar con el servidor en 127.0.0.1:3000. 
+                ❌ Error de Conexión: No se pudo conectar con el servidor. 
                 Asegurate de que "node server.js" esté corriendo.
             </li>`;
     }
@@ -286,7 +286,7 @@ btnGuardar.addEventListener('click', async () => {
     };
 
     try {
-        const respuesta = await fetch('http://127.0.0.1:3000/api/pedidos', {
+        const respuesta = await fetch(`${window.location.origin}/api/pedidos`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(datosPedido)
@@ -317,7 +317,7 @@ btnGuardar.addEventListener('click', async () => {
    ========================================================================== */
 async function obtenerHistorialPedidos() {
     try {
-        const respuesta = await fetch('http://127.0.0.1:3000/api/pedidos');
+        const respuesta = await fetch(`${window.location.origin}/api/pedidos`);
         if (!respuesta.ok) throw new Error('No se pudo conectar para el historial');
         
         const historial = await respuesta.json();
@@ -380,7 +380,7 @@ async function verDetallePedido(id, fecha, notas) {
     modalDetallePedido.style.display = 'block';
 
     try {
-        const respuesta = await fetch(`http://127.0.0.1:3000/api/pedidos/${id}/items`);
+        const respuesta = await fetch(`${window.location.origin}/api/pedidos/${id}/items`);
         if (!respuesta.ok) throw new Error('Error al traer los repuestos');
         
         const items = await respuesta.json();

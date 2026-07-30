@@ -1,8 +1,8 @@
 /* ==========================================================================
    1. CONFIGURACIÓN GLOBAL Y VARIABLES DE ESTADO
    ========================================================================== */
-// URL base de la API en el backend local
-const API_URL = 'http://localhost:3000/api/productos';
+// URL base de la API en el backend (dinámica para Cloudflare / Local / Red)
+const API_URL = `${window.location.origin}/api/productos`;
 
 // Elementos de la interfaz (DOM)
 const tablaCuerpo = document.getElementById('tabla-cuerpo');
@@ -100,7 +100,7 @@ tablaCuerpo.addEventListener('click', (e) => {
 });
 
 /* ==========================================================================
-3. FILTRO PROVEEDORES EXISTENTES 
+   3. FILTRO PROVEEDORES EXISTENTES 
    ========================================================================== */
 function actualizarSugerenciasProveedores() {
     const datalist = document.getElementById('lista-proveedores-existentes');
@@ -260,9 +260,7 @@ document.getElementById('btn-modificar-minimo').addEventListener('click', async 
  */
 async function prepararActualizacion(id) {
     try {
-        const respuesta = await fetch(`http://127.0.0.1:3000/api/productos`);
-        const productos = await respuesta.json();
-        const p = productos.find(prod => prod.id === id);
+        const p = productosLocales.find(prod => prod.id === id);
 
         if (!p) return;
         idProductoSeleccionado = id;
@@ -333,7 +331,7 @@ document.getElementById('form-editar-producto').addEventListener('submit', async
     };
 
     try {
-        const respuesta = await fetch(`http://127.0.0.1:3000/api/productos/${id}`, {
+        const respuesta = await fetch(`${API_URL}/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(datosActualizados)
@@ -410,7 +408,7 @@ async function eliminarProducto(id) {
             for (const urlFoto of fotosABorrar) {
                 if (urlFoto && urlFoto.trim() !== "") {
                     try {
-                        await fetch('http://127.0.0.1:3000/api/delete-image', {
+                        await fetch(`${window.location.origin}/api/delete-image`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ imageUrl: urlFoto })
@@ -464,7 +462,7 @@ async function subirFotoDirecto(slotNum, contexto = 'crear', evento) {
         const formData = new FormData();
         formData.append('imagen', fotoComprimida);
 
-        const respuesta = await fetch('http://127.0.0.1:3000/api/upload', {
+        const respuesta = await fetch(`${window.location.origin}/api/upload`, {
             method: 'POST',
             body: formData
         });
@@ -505,7 +503,7 @@ async function resetearSlot(slotNum, contexto) {
     if (urlEliminar && urlEliminar.trim() !== "" && !urlEliminar.includes('placeholder')) {
         try {
             console.log(`Solicitando eliminación física de: ${urlEliminar}`);
-            const respuesta = await fetch('http://127.0.0.1:3000/api/delete-image', {
+            const respuesta = await fetch(`${window.location.origin}/api/delete-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ imageUrl: urlEliminar })

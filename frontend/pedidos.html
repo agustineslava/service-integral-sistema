@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Integral - Gestión de Pedidos</title>
+    <!-- 🔒 Protección de sesión y roles (Debe ir primero) -->
+    <script src="auth-check.js"></script>
     <!-- 💾 ?v=1.2 obliga al navegador a limpiar el caché y cargar el último diseño adaptativo -->
     <link rel="stylesheet" href="style.css?v=1.2">
 </head>
@@ -21,6 +23,10 @@
                     Servidor Local: <span class="badge-online">Conectado</span>
                 </div>
             </div>
+
+            <!-- Bloque de perfil y usuario logueado -->
+            <div id="info-usuario-header" class="info-usuario-header"></div>
+
             <!-- Menú de navegación interactivo -->
             <nav class="menu-navegacion">
                 <ul>
@@ -30,7 +36,7 @@
                     <!-- 🌟 BOTÓN DE TEMA CON SVGS INTERACTIVOS (Sincronizado con index) -->
                     <li>
                         <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema de color">
-                            <!-- SVG del Sol (Se muestra en Modo Oscuro para pasar a Claro) -->
+                            <!-- SVG del Sol -->
                             <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="4"></circle>
                                 <path d="M12 2v2"></path>
@@ -42,8 +48,7 @@
                                 <path d="m6.34 17.66-1.41 1.41"></path>
                                 <path d="m19.07 4.93-1.41 1.41"></path>
                             </svg>
-                            
-                            <!-- SVG de la Luna (Se muestra en Modo Claro para pasar a Oscuro) -->
+                            <!-- SVG de la Luna -->
                             <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
                             </svg>
@@ -76,7 +81,6 @@
                         <label for="select-proveedor-pedido">Filtrar por Proveedor / Distribuidor:</label>
                         <select id="select-proveedor-pedido">
                             <option value="TODOS">-- Todos los Proveedores --</option>
-                            <!-- Se llena automáticamente con los proveedores reales de tu MySQL -->
                         </select>
                     </div>
                 </div>
@@ -207,9 +211,7 @@
                             <th style="text-align: center;">Cantidad</th>
                         </tr>
                     </thead>
-                    <tbody id="tabla-modal-items-cuerpo">
-                        <!-- Renderizado dinámico de los artículos comprados -->
-                    </tbody>
+                    <tbody id="tabla-modal-items-cuerpo"></tbody>
                 </table>
             </div>
 

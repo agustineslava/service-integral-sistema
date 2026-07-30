@@ -1,7 +1,6 @@
 /* ==========================================================================
    1. VARIABLES DE ENTORNO, DEPENDENCIAS Y LIBRERÍAS
    ========================================================================== */
-// Carga las variables de entorno desde el archivo .env (Debe ser lo primero)
 require('dotenv').config();
 
 const express = require('express');
@@ -13,29 +12,28 @@ const cron = require('node-cron');
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 
-// Configuración de puertos e IP para el servidor local
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || '0.0.0.0';
+const JWT_SECRET = process.env.JWT_SECRET || 'clave_secreta_service_integral_2026';
 
 /* ==========================================================================
    2. MIDDLEWARES DE LA APLICACIÓN
    ========================================================================== */
-// Habilita CORS para permitir peticiones desde el frontend local
 app.use(cors());
-// Habilita el parseo de cuerpos en formato JSON
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 /* ==========================================================================
    3. CONFIGURACIÓN DE MULTIMEDIA (CLOUDINARY & MULTER)
    ========================================================================== */
-// Configura multer para almacenar temporalmente los archivos en la memoria RAM
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Credenciales para la conexión con el panel de Cloudinary
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
@@ -45,16 +43,38 @@ cloudinary.config({
 /* ==========================================================================
    4. CONEXIÓN A LA BASE DE DATOS (MYSQL CONNECTION POOL)
    ========================================================================== */
-// Pool de conexiones para optimizar y reutilizar accesos concurrentes a la base de datos
 const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     waitForConnections: true,
-    connectionLimit: 10, // Cantidad máxima de conexiones simultáneas en paralelo
+    connectionLimit: 10,
     queueLimit: 0
 });
+
+// Función para asegurar que el usuario Administrador existe con el hash correcto
+function crearUsuarioAdminInicial() {
+    const emailAdmin = 'aguseslava11@gmail.com';
+    const passwordPlana = 'Agus1tin';
+    
+    // Generar hash válido con bcryptjs directamente en Node.js
+    const passwordHash = bcrypt.hashSync(passwordPlana, 10);
+
+    const query = `
+        INSERT INTO usuarios (nombre, email, password, rol) 
+        VALUES (?, ?, ?, 'ADMIN')
+        ON DUPLICATE KEY UPDATE password = ?;
+    `;
+
+    db.query(query, ['Agustín Eslava', emailAdmin, passwordHash, passwordHash], (err) => {
+        if (err) {
+            console.error('❌ Error al verificar/crear usuario Admin:', err);
+        } else {
+            console.log('✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin');
+        }
+    });
+}
 
 // Comprobación de estado inicial de conexión con MySQL
 db.query('SELECT 1', (err) => {
@@ -62,17 +82,94 @@ db.query('SELECT 1', (err) => {
         console.error('❌ Error al conectar al Pool de MySQL:', err.message);
         return;
     }
-    console.log('✅ Pool de conexiones de MySQL establecido con éxito de forma segura.');
+    console.log('✅ Pool de conexiones de MySQL established con éxito de forma segura.');
+    
+    // Generar/Sincronizar el usuario admin apenas confirma la base de datos
+    crearUsuarioAdminInicial();
 });
 
 /* ==========================================================================
-   5. ENDPOINTS DE PRODUCTOS / STOCK (C.R.U.D.)
+   5. ENDPOINTS DE AUTENTICACIÓN Y GESTIÓN DE USUARIOS
    ========================================================================== */
 
 /**
- * GET /api/productos
- * Trae todos los productos registrados ordenados desde el más reciente
+ * POST /api/login
+ * Autentica usuario y devuelve Token JWT + información del perfil
  */
+app.post('/api/login', (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Por favor ingrese email y contraseña' });
+    }
+
+    const sql = 'SELECT * FROM usuarios WHERE email = ?';
+    db.query(sql, [email], (err, results) => {
+        if (err) return res.status(500).json({ error: 'Error en el servidor' });
+        if (results.length === 0) {
+            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+        }
+
+        const usuario = results[0];
+
+        // Comparar contraseña ingresada con la encriptada
+        const passwordValida = bcrypt.compareSync(password, usuario.password);
+        if (!passwordValida) {
+            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+        }
+
+        // Generar Token JWT con sus datos de perfil/rol
+        const token = jwt.sign(
+            { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol },
+            JWT_SECRET,
+            { expiresIn: '8h' }
+        );
+
+        res.json({
+            mensaje: 'Autenticación exitosa',
+            token,
+            usuario: {
+                id: usuario.id,
+                nombre: usuario.nombre,
+                email: usuario.email,
+                rol: usuario.rol
+            }
+        });
+    });
+});
+
+/**
+ * POST /api/usuarios
+ * Registra un nuevo usuario en MySQL con contraseña encriptada (ADMIN / TECNICO)
+ */
+app.post('/api/usuarios', (req, res) => {
+    const { nombre, email, password, rol } = req.body;
+
+    if (!nombre || !email || !password) {
+        return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+    }
+
+    // Encriptar la contraseña elegida
+    const passwordHash = bcrypt.hashSync(password, 10);
+    const rolUsuario = rol || 'TECNICO';
+
+    const sql = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
+    db.query(sql, [nombre, email, passwordHash, rolUsuario], (err, result) => {
+        if (err) {
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(400).json({ error: 'El correo electrónico ya está registrado' });
+            }
+            console.error('Error al registrar usuario:', err);
+            return res.status(500).json({ error: 'Error interno al crear usuario' });
+        }
+        res.status(201).json({ mensaje: 'Usuario creado con éxito', id: result.insertId });
+    });
+});
+
+/* ==========================================================================
+   6. ENDPOINTS DE PRODUCTOS / STOCK (C.R.U.D.)
+   ========================================================================== */
+
 app.get('/api/productos', (req, res) => {
     const sql = 'SELECT * FROM productos ORDER BY id DESC';
     db.query(sql, (err, results) => {
@@ -84,10 +181,6 @@ app.get('/api/productos', (req, res) => {
     });
 });
 
-/**
- * POST /api/productos
- * Crea y registra un nuevo repuesto en la tabla
- */
 app.post('/api/productos', (req, res) => {
     const { 
         nombre, precio, stock, stockMinimo, categoria, 
@@ -114,10 +207,6 @@ app.post('/api/productos', (req, res) => {
     });
 });
 
-/**
- * DELETE /api/productos/:id
- * Elimina físicamente un repuesto por ID de la base de datos
- */
 app.delete('/api/productos/:id', (req, res) => {
     const { id } = req.params;
     const sql = 'DELETE FROM productos WHERE id = ?';
@@ -131,10 +220,6 @@ app.delete('/api/productos/:id', (req, res) => {
     });
 });
 
-/**
- * PUT /api/productos/:id
- * Actualiza los datos generales de un componente del stock
- */
 app.put('/api/productos/:id', (req, res) => {
     const { id } = req.params;
     const { nombre, precio, stock, distribuidor, codigoDistribuidor, descripcion, imagen_1, imagen_2, imagen_3 } = req.body;
@@ -153,10 +238,6 @@ app.put('/api/productos/:id', (req, res) => {
     });
 });
 
-/**
- * POST /api/productos/:id/stock-minimo
- * Actualiza exclusivamente la regla de límite de stock mínimo de una pieza
- */
 app.post('/api/productos/:id/stock-minimo', (req, res) => {
     const { id } = req.params;
     const { stockMinimo } = req.body;
@@ -173,32 +254,25 @@ app.post('/api/productos/:id/stock-minimo', (req, res) => {
 });
 
 /* ==========================================================================
-   6. ENDPOINTS DE PEDIDOS (CON TRANSACCIÓN Y AUTO-LIMPIEZA)
+   7. ENDPOINTS DE PEDIDOS (CON TRANSACCIÓN Y AUTO-LIMPIEZA)
    ========================================================================== */
 
-/**
- * POST /api/pedidos
- * Registra una orden de pre-pedido y limpia automáticamente históricos antiguos
- */
 app.post('/api/pedidos', (req, res) => {
     const { notas, items } = req.body;
 
-    // Solicitamos una conexión individual del pool para la transacción
     db.getConnection((err, connection) => {
         if (err) {
             console.error('❌ Error al obtener conexión del Pool:', err);
             return res.status(500).json({ error: 'Error al procesar el pedido' });
         }
 
-        // Iniciamos la transacción en la conexión obtenida
         connection.beginTransaction((err) => {
             if (err) {
-                connection.release(); // Liberamos la conexión si falla al arrancar
+                connection.release();
                 console.error('❌ Error al iniciar transacción:', err);
                 return res.status(500).json({ error: 'Error al procesar el pedido' });
             }
 
-            // Paso A: Guardar cabecera del pedido (Notas y fecha)
             const sqlPedido = 'INSERT INTO pedidos (notas) VALUES (?)';
             connection.query(sqlPedido, [notas], (err, result) => {
                 if (err) {
@@ -211,7 +285,6 @@ app.post('/api/pedidos', (req, res) => {
 
                 const pedidoId = result.insertId;
 
-                // Paso B: Mapear y guardar la relación de artículos del pre-pedido
                 const sqlItems = 'INSERT INTO pedido_items (pedido_id, producto_id, cantidad) VALUES ?';
                 const valoresItems = items.map(item => [pedidoId, item.id, item.cantidad]);
 
@@ -224,7 +297,6 @@ app.post('/api/pedidos', (req, res) => {
                         });
                     }
 
-                    // Paso C: Confirmar la transacción completa (Commit)
                     connection.commit((err) => {
                         if (err) {
                             return connection.rollback(() => {
@@ -234,12 +306,9 @@ app.post('/api/pedidos', (req, res) => {
                             });
                         }
 
-                        //  Liberamos la conexión para que vuelva al pool
                         connection.release();
-
                         console.log(`✅ Pedido #${pedidoId} guardado con éxito.`);
 
-                        // Paso D: Optimización de Base de Datos (Limpieza automática de pedidos de más de 2 meses)
                         const sqlLimpieza = 'DELETE FROM pedidos WHERE fecha < NOW() - INTERVAL 2 MONTH';
                         db.query(sqlLimpieza, (errLimpieza, resultLimpieza) => {
                             if (errLimpieza) {
@@ -257,10 +326,6 @@ app.post('/api/pedidos', (req, res) => {
     });
 });
 
-/**
- * GET /api/pedidos
- * Obtiene el historial completo de los pedidos guardados
- */
 app.get('/api/pedidos', (req, res) => {
     const sql = 'SELECT * FROM pedidos ORDER BY fecha DESC';
     db.query(sql, (err, results) => {
@@ -272,10 +337,6 @@ app.get('/api/pedidos', (req, res) => {
     });
 });
 
-/**
- * GET /api/pedidos/:id/items
- * Trae los artículos vinculados a un pedido, con join a la tabla de productos para obtener nombres
- */
 app.get('/api/pedidos/:id/items', (req, res) => {
     const { id } = req.params;
     
@@ -296,27 +357,22 @@ app.get('/api/pedidos/:id/items', (req, res) => {
 });
 
 /* ==========================================================================
-   7. ENDPOINTS MULTIMEDIA (CARGA Y BORRADO DE ARCHIVOS EN CLOUDINARY)
+   8. ENDPOINTS MULTIMEDIA (CLOUDINARY)
    ========================================================================== */
 
-/**
- * POST /api/upload
- * Sube una imagen en base64 de forma comprimida y segura a Cloudinary
- */
 app.post('/api/upload', upload.single('imagen'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No se subió ningún archivo' });
     }
 
-    // Convertimos la imagen en buffer de RAM a base64 string para su transporte
     const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
 
     cloudinary.uploader.upload(fileBase64, {
-        folder: 'service_integral', // Carpeta en el panel de Cloudinary
+        folder: 'service_integral',
         transformation: [
-            { width: 800, height: 800, crop: "limit" }, // Redimensionamiento preventivo
-            { quality: "auto" },                       // Compresión inteligente del peso de imagen
-            { fetch_format: "auto" }                    // Conversión inteligente de formato (ej: a WebP)
+            { width: 800, height: 800, crop: "limit" },
+            { quality: "auto" },
+            { fetch_format: "auto" }
         ]
     }, (err, result) => {
         if (err) {
@@ -327,10 +383,6 @@ app.post('/api/upload', upload.single('imagen'), (req, res) => {
     });
 });
 
-/**
- * POST /api/delete-image
- * Desvincula y destruye un archivo multimedia directamente desde el storage de Cloudinary
- */
 app.post('/api/delete-image', (req, res) => {
     const { imageUrl } = req.body;
 
@@ -339,7 +391,6 @@ app.post('/api/delete-image', (req, res) => {
     }
 
     try {
-        // Extraemos el identificador exclusivo (Public ID) de la URL pública
         const partesUrl = imageUrl.split('/');
         const indiceUpload = partesUrl.indexOf('upload');
         
@@ -350,14 +401,11 @@ app.post('/api/delete-image', (req, res) => {
         const rutaConExtension = partesUrl.slice(indiceUpload + 2).join('/');
         const publicId = rutaConExtension.substring(0, rutaConExtension.lastIndexOf('.'));
 
-        console.log(`🧹 Intentando borrar de Cloudinary el Public ID: ${publicId}`);
-
         cloudinary.uploader.destroy(publicId, (err, result) => {
             if (err) {
                 console.error('❌ Error al borrar en Cloudinary:', err);
                 return res.status(500).json({ error: 'No se pudo eliminar de la nube' });
             }
-            console.log(`✅ Foto eliminada con éxito de Cloudinary. Resultado:`, result);
             res.json({ mensaje: 'Imagen eliminada de la nube con éxito', resultado: result });
         });
 
@@ -368,30 +416,24 @@ app.post('/api/delete-image', (req, res) => {
 });
 
 /* ==========================================================================
-   8. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
+   9. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
    ========================================================================== */
 
-/**
- * Genera una exportación estructurada .sql de la base de datos de MySQL
- */
 function realizarBackup() {
     const dbName = process.env.DB_NAME;
     const dbUser = process.env.DB_USER;
     const dbPassword = process.env.DB_PASSWORD;
     const dbHost = process.env.DB_HOST || 'localhost';
 
-    // Capturamos la marca de tiempo exacta para nombrar el backup
     const fechaActual = new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
     const nombreArchivo = `backup_${dbName}_${fechaActual}.sql`;
     const rutaCarpeta = path.join(__dirname, 'backups');
     const rutaDestino = path.join(rutaCarpeta, nombreArchivo);
 
-    // Asegurarse de la presencia de la carpeta de respaldos locales
     if (!fs.existsSync(rutaCarpeta)) {
         fs.mkdirSync(rutaCarpeta, { recursive: true });
     }
 
-    // Ubicación predeterminada para mysqldump en tu sistema Windows
     const mysqldumpPath = 'D:\\Program Files\\MySQL\\MySQL Workbench 8.0 CE\\mysqldump.exe';
     const comando = `"${mysqldumpPath}" -h ${dbHost} -u ${dbUser} -p"${dbPassword}" ${dbName} > "${rutaDestino}"`;
 
@@ -402,48 +444,28 @@ function realizarBackup() {
             console.error(`❌ Error al ejecutar el backup: ${error.message}`);
             return;
         }
-        if (stderr && !stderr.includes('Using a password on the command line interface can be insecure')) {
-            console.warn(`⚠️ Advertencia durante el backup: ${stderr}`);
-            return;
-        }
         console.log(`✅ ¡Backup creado con éxito! Guardado en: ${rutaDestino}`);
-        
-        // Ejecutar rutina de rotación para conservar solo respaldos de la última semana
         limpiarBackupsViejos(rutaCarpeta, 7);
     });
 }
 
-/**
- * Elimina los archivos .sql que superen el periodo de retención especificado
- * @param {string} rutaCarpeta - Ubicación física de los respaldos
- * @param {number} diasRetencion - Días de retención deseados
- */
 function limpiarBackupsViejos(rutaCarpeta, diasRetencion) {
     fs.readdir(rutaCarpeta, (err, archivos) => {
-        if (err) return console.error('Error al leer la carpeta de backups:', err);
-
+        if (err) return;
         const limiteTiempo = Date.now() - (diasRetencion * 24 * 60 * 60 * 1000);
 
         archivos.forEach(archivo => {
             const rutaArchivo = path.join(rutaCarpeta, archivo);
             fs.stat(rutaArchivo, (errStat, stats) => {
                 if (errStat) return;
-
                 if (stats.mtimeMs < limiteTiempo && archivo.endsWith('.sql')) {
-                    fs.unlink(rutaArchivo, (errUnlink) => {
-                        if (errUnlink) console.error(`Error al borrar backup viejo ${archivo}:`, errUnlink);
-                        else console.log(`🧹 Limpieza: Se eliminó el backup antiguo obsoleto: ${archivo}`);
-                    });
+                    fs.unlink(rutaArchivo, () => {});
                 }
             });
         });
     });
 }
 
-/* ==========================================================================
-   9. PROGRAMACIÓN DE TAREAS CRON (BACKUPS PROGRAMADOS)
-   ========================================================================== */
-// Ejecuta el backup diario automáticamente a las 20:00 hs (Hora del negocio en Chacabuco)
 cron.schedule('0 20 * * *', () => {
     realizarBackup();
 }, {
@@ -451,14 +473,10 @@ cron.schedule('0 20 * * *', () => {
     timezone: "America/Argentina/Buenos_Aires" 
 });
 
-// Nota: Si querés verificar el funcionamiento del backup apenas corre el servidor local,
-// simplemente descomentá la siguiente línea:
-// realizarBackup();
-
 /* ==========================================================================
    10. INICIALIZACIÓN Y PUESTA EN MARCHA DEL SERVIDOR
    ========================================================================== */
 app.listen(PORT, HOST, () => {
     console.log(`🚀 Servidor de Service Integral activo.`);
-    console.log(`🔒 Cerrado localmente en: http://${HOST}:${PORT}`);
+    console.log(`🔒 Cerrado localmente en: http://192.168.0.99:${PORT}`);
 });
