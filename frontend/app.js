@@ -28,7 +28,7 @@ let idProductoSeleccionado = null;
  */
 async function obtenerProductos() {
     try {
-        const respuesta = await fetch(API_URL);
+        const respuesta = await apiFetch(API_URL);
         if (!respuesta.ok) throw new Error('Error al conectar con el servidor');
         
         productosLocales = await respuesta.json();
@@ -225,7 +225,7 @@ document.getElementById('btn-modificar-minimo').addEventListener('click', async 
         const nuevoMinimo = parseInt(inputMinimo.value) || 0;
 
         try {
-            const respuesta = await fetch(`${API_URL}/${idProductoSeleccionado}/stock-minimo`, {
+            const respuesta = await apiFetch(`${API_URL}/${idProductoSeleccionado}/stock-minimo`, {
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ stockMinimo: nuevoMinimo })
@@ -331,7 +331,7 @@ document.getElementById('form-editar-producto').addEventListener('submit', async
     };
 
     try {
-        const respuesta = await fetch(`${API_URL}/${id}`, {
+        const respuesta = await apiFetch(`${API_URL}/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(datosActualizados)
@@ -373,7 +373,7 @@ formProducto.addEventListener('submit', async (e) => {
     };
 
     try {
-        const respuesta = await fetch(API_URL, {
+        const respuesta = await apiFetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(nuevoProducto)
@@ -408,7 +408,7 @@ async function eliminarProducto(id) {
             for (const urlFoto of fotosABorrar) {
                 if (urlFoto && urlFoto.trim() !== "") {
                     try {
-                        await fetch(`${window.location.origin}/api/delete-image`, {
+                        await apiFetch(`${window.location.origin}/api/delete-image`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ imageUrl: urlFoto })
@@ -421,7 +421,7 @@ async function eliminarProducto(id) {
         }
 
         // 2. Borrar de la base de datos MySQL una vez saneada la nube
-        const respuesta = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        const respuesta = await apiFetch(`${API_URL}/${id}`, { method: 'DELETE' });
         if (respuesta.ok) {
             alert('Artículo y sus archivos multimedia eliminados.');
             obtenerProductos();
@@ -462,7 +462,7 @@ async function subirFotoDirecto(slotNum, contexto = 'crear', evento) {
         const formData = new FormData();
         formData.append('imagen', fotoComprimida);
 
-        const respuesta = await fetch(`${window.location.origin}/api/upload`, {
+        const respuesta = await apiFetch(`${window.location.origin}/api/upload`, {
             method: 'POST',
             body: formData
         });
@@ -503,7 +503,7 @@ async function resetearSlot(slotNum, contexto) {
     if (urlEliminar && urlEliminar.trim() !== "" && !urlEliminar.includes('placeholder')) {
         try {
             console.log(`Solicitando eliminación física de: ${urlEliminar}`);
-            const respuesta = await fetch(`${window.location.origin}/api/delete-image`, {
+            const respuesta = await apiFetch(`${window.location.origin}/api/delete-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ imageUrl: urlEliminar })

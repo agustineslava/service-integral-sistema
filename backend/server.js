@@ -19,7 +19,14 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-const JWT_SECRET = process.env.JWT_SECRET || 'clave_secreta_service_integral_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+    console.error('❌ Falta JWT_SECRET en el archivo .env. El servidor no puede arrancar así.');
+    console.error('   Generá uno y agregalo a backend/.env, por ejemplo:');
+    console.error('   JWT_SECRET=' + require('crypto').randomBytes(48).toString('hex'));
+    process.exit(1);
+}
 
 /* ==========================================================================
    2. MIDDLEWARES DE LA APLICACIÓN
@@ -53,26 +60,37 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-// Función para asegurar que el usuario Administrador existe con el hash correcto
+// Función para asegurar que exista un usuario Administrador inicial (solo la primera vez)
+const ADMIN_EMAIL_INICIAL = process.env.ADMIN_EMAIL_INICIAL;
+const ADMIN_PASSWORD_INICIAL = process.env.ADMIN_PASSWORD_INICIAL;
+
 function crearUsuarioAdminInicial() {
-    const emailAdmin = 'aguseslava11@gmail.com';
-    const passwordPlana = 'Agus1tin';
-    
-    // Generar hash válido con bcryptjs directamente en Node.js
-    const passwordHash = bcrypt.hashSync(passwordPlana, 10);
+    if (!ADMIN_EMAIL_INICIAL || !ADMIN_PASSWORD_INICIAL) {
+        console.log('ℹ️  ADMIN_EMAIL_INICIAL / ADMIN_PASSWORD_INICIAL no están definidos en .env — se omite la creación automática de administrador.');
+        return;
+    }
 
-    const query = `
-        INSERT INTO usuarios (nombre, email, password, rol) 
-        VALUES (?, ?, ?, 'ADMIN')
-        ON DUPLICATE KEY UPDATE password = ?;
-    `;
-
-    db.query(query, ['Agustín Eslava', emailAdmin, passwordHash, passwordHash], (err) => {
+    // Solo consultamos si ya existe: si existe, NO tocamos su contraseña actual
+    // (evita pisar una contraseña que el cliente ya cambió desde la app).
+    db.query('SELECT id FROM usuarios WHERE email = ?', [ADMIN_EMAIL_INICIAL], (err, rows) => {
         if (err) {
-            console.error('❌ Error al verificar/crear usuario Admin:', err);
-        } else {
-            console.log('✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin');
+            console.error('❌ Error al verificar usuario Admin inicial:', err.message);
+            return;
         }
+        if (rows.length > 0) return; // ya existe, no hacemos nada
+
+        const passwordHash = bcrypt.hashSync(ADMIN_PASSWORD_INICIAL, 10);
+        db.query(
+            'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, "ADMIN")',
+            ['Administrador', ADMIN_EMAIL_INICIAL, passwordHash],
+            (errInsert) => {
+                if (errInsert) {
+                    console.error('❌ Error al crear usuario Admin inicial:', errInsert.message);
+                } else {
+                    console.log(`✅ Usuario Administrador inicial creado: ${ADMIN_EMAIL_INICIAL}`);
+                }
+            }
+        );
     });
 }
 
@@ -87,6 +105,41 @@ db.query('SELECT 1', (err) => {
     // Generar/Sincronizar el usuario admin apenas confirma la base de datos
     crearUsuarioAdminInicial();
 });
+
+/* ==========================================================================
+   5.0 MIDDLEWARES DE AUTENTICACIÓN Y AUTORIZACIÓN
+   ========================================================================== */
+
+/**
+ * Exige un JWT válido en el header "Authorization: Bearer <token>".
+ * Si es válido, adjunta los datos del usuario en req.usuario.
+ */
+function verificarToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+    if (!token) {
+        return res.status(401).json({ error: 'No autorizado. Iniciá sesión nuevamente.' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(401).json({ error: 'Sesión inválida o expirada. Iniciá sesión nuevamente.' });
+        }
+        req.usuario = decoded;
+        next();
+    });
+}
+
+/**
+ * Debe usarse DESPUÉS de verificarToken. Exige que el usuario tenga rol ADMIN.
+ */
+function requiereAdmin(req, res, next) {
+    if (!req.usuario || req.usuario.rol !== 'ADMIN') {
+        return res.status(403).json({ error: 'No tenés permisos para realizar esta acción.' });
+    }
+    next();
+}
 
 /* ==========================================================================
    5. ENDPOINTS DE AUTENTICACIÓN Y GESTIÓN DE USUARIOS
@@ -142,7 +195,7 @@ app.post('/api/login', (req, res) => {
  * POST /api/usuarios
  * Registra un nuevo usuario en MySQL con contraseña encriptada (ADMIN / TECNICO)
  */
-app.post('/api/usuarios', (req, res) => {
+app.post('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
     const { nombre, email, password, rol } = req.body;
 
     if (!nombre || !email || !password) {
@@ -170,7 +223,7 @@ app.post('/api/usuarios', (req, res) => {
    6. ENDPOINTS DE PRODUCTOS / STOCK (C.R.U.D.)
    ========================================================================== */
 
-app.get('/api/productos', (req, res) => {
+app.get('/api/productos', verificarToken, (req, res) => {
     const sql = 'SELECT * FROM productos ORDER BY id DESC';
     db.query(sql, (err, results) => {
         if (err) {
@@ -181,7 +234,7 @@ app.get('/api/productos', (req, res) => {
     });
 });
 
-app.post('/api/productos', (req, res) => {
+app.post('/api/productos', verificarToken, requiereAdmin, (req, res) => {
     const { 
         nombre, precio, stock, stockMinimo, categoria, 
         distribuidor, codigoDistribuidor, descripcion, 
@@ -207,7 +260,7 @@ app.post('/api/productos', (req, res) => {
     });
 });
 
-app.delete('/api/productos/:id', (req, res) => {
+app.delete('/api/productos/:id', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
     const sql = 'DELETE FROM productos WHERE id = ?';
 
@@ -220,7 +273,7 @@ app.delete('/api/productos/:id', (req, res) => {
     });
 });
 
-app.put('/api/productos/:id', (req, res) => {
+app.put('/api/productos/:id', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
     const { nombre, precio, stock, distribuidor, codigoDistribuidor, descripcion, imagen_1, imagen_2, imagen_3 } = req.body;
 
@@ -238,7 +291,7 @@ app.put('/api/productos/:id', (req, res) => {
     });
 });
 
-app.post('/api/productos/:id/stock-minimo', (req, res) => {
+app.post('/api/productos/:id/stock-minimo', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
     const { stockMinimo } = req.body;
 
@@ -257,7 +310,7 @@ app.post('/api/productos/:id/stock-minimo', (req, res) => {
    7. ENDPOINTS DE PEDIDOS (CON TRANSACCIÓN Y AUTO-LIMPIEZA)
    ========================================================================== */
 
-app.post('/api/pedidos', (req, res) => {
+app.post('/api/pedidos', verificarToken, requiereAdmin, (req, res) => {
     const { notas, items } = req.body;
 
     db.getConnection((err, connection) => {
@@ -326,7 +379,7 @@ app.post('/api/pedidos', (req, res) => {
     });
 });
 
-app.get('/api/pedidos', (req, res) => {
+app.get('/api/pedidos', verificarToken, (req, res) => {
     const sql = 'SELECT * FROM pedidos ORDER BY fecha DESC';
     db.query(sql, (err, results) => {
         if (err) {
@@ -337,7 +390,7 @@ app.get('/api/pedidos', (req, res) => {
     });
 });
 
-app.get('/api/pedidos/:id/items', (req, res) => {
+app.get('/api/pedidos/:id/items', verificarToken, (req, res) => {
     const { id } = req.params;
     
     const sql = `
@@ -360,7 +413,7 @@ app.get('/api/pedidos/:id/items', (req, res) => {
    8. ENDPOINTS MULTIMEDIA (CLOUDINARY)
    ========================================================================== */
 
-app.post('/api/upload', upload.single('imagen'), (req, res) => {
+app.post('/api/upload', verificarToken, requiereAdmin, upload.single('imagen'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No se subió ningún archivo' });
     }
@@ -383,7 +436,7 @@ app.post('/api/upload', upload.single('imagen'), (req, res) => {
     });
 });
 
-app.post('/api/delete-image', (req, res) => {
+app.post('/api/delete-image', verificarToken, requiereAdmin, (req, res) => {
     const { imageUrl } = req.body;
 
     if (!imageUrl) {
