@@ -60,3 +60,8 @@
 2026-09-18T18:18:52: 🚀 Servidor de Service Integral activo.
 2026-09-18T18:18:52: 🔒 Cerrado localmente en: http://192.168.0.99:3000
 2026-09-18T18:18:53: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T19:03:05: ◇ injected env (13) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+2026-09-18T19:03:15: 🚀 Servidor de Service Integral activo.
+2026-09-18T19:03:15: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T19:03:15: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T19:03:16: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin

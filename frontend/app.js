@@ -609,3 +609,59 @@ document.addEventListener('DOMContentLoaded', () => {
     // Traer el catálogo de repuestos de MySQL
     obtenerProductos();
 });
+
+/* ==========================================================================
+   12. EXPORTACIÓN DE INVENTARIO A CSV / EXCEL
+   ========================================================================== */
+const btnExportarCSV = document.getElementById('btn-exportar-csv');
+
+if (btnExportarCSV) {
+    btnExportarCSV.addEventListener('click', () => {
+        if (!productosLocales || productosLocales.length === 0) {
+            alert('No hay productos cargados en el inventario para exportar.');
+            return;
+        }
+
+        const encabezados = [
+            'ID',
+            'Nombre',
+            'Precio Costo ($)',
+            'Stock Actual',
+            'Stock Minimo',
+            'Categoria',
+            'Proveedor',
+            'Codigo Distribuidor',
+            'Descripcion'
+        ];
+
+        const filas = productosLocales.map(p => [
+            p.id,
+            `"${(p.nombre || '').replace(/"/g, '""')}"`,
+            Number(p.precio || 0).toFixed(2),
+            p.stock,
+            p.stockMinimo,
+            `"${(p.categoria || 'Otros').replace(/"/g, '""')}"`,
+            `"${(p.distribuidor || 'No asignado').replace(/"/g, '""')}"`,
+            `"${(p.codigoDistribuidor || 'N/A').replace(/"/g, '""')}"`,
+            `"${(p.descripcion || '').replace(/"/g, '""')}"`
+        ]);
+
+        // Unir todo con saltos de línea Windows estándar
+        const contenidoCSV = [
+            encabezados.join(';'),
+            ...filas.map(f => f.join(';'))
+        ].join('\r\n');
+
+        // \uFEFF fuerza a Excel a abrir el archivo interpretando acentos y caracteres especiales correctamente
+        const blob = new Blob(['\uFEFF' + contenidoCSV], { type: 'text/csv;charset=utf-8;' });
+        const enlaceDescarga = document.createElement('a');
+        const fechaHoy = new Date().toISOString().slice(0, 10);
+        
+        enlaceDescarga.href = URL.createObjectURL(blob);
+        enlaceDescarga.setAttribute('download', `Inventario_Stock_${fechaHoy}.csv`);
+        document.body.appendChild(enlaceDescarga);
+        enlaceDescarga.click();
+        document.body.removeChild(enlaceDescarga);
+        URL.revokeObjectURL(enlaceDescarga.href);
+    });
+}

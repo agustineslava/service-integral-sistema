@@ -89,6 +89,17 @@ db.query('SELECT 1', (err) => {
 });
 
 /* ==========================================================================
+   CONFIGURACIÓN PÚBLICA DE MARCA BLANCA
+   ========================================================================== */
+app.get('/api/config-comercio', (req, res) => {
+    res.json({
+        nombre: process.env.COMERCIO_NOMBRE || 'Sistema de Gestión',
+        subtitulo: process.env.COMERCIO_SUBTITULO || 'Gestión de Stock y Taller',
+        logo: process.env.COMERCIO_LOGO || 'logos/logo.jpg'
+    });
+});
+
+/* ==========================================================================
    5. ENDPOINTS DE AUTENTICACIÓN Y GESTIÓN DE USUARIOS
    ========================================================================== */
 
