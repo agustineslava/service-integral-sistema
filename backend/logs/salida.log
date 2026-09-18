@@ -56,3 +56,7 @@
 2026-09-18T18:18:01: 🚀 Servidor de Service Integral activo.
 2026-09-18T18:18:01: 🔒 Cerrado localmente en: http://192.168.0.99:3000
 2026-09-18T18:18:01: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T18:18:51: ◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+2026-09-18T18:18:52: 🚀 Servidor de Service Integral activo.
+2026-09-18T18:18:52: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T18:18:53: ✅ Pool de conexiones de MySQL established con éxito de forma segura.

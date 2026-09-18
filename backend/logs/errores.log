@@ -414,3 +414,13 @@
 2026-09-18T17:55:42:   code: 'MODULE_NOT_FOUND',
 2026-09-18T17:55:42:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
 2026-09-18T17:55:42: }
+2026-09-18T18:19:13: ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false (default). This could indicate a misconfiguration which would prevent express-rate-limit from accurately identifying users. See https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/ for more information.
+2026-09-18T18:19:13:     at Object.xForwardedForHeader (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:185:13)
+2026-09-18T18:19:13:     at wrappedValidations.<computed> [as xForwardedForHeader] (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:397:22)
+2026-09-18T18:19:13:     at Object.keyGenerator (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:658:20)
+2026-09-18T18:19:13:     at D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:710:32
+2026-09-18T18:19:13:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-09-18T18:19:13:     at async D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:691:5 {
+2026-09-18T18:19:13:   code: 'ERR_ERL_UNEXPECTED_X_FORWARDED_FOR',
+2026-09-18T18:19:13:   help: 'https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/'
+2026-09-18T18:19:13: }
