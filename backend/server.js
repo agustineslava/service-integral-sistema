@@ -233,14 +233,23 @@ app.delete('/api/productos/:id', (req, res) => {
 
 app.put('/api/productos/:id', (req, res) => {
     const { id } = req.params;
-    const { nombre, precio, stock, distribuidor, codigoDistribuidor, descripcion, imagen_1, imagen_2, imagen_3 } = req.body;
+    const { 
+        nombre, precio, stock, stockMinimo, categoria, 
+        distribuidor, codigoDistribuidor, descripcion, 
+        imagen_1, imagen_2, imagen_3 
+    } = req.body;
 
     const sql = `UPDATE productos 
-                 SET nombre = ?, precio = ?, stock = ?, distribuidor = ?, codigoDistribuidor = ?, descripcion = ?, 
+                 SET nombre = ?, precio = ?, stock = ?, stockMinimo = ?, categoria = ?, 
+                     distribuidor = ?, codigoDistribuidor = ?, descripcion = ?, 
                      imagen_1 = ?, imagen_2 = ?, imagen_3 = ? 
                  WHERE id = ?`;
     
-    db.query(sql, [nombre, precio, stock, distribuidor, codigoDistribuidor, descripcion, imagen_1, imagen_2, imagen_3, id], (err, result) => {
+    db.query(sql, [
+        nombre, precio, stock, stockMinimo || 0, categoria || 'Otros',
+        distribuidor, codigoDistribuidor, descripcion, 
+        imagen_1, imagen_2, imagen_3, id
+    ], (err, result) => {
         if (err) {
             console.error('❌ Error al actualizar en MySQL:', err.message);
             return res.status(500).json({ error: 'Error interno del servidor' });

@@ -1,3 +1,35 @@
+/**
+ * Wrapper de fetch que inyecta automáticamente el token Bearer JWT
+ * y redirige a login si la sesión caducó.
+ */
+async function apiFetch(url, opciones = {}) {
+    const token = localStorage.getItem('jwt_token');
+    const headers = {
+        ...(opciones.headers || {})
+    };
+
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Si enviamos body y no es FormData, fijamos Content-Type JSON
+    if (opciones.body && !(opciones.body instanceof FormData) && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    const respuesta = await fetch(url, { ...opciones, headers });
+
+    if (respuesta.status === 401) {
+        localStorage.removeItem('jwt_token');
+        localStorage.removeItem('usuario_actual');
+        alert('Tu sesión ha expirado o no es válida. Por favor, iniciá sesión nuevamente.');
+        window.location.href = 'login.html';
+        return respuesta;
+    }
+
+    return respuesta;
+}
+
 /* ==========================================================================
    VERIFICACIÓN DE SESIÓN Y CONTROL DE PERMISOS / ROLES (ADMIN vs TECNICO)
    ========================================================================== */

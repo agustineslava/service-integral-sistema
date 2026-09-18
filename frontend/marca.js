@@ -1,9 +1,16 @@
 // Carga e inyecta dinámicamente la marca del taller configurada en el servidor
+// Carga e inyecta dinámicamente la marca del taller configurada en el servidor
 async function aplicarMarcaDinamica() {
     try {
-        const res = await fetch(`${window.location.origin}/api/config-comercio`);
+        const res = await fetch('/api/config-comercio');
         if (!res.ok) return;
         const conf = await res.json();
+
+        // Normalizar la ruta del logo para evitar fallos por rutas relativas
+        let logoSrc = conf.logo || '/logos/logo.jpg';
+        if (!logoSrc.startsWith('http') && !logoSrc.startsWith('/')) {
+            logoSrc = '/' + logoSrc;
+        }
 
         // 1. Título de la pestaña
         if (document.title.includes('Service Integral')) {
@@ -12,11 +19,11 @@ async function aplicarMarcaDinamica() {
 
         // 2. Logotipos (Login y Header principal)
         document.querySelectorAll('.logo img, .login-logo').forEach(img => {
-            img.src = conf.logo;
+            img.src = logoSrc;
             img.alt = `Logo ${conf.nombre}`;
         });
 
-        // 3. Título comercial en la cabecera / login / bienvenida
+        // 3. Título comercial
         document.querySelectorAll('.login-titulo').forEach(el => {
             el.textContent = conf.nombre;
         });

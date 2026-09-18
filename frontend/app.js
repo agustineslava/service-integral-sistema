@@ -28,11 +28,11 @@ let idProductoSeleccionado = null;
  */
 async function obtenerProductos() {
     try {
-        const respuesta = await fetch(API_URL);
+        const respuesta = await apiFetch(API_URL);
         if (!respuesta.ok) throw new Error('Error al conectar con el servidor');
         
         productosLocales = await respuesta.json();
-        renderizarTabla(productosLocales);
+        procesarYRenderizarTabla(); // Aplica filtros y orden actual
         verificarStockMinimo(productosLocales);
         actualizarSugerenciasProveedores();
     } catch (error) {
@@ -123,19 +123,83 @@ function actualizarSugerenciasProveedores() {
 }
 
 /* ==========================================================================
-   3. BUSCADOR INTERACTIVO AVANZADO
+   3. BUSCADOR INTERACTIVO AVANZADO, FILTRADO Y ORDENAMIENTO EN TIEMPO REAL
    ========================================================================== */
-inputBuscador.addEventListener('input', () => {
-    const termino = inputBuscador.value.toLowerCase().trim();
-    const columnaFiltro = selectFiltro.value; 
+const filtroEstado = document.getElementById('select-filtro-estado');
+const filtroCategoria = document.getElementById('select-filtro-categoria');
+const selectOrdenar = document.getElementById('select-ordenar');
 
-    const filtrados = productosLocales.filter(p => {
-        const valorPropiedad = p[columnaFiltro] ? p[columnaFiltro].toString().toLowerCase() : '';
-        return valorPropiedad.includes(termino);
+function procesarYRenderizarTabla() {
+    if (!productosLocales) return;
+
+    let resultado = [...productosLocales];
+
+    // --- A. FILTRO POR TÉRMINO DE BÚSQUEDA ---
+    const termino = (inputBuscador.value || '').toLowerCase().trim();
+    if (termino !== '') {
+        resultado = resultado.filter(p => {
+            const nombre = (p.nombre || '').toLowerCase();
+            const codigo = (p.codigoDistribuidor || '').toLowerCase();
+            const distribuidor = (p.distribuidor || '').toLowerCase();
+            const descripcion = (p.descripcion || '').toLowerCase();
+            const id = String(p.id || '');
+
+            return nombre.includes(termino) ||
+                   codigo.includes(termino) ||
+                   distribuidor.includes(termino) ||
+                   descripcion.includes(termino) ||
+                   id.includes(termino);
+        });
+    }
+
+    // --- B. FILTRO POR ESTADO DE STOCK ---
+    const estado = filtroEstado ? filtroEstado.value : 'TODOS';
+    if (estado === 'CRITICO') {
+        resultado = resultado.filter(p => p.stock <= p.stockMinimo && p.stock > 0);
+    } else if (estado === 'NORMAL') {
+        resultado = resultado.filter(p => p.stock > p.stockMinimo);
+    } else if (estado === 'SIN_STOCK') {
+        resultado = resultado.filter(p => p.stock === 0);
+    }
+
+    // --- C. FILTRO POR CATEGORÍA ---
+    const categoria = filtroCategoria ? filtroCategoria.value : 'TODAS';
+    if (categoria !== 'TODAS') {
+        resultado = resultado.filter(p => (p.categoria || 'Otros') === categoria);
+    }
+
+    // --- D. ORDENAMIENTO ---
+    const criterio = selectOrdenar ? selectOrdenar.value : 'id_desc';
+    resultado.sort((a, b) => {
+        switch (criterio) {
+            case 'nombre_asc':
+                return (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' });
+            case 'nombre_desc':
+                return (b.nombre || '').localeCompare(a.nombre || '', 'es', { sensitivity: 'base' });
+            case 'precio_asc':
+                return Number(a.precio || 0) - Number(b.precio || 0);
+            case 'precio_desc':
+                return Number(b.precio || 0) - Number(a.precio || 0);
+            case 'stock_asc':
+                return Number(a.stock || 0) - Number(b.stock || 0);
+            case 'stock_desc':
+                return Number(b.stock || 0) - Number(a.stock || 0);
+            case 'id_asc':
+                return Number(a.id) - Number(b.id);
+            case 'id_desc':
+            default:
+                return Number(b.id) - Number(a.id);
+        }
     });
 
-    renderizarTabla(filtrados);
-});
+    renderizarTabla(resultado);
+}
+
+// Event Listeners unificados para respuesta inmediata
+inputBuscador.addEventListener('input', procesarYRenderizarTabla);
+if (filtroEstado) filtroEstado.addEventListener('change', procesarYRenderizarTabla);
+if (filtroCategoria) filtroCategoria.addEventListener('change', procesarYRenderizarTabla);
+if (selectOrdenar) selectOrdenar.addEventListener('change', procesarYRenderizarTabla);
 
 
 /* ==========================================================================
@@ -269,6 +333,8 @@ async function prepararActualizacion(id) {
         document.getElementById('edit-nombre').value = p.nombre;
         document.getElementById('edit-precio').value = p.precio;
         document.getElementById('edit-stock').value = p.stock;
+        document.getElementById('edit-stockMinimo').value = p.stockMinimo || 0;
+        document.getElementById('edit-categoria').value = p.categoria || 'Otros';
         document.getElementById('edit-distribuidor').value = p.distribuidor || '';
         document.getElementById('edit-codigo').value = p.codigoDistribuidor || '';
         document.getElementById('edit-descripcion').value = p.descripcion || '';
@@ -319,9 +385,11 @@ document.getElementById('form-editar-producto').addEventListener('submit', async
 
     // Normalizamos cadenas y números antes de enviarlos a Node.js
     const datosActualizados = {
-        nombre: capitalizarPrimeraLetra(document.getElementById('edit-nombre').value),
+       nombre: capitalizarPrimeraLetra(document.getElementById('edit-nombre').value),
         precio: parseFloat(document.getElementById('edit-precio').value) || 0.00,
         stock: parseInt(document.getElementById('edit-stock').value) || 0,
+        stockMinimo: parseInt(document.getElementById('edit-stockMinimo').value) || 0,
+        categoria: document.getElementById('edit-categoria').value,
         distribuidor: capitalizarPrimeraLetra(document.getElementById('edit-distribuidor').value),
         descripcion: capitalizarPrimeraLetra(document.getElementById('edit-descripcion').value),
         codigoDistribuidor: document.getElementById('edit-codigo').value ? document.getElementById('edit-codigo').value.trim().toUpperCase() : null,
@@ -330,10 +398,9 @@ document.getElementById('form-editar-producto').addEventListener('submit', async
         imagen_3: document.getElementById('edit-img-url-3').value || null
     };
 
-    try {
-        const respuesta = await fetch(`${API_URL}/${id}`, {
+  try {
+        const respuesta = await apiFetch(`${API_URL}/${id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(datosActualizados)
         });
 
@@ -342,7 +409,8 @@ document.getElementById('form-editar-producto').addEventListener('submit', async
             cerrarModal('modal-editar');
             obtenerProductos(); 
         } else {
-            alert('Error al actualizar el producto.');
+            const data = await respuesta.json();
+            alert(data.error || 'Error al actualizar el producto.');
         }
     } catch (error) {
         console.error('Error al guardar cambios:', error);
@@ -373,9 +441,8 @@ formProducto.addEventListener('submit', async (e) => {
     };
 
     try {
-        const respuesta = await fetch(API_URL, {
+        const respuesta = await apiFetch(API_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(nuevoProducto)
         });
 
@@ -387,7 +454,8 @@ formProducto.addEventListener('submit', async (e) => {
             eliminarFotoCrear(3);
             obtenerProductos(); 
         } else {
-            alert('Error al guardar el producto.');
+            const data = await respuesta.json();
+            alert(data.error || 'Error al guardar el producto.');
         }
     } catch (error) {
         console.error('Error en la petición de guardado:', error);
@@ -404,24 +472,22 @@ async function eliminarProducto(id) {
         // 1. Borrar todas las fotos activas en Cloudinary asociadas a este registro
         if (productoABorrar) {
             const fotosABorrar = [productoABorrar.imagen_1, productoABorrar.imagen_2, productoABorrar.imagen_3];
-            
             for (const urlFoto of fotosABorrar) {
                 if (urlFoto && urlFoto.trim() !== "") {
                     try {
-                        await fetch(`${window.location.origin}/api/delete-image`, {
+                        await apiFetch('/api/delete-image', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ imageUrl: urlFoto })
                         });
                     } catch (errFoto) {
-                        console.error('No se pudo borrar una de las imágenes de Cloudinary:', errFoto);
+                        console.error('No se pudo borrar imagen en Cloudinary:', errFoto);
                     }
                 }
             }
         }
 
         // 2. Borrar de la base de datos MySQL una vez saneada la nube
-        const respuesta = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        const respuesta = await apiFetch(`${API_URL}/${id}`, { method: 'DELETE' });
         if (respuesta.ok) {
             alert('Artículo y sus archivos multimedia eliminados.');
             obtenerProductos();
@@ -462,9 +528,9 @@ async function subirFotoDirecto(slotNum, contexto = 'crear', evento) {
         const formData = new FormData();
         formData.append('imagen', fotoComprimida);
 
-        const respuesta = await fetch(`${window.location.origin}/api/upload`, {
+        const respuesta = await apiFetch('/api/upload', {
             method: 'POST',
-            body: formData
+            body: formData // apiFetch detecta FormData y no fuerza Content-Type JSON
         });
 
         if (!respuesta.ok) throw new Error('Fallo al subir archivo');
@@ -503,9 +569,8 @@ async function resetearSlot(slotNum, contexto) {
     if (urlEliminar && urlEliminar.trim() !== "" && !urlEliminar.includes('placeholder')) {
         try {
             console.log(`Solicitando eliminación física de: ${urlEliminar}`);
-            const respuesta = await fetch(`${window.location.origin}/api/delete-image`, {
+            const respuesta = await apiFetch('/api/delete-image', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ imageUrl: urlEliminar })
             });
             

@@ -7,45 +7,40 @@ echo   INICIANDO SERVIDOR Y TUNEL DE SERVICE INTEGRAL
 echo ===================================================
 echo.
 
-:: 1. Cerrar procesos previos de cloudflared
 taskkill /f /im cloudflared.exe >nul 2>&1
 taskkill /f /im cloudflared.exe.exe >nul 2>&1
 
-:: 2. Levantar el Backend con PM2 o Node
 cd /d "%~dp0backend"
 where pm2 >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] Iniciando servidor con Node.js...
+    echo [INFO] Iniciando backend directamente con Node.js...
     start /b node server.js
 ) else (
-    echo [INFO] Iniciando servidor con PM2...
+    echo [INFO] Iniciando backend mediante PM2...
     call pm2 startOrRestart ecosystem.config.js
 )
 
 echo Esperando conexion con base de datos...
 timeout /t 3 /nobreak >nul
 
-:: 3. Volver a la raiz y limpiar log viejo
 cd /d "%~dp0"
 if exist tunnel_log.txt del /f /q tunnel_log.txt >nul 2>&1
 
 echo Conectando con Cloudflare...
 echo.
 
-:: 4. Localizar ejecutable de Cloudflare
 set "CF_EXE="
 if exist "%~dp0cloudflared.exe" set "CF_EXE=%~dp0cloudflared.exe"
 if exist "%~dp0cloudflared.exe.exe" set "CF_EXE=%~dp0cloudflared.exe.exe"
 
 if not defined CF_EXE (
-    echo [ERROR] No se encontro cloudflared.exe en la raiz.
+    echo [ERROR] No se encontro cloudflared.exe en la raiz del proyecto.
     pause
     exit /b
 )
 
 start /b "" "%CF_EXE%" tunnel --url http://localhost:3000 > tunnel_log.txt 2>&1
 
-:: 5. Extraer la URL limpia
 set "MI_URL="
 set /a reintentos=0
 
@@ -65,7 +60,7 @@ if %reintentos% LSS 10 (
 )
 
 echo.
-echo [AVISO] No se pudo obtener la URL publica. Podes ingresar en: http://localhost:3000/login.html
+echo [AVISO] Podes ingresar localmente en: http://localhost:3000/login.html
 goto FIN
 
 :URL_OK
@@ -74,13 +69,16 @@ echo  ENLACE DE ACCESO REMOTO GENERADO:
 echo  %MI_URL%
 echo ===================================================
 echo.
-echo Esperando 4 segundos a la propagacion de red...
-timeout /t 4 /nobreak >nul
+echo ESCANEA ESTE CODIGO QR CON EL CELULAR PARA INGRESAR:
+echo.
+powershell -NoProfile -Command "try { $qr = Invoke-RestMethod -Uri 'https://qrenco.de/\%MI_URL\%/login.html' -TimeoutSec 3; Write-Host$qr } catch { Write-Host '[Aviso: Conectate usando el enlace superior]' }"
+echo.
+echo Esperando propagacion de red (3 segundos)...
+timeout /t 3 /nobreak >nul
 
-echo Abriendo navegador...
 start "" chrome "%MI_URL%/login.html"
 
 :FIN
 echo.
-echo Servidor en ejecucion. Presiona cualquier tecla para cerrar esta ventana.
+echo Servidor en ejecucion. Presiona cualquier tecla para cerrar esta consola.
 pause >nul

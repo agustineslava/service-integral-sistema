@@ -202,19 +202,53 @@
         </section>
             
         <!-- ==========================================================================
-           4. BUSCADOR DINÁMICO AVANZADO
+           4. BARRA AVANZADA: BUSCADOR, FILTROS Y ORDENAMIENTO
            ========================================================================== -->
         <section class="seccion-busqueda">
-            <div class="buscador-avanzado">
-                <label for="select-filtro">Buscar por:</label>
-                <select id="select-filtro">
-                    <option value="nombre">Nombre / Componente</option>
-                    <option value="id">ID de Producto</option>
-                    <option value="codigoDistribuidor">Código Distribuidor</option>
-                    <option value="distribuidor">Proveedor</option>
-                    <option value="categoria">Categoría</option>
-                </select>
-                <input type="text" id="input-buscador" placeholder="Escriba los términos de búsqueda..." autocomplete="off">
+            <div class="buscador-avanzado" style="flex-wrap: wrap; gap: 12px;">
+                <!-- Campo de búsqueda -->
+                <div style="display: flex; align-items: center; gap: 8px; flex: 2; min-width: 260px;">
+                    <label for="input-buscador" style="margin-bottom: 0;">Buscar:</label>
+                    <input type="text" id="input-buscador" placeholder="Escriba nombre, código, proveedor..." autocomplete="off">
+                </div>
+
+                <!-- Filtrar por Estado / Categoría -->
+                <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px;">
+                    <label for="select-filtro-estado" style="margin-bottom: 0;">Estado:</label>
+                    <select id="select-filtro-estado">
+                        <option value="TODOS">Todos los estados</option>
+                        <option value="CRITICO">⚠️ Solo Stock Crítico</option>
+                        <option value="NORMAL">✅ Stock Suficiente</option>
+                        <option value="SIN_STOCK">❌ Sin Stock (0 un.)</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px;">
+                    <label for="select-filtro-categoria" style="margin-bottom: 0;">Categoría:</label>
+                    <select id="select-filtro-categoria">
+                        <option value="TODAS">Todas las categorías</option>
+                        <option value="Lavarropas">Lavarropas</option>
+                        <option value="Heladeras">Heladeras</option>
+                        <option value="Lavavajillas">Lavavajillas</option>
+                        <option value="Secarropas">Secarropas</option>
+                        <option value="Otros">Otros</option>
+                    </select>
+                </div>
+
+                <!-- Ordenar por Columna y Criterio -->
+                <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px;">
+                    <label for="select-ordenar" style="margin-bottom: 0;">Ordenar por:</label>
+                    <select id="select-ordenar">
+                        <option value="id_desc">Más recientes primero</option>
+                        <option value="id_asc">Más antiguos primero</option>
+                        <option value="nombre_asc">Nombre (A - Z)</option>
+                        <option value="nombre_desc">Nombre (Z - A)</option>
+                        <option value="precio_desc">Mayor precio</option>
+                        <option value="precio_asc">Menor precio</option>
+                        <option value="stock_asc">Menor stock disponible</option>
+                        <option value="stock_desc">Mayor stock disponible</option>
+                    </select>
+                </div>
             </div>
         </section>
 
@@ -321,26 +355,45 @@
                         <label for="edit-nombre">Nombre del Producto:</label>
                         <input type="text" id="edit-nombre" autocomplete="off" required>
                     </div>
+                    
+                    <!-- Fila de Costo, Stock Actual y Stock Mínimo -->
                     <div class="fila-formulario">
-                        <div class="campo w-50">
+                        <div class="campo w-33">
                             <label for="edit-precio">Precio Costo ($)</label>
                             <input type="number" id="edit-precio" min="0" step="0.01" required>
                         </div>
-                        <div class="campo w-50">
+                        <div class="campo w-33">
                             <label for="edit-stock">Stock Actual</label>
                             <input type="number" id="edit-stock" min="0" required>
                         </div>
+                        <div class="campo w-33">
+                            <label for="edit-stockMinimo">Stock Mínimo</label>
+                            <input type="number" id="edit-stockMinimo" min="0" required>
+                        </div>
                     </div>
+
+                    <!-- Fila de Categoría, Proveedor y Código -->
                     <div class="fila-formulario">
-                        <div class="campo w-50">
+                        <div class="campo w-33">
+                            <label for="edit-categoria">Categoría</label>
+                            <select id="edit-categoria">
+                                <option value="Lavarropas">Lavarropas</option>
+                                <option value="Heladeras">Heladeras</option>
+                                <option value="Lavavajillas">Lavavajillas</option>
+                                <option value="Secarropas">Secarropas</option>
+                                <option value="Otros">Otros</option>
+                            </select>
+                        </div>
+                        <div class="campo w-33">
                             <label for="edit-distribuidor">Proveedor / Distribuidor</label>
                             <input type="text" id="edit-distribuidor" autocomplete="off">
                         </div>
-                        <div class="campo w-50">
+                        <div class="campo w-33">
                             <label for="edit-codigo">Código Distribuidor</label>
                             <input type="text" id="edit-codigo" autocomplete="off">
                         </div>
                     </div>
+
                     <div class="campo">
                         <label for="edit-descripcion">Descripción / Notas</label>
                         <input type="text" id="edit-descripcion" autocomplete="off">
@@ -349,7 +402,6 @@
                     <div class="edit-imagenes-seccion">
                         <h3>Gestión de Imágenes (Máx. 3 - Autocompresión)</h3>
                         <div class="slots-imagenes-grid">
-                            
                             <!-- Slot 1 Edición -->
                             <div class="slot-foto">
                                 <span>Foto 1</span>
@@ -403,10 +455,9 @@
                                 <input type="hidden" id="edit-img-url-3">
                                 <button type="button" class="btn-accion-foto btn-borrar-foto" onclick="eliminarFotoSlot(3)">Eliminar</button>
                             </div>
-
                         </div>
                     </div>
-                </div> 
+                </div>
                 <button type="submit" class="btn btn-actualizar">Guardar Cambios</button>
             </form>
         </div>
