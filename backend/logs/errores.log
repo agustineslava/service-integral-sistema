@@ -1,0 +1,416 @@
+2026-09-18T17:53:29: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:53:29: Require stack:
+2026-09-18T17:53:29: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:53:29:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:53:29:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:53:29:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:53:29:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:53:29:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:53:29:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:53:29:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:53:29:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:53:29:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:53:29:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:53:29:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:53:29:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:53:29: }
+2026-09-18T17:53:33: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:53:33: Require stack:
+2026-09-18T17:53:33: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:53:33:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:53:33:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:53:33:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:53:33:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:53:33:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:53:33:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:53:33:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:53:33:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:53:33:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:53:33:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:53:33:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:53:33:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:53:33: }
+2026-09-18T17:53:37: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:53:37: Require stack:
+2026-09-18T17:53:37: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:53:37:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:53:37:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:53:37:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:53:37:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:53:37:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:53:37:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:53:37:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:53:37:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:53:37:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:53:37:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:53:37:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:53:37:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:53:37: }
+2026-09-18T17:53:41: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:53:41: Require stack:
+2026-09-18T17:53:41: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:53:41:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:53:41:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:53:41:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:53:41:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:53:41:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:53:41:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:53:41:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:53:41:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:53:41:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:53:41:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:53:41:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:53:41:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:53:41: }
+2026-09-18T17:53:45: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:53:45: Require stack:
+2026-09-18T17:53:45: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:53:45:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:53:45:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:53:45:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:53:45:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:53:45:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:53:45:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:53:45:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:53:45:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:53:45:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:53:45:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:53:45:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:53:45:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:53:45: }
+2026-09-18T17:53:49: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:53:49: Require stack:
+2026-09-18T17:53:49: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:53:49:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:53:49:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:53:49:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:53:49:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:53:49:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:53:49:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:53:49:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:53:49:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:53:49:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:53:49:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:53:49:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:53:49:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:53:49: }
+2026-09-18T17:53:52: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:53:52: Require stack:
+2026-09-18T17:53:52: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:53:52:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:53:52:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:53:52:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:53:52:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:53:52:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:53:52:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:53:52:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:53:52:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:53:52:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:53:52:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:53:52:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:53:52:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:53:52: }
+2026-09-18T17:53:56: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:53:56: Require stack:
+2026-09-18T17:53:56: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:53:56:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:53:56:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:53:56:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:53:56:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:53:56:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:53:56:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:53:56:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:53:56:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:53:56:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:53:56:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:53:56:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:53:56:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:53:56: }
+2026-09-18T17:54:00: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:54:00: Require stack:
+2026-09-18T17:54:00: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:54:00:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:54:00:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:54:00:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:54:00:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:54:00:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:54:00:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:54:00:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:54:00:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:54:00:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:54:00:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:54:00:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:54:00:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:54:00: }
+2026-09-18T17:54:04: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:54:04: Require stack:
+2026-09-18T17:54:04: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:54:04:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:54:04:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:54:04:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:54:04:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:54:04:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:54:04:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:54:04:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:54:04:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:54:04:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:54:04:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:54:04:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:54:04:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:54:04: }
+2026-09-18T17:54:09: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:54:09: Require stack:
+2026-09-18T17:54:09: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:54:09:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:54:09:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:54:09:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:54:09:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:54:09:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:54:09:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:54:09:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:54:09:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:54:09:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:54:09:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:54:09:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:54:09:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:54:09: }
+2026-09-18T17:54:13: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:54:13: Require stack:
+2026-09-18T17:54:13: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:54:13:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:54:13:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:54:13:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:54:13:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:54:13:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:54:13:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:54:13:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:54:13:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:54:13:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:54:13:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:54:13:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:54:13:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:54:13: }
+2026-09-18T17:54:17: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:54:17: Require stack:
+2026-09-18T17:54:17: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:54:17:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:54:17:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:54:17:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:54:17:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:54:17:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:54:17:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:54:17:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:54:17:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:54:17:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:54:17:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:54:17:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:54:17:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:54:17: }
+2026-09-18T17:54:22: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:54:22: Require stack:
+2026-09-18T17:54:22: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:54:22:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:54:22:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:54:22:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:54:22:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:54:22:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:54:22:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:54:22:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:54:22:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:54:22:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:54:22:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:54:22:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:54:22:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:54:22: }
+2026-09-18T17:54:26: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:54:26: Require stack:
+2026-09-18T17:54:26: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:54:26:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:54:26:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:54:26:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:54:26:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:54:26:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:54:26:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:54:26:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:54:26:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:54:26:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:54:26:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:54:26:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:54:26:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:54:26: }
+2026-09-18T17:54:30: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:54:30: Require stack:
+2026-09-18T17:54:30: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:54:30:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:54:30:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:54:30:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:54:30:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:54:30:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:54:30:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:54:30:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:54:30:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:54:30:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:54:30:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:54:30:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:54:30:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:54:30: }
+2026-09-18T17:55:06: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:06: Require stack:
+2026-09-18T17:55:06: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:06:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:06:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:06:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:06:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:06:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:06:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:06:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:06:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:06:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:06:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:06:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:06:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:06: }
+2026-09-18T17:55:10: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:10: Require stack:
+2026-09-18T17:55:10: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:10:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:10:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:10:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:10:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:10:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:10:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:10:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:10:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:10:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:10:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:10:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:10:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:10: }
+2026-09-18T17:55:14: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:14: Require stack:
+2026-09-18T17:55:14: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:14:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:14:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:14:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:14:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:14:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:14:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:14:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:14:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:14:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:14:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:14:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:14:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:14: }
+2026-09-18T17:55:18: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:18: Require stack:
+2026-09-18T17:55:18: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:18:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:18:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:18:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:18:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:18:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:18:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:18:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:18:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:18:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:18:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:18:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:18:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:18: }
+2026-09-18T17:55:22: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:22: Require stack:
+2026-09-18T17:55:22: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:22:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:22:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:22:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:22:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:22:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:22:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:22:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:22:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:22:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:22:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:22:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:22:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:22: }
+2026-09-18T17:55:26: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:26: Require stack:
+2026-09-18T17:55:26: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:26:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:26:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:26:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:26:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:26:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:26:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:26:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:26:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:26:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:26:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:26:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:26:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:26: }
+2026-09-18T17:55:30: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:30: Require stack:
+2026-09-18T17:55:30: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:30:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:30:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:30:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:30:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:30:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:30:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:30:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:30:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:30:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:30:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:30:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:30:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:30: }
+2026-09-18T17:55:34: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:34: Require stack:
+2026-09-18T17:55:34: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:34:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:34:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:34:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:34:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:34:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:34:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:34:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:34:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:34:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:34:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:34:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:34:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:34: }
+2026-09-18T17:55:38: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:38: Require stack:
+2026-09-18T17:55:38: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:38:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:38:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:38:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:38:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:38:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:38:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:38:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:38:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:38:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:38:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:38:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:38:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:38: }
+2026-09-18T17:55:42: Error: Cannot find module 'express-rate-limit'
+2026-09-18T17:55:42: Require stack:
+2026-09-18T17:55:42: - D:\SitemaServiceIntegral\backend\server.js
+2026-09-18T17:55:42:     at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)
+2026-09-18T17:55:42:     at Function._load (node:internal/modules/cjs/loader:1075:27)
+2026-09-18T17:55:42:     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+2026-09-18T17:55:42:     at wrapModuleLoad (node:internal/modules/cjs/loader:219:24)
+2026-09-18T17:55:42:     at Module.require (node:internal/modules/cjs/loader:1340:12)
+2026-09-18T17:55:42:     at require (node:internal/modules/helpers:138:16)
+2026-09-18T17:55:42:     at Object.<anonymous> (D:\SitemaServiceIntegral\backend\server.js:12:19)
+2026-09-18T17:55:42:     at Module._compile (node:internal/modules/cjs/loader:1565:14)
+2026-09-18T17:55:42:     at Object..js (node:internal/modules/cjs/loader:1708:10)
+2026-09-18T17:55:42:     at Module.load (node:internal/modules/cjs/loader:1318:32) {
+2026-09-18T17:55:42:   code: 'MODULE_NOT_FOUND',
+2026-09-18T17:55:42:   requireStack: [ 'D:\\SitemaServiceIntegral\\backend\\server.js' ]
+2026-09-18T17:55:42: }

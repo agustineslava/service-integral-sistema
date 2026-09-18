@@ -18,21 +18,6 @@ let productosLocales = [];
 // ID del producto que está siendo seleccionado para Ver Detalle o Modificar
 let idProductoSeleccionado = null;
 
-/**
- * Escapa caracteres especiales de HTML antes de insertarlos con innerHTML.
- * Evita que un nombre de producto, proveedor o descripción con < > " ' rompa el layout
- * o ejecute HTML/JS no deseado (XSS).
- */
-function escapeHtml(valor) {
-    if (valor === null || valor === undefined) return '';
-    return String(valor)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
 
 /* ==========================================================================
    2. RENDIMIENTO Y CONTROL DE LA TABLA PRINCIPAL
@@ -43,7 +28,7 @@ function escapeHtml(valor) {
  */
 async function obtenerProductos() {
     try {
-        const respuesta = await apiFetch(API_URL);
+        const respuesta = await fetch(API_URL);
         if (!respuesta.ok) throw new Error('Error al conectar con el servidor');
         
         productosLocales = await respuesta.json();
@@ -77,12 +62,12 @@ function renderizarTabla(lista) {
 
         tr.innerHTML = `
             <td>${p.id}</td>
-            <td><strong>${escapeHtml(p.nombre)}</strong></td>
+            <td><strong>${p.nombre}</strong></td>
             <td>$${parseFloat(p.precio).toFixed(2)}</td>
             <td><strong>${p.stock}</strong></td>
             <td>${p.stockMinimo}</td>
-            <td>${escapeHtml(p.distribuidor || 'No asignado')}</td>
-            <td><code class="cod-repuesto">${escapeHtml(p.codigoDistribuidor || 'N/A')}</code></td>
+            <td>${p.distribuidor || 'No asignado'}</td>
+            <td><code class="cod-repuesto">${p.codigoDistribuidor || 'N/A'}</code></td>
             <td>
                 <div class="celda-acciones">
                     <button class="btn-tabla btn-info btn-accion-info" data-id="${p.id}">Info</button>
@@ -240,7 +225,7 @@ document.getElementById('btn-modificar-minimo').addEventListener('click', async 
         const nuevoMinimo = parseInt(inputMinimo.value) || 0;
 
         try {
-            const respuesta = await apiFetch(`${API_URL}/${idProductoSeleccionado}/stock-minimo`, {
+            const respuesta = await fetch(`${API_URL}/${idProductoSeleccionado}/stock-minimo`, {
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ stockMinimo: nuevoMinimo })
@@ -346,7 +331,7 @@ document.getElementById('form-editar-producto').addEventListener('submit', async
     };
 
     try {
-        const respuesta = await apiFetch(`${API_URL}/${id}`, {
+        const respuesta = await fetch(`${API_URL}/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(datosActualizados)
@@ -388,7 +373,7 @@ formProducto.addEventListener('submit', async (e) => {
     };
 
     try {
-        const respuesta = await apiFetch(API_URL, {
+        const respuesta = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(nuevoProducto)
@@ -413,10 +398,30 @@ formProducto.addEventListener('submit', async (e) => {
 async function eliminarProducto(id) {
     if (!confirm('¿Seguro que querés eliminar este repuesto del stock?')) return;
 
+    const productoABorrar = productosLocales.find(p => p.id === id);
+
     try {
-        // El backend ya se encarga de borrar las fotos de Cloudinary antes de
-        // borrar la fila de MySQL, así que acá alcanza con un solo pedido.
-        const respuesta = await apiFetch(`${API_URL}/${id}`, { method: 'DELETE' });
+        // 1. Borrar todas las fotos activas en Cloudinary asociadas a este registro
+        if (productoABorrar) {
+            const fotosABorrar = [productoABorrar.imagen_1, productoABorrar.imagen_2, productoABorrar.imagen_3];
+            
+            for (const urlFoto of fotosABorrar) {
+                if (urlFoto && urlFoto.trim() !== "") {
+                    try {
+                        await fetch(`${window.location.origin}/api/delete-image`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ imageUrl: urlFoto })
+                        });
+                    } catch (errFoto) {
+                        console.error('No se pudo borrar una de las imágenes de Cloudinary:', errFoto);
+                    }
+                }
+            }
+        }
+
+        // 2. Borrar de la base de datos MySQL una vez saneada la nube
+        const respuesta = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
         if (respuesta.ok) {
             alert('Artículo y sus archivos multimedia eliminados.');
             obtenerProductos();
@@ -457,7 +462,7 @@ async function subirFotoDirecto(slotNum, contexto = 'crear', evento) {
         const formData = new FormData();
         formData.append('imagen', fotoComprimida);
 
-        const respuesta = await apiFetch(`${window.location.origin}/api/upload`, {
+        const respuesta = await fetch(`${window.location.origin}/api/upload`, {
             method: 'POST',
             body: formData
         });
@@ -498,7 +503,7 @@ async function resetearSlot(slotNum, contexto) {
     if (urlEliminar && urlEliminar.trim() !== "" && !urlEliminar.includes('placeholder')) {
         try {
             console.log(`Solicitando eliminación física de: ${urlEliminar}`);
-            const respuesta = await apiFetch(`${window.location.origin}/api/delete-image`, {
+            const respuesta = await fetch(`${window.location.origin}/api/delete-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ imageUrl: urlEliminar })

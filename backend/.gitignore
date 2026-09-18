@@ -10,10 +10,11 @@ backend/node_modules/
 backend/backups/
 backups/
 
-# Evitar subir los logs de PM2
-backend/logs/
-logs/
-
 # Archivos temporales o del sistema operativo
 .DS_Store
 Thumbs.db
+
+# Archivos temporales y binarios locales
+tunnel_log.txt
+cloudflared.exe
+cloudflared.exe.exe

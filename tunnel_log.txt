@@ -41,3 +41,12 @@
 2026-09-18T21:18:59Z INF precheck component="Cloudflare API" details="API is reachable" run_id=e7050ed1-2648-480d-89c1-db9c3da71854 status=pass target=api.cloudflare.com:443
 2026-09-18T21:18:59Z INF precheck complete hard_fail=false run_id=e7050ed1-2648-480d-89c1-db9c3da71854 suggested_protocol=quic
 2026-09-18T21:18:59Z INF Registered tunnel connection connIndex=0 connection=6324c127-c681-4f20-867b-2b4631204517 event=0 ip=198.41.192.47 location=eze02 protocol=quic
+2026-09-18T21:42:49Z INF Initiating graceful shutdown due to signal terminated ...
+2026-09-18T21:42:49Z ERR failed to run the datagram handler error="Application error 0x0 (remote)" connIndex=0 event=0 ip=198.41.192.47
+2026-09-18T21:42:49Z ERR failed to serve tunnel connection error="accept stream listener encountered a failure while serving" connIndex=0 event=0 ip=198.41.192.47
+2026-09-18T21:42:49Z ERR Serve tunnel error error="accept stream listener encountered a failure while serving" connIndex=0 event=0 ip=198.41.192.47
+2026-09-18T21:42:49Z INF Retrying connection in up to 1s connIndex=0 event=0 ip=198.41.192.47
+2026-09-18T21:42:49Z ERR Connection terminated connIndex=0
+2026-09-18T21:42:49Z ERR no more connections active and exiting
+2026-09-18T21:42:49Z INF Tunnel server stopped
+2026-09-18T21:42:49Z INF Metrics server stopped

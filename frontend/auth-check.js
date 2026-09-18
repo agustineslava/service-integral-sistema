@@ -1,29 +1,4 @@
 /* ==========================================================================
-   FETCH AUTENTICADO: adjunta el JWT a cada pedido a la API y maneja
-   automáticamente el caso de sesión inválida/expirada (401).
-   ========================================================================== */
-async function apiFetch(url, options = {}) {
-    const token = localStorage.getItem('jwt_token');
-
-    const headers = {
-        ...(options.headers || {}),
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    };
-
-    const respuesta = await fetch(url, { ...options, headers });
-
-    if (respuesta.status === 401) {
-        localStorage.removeItem('jwt_token');
-        localStorage.removeItem('usuario_actual');
-        alert('Tu sesión expiró o no es válida. Iniciá sesión nuevamente.');
-        window.location.href = 'login.html';
-        throw new Error('No autorizado');
-    }
-
-    return respuesta;
-}
-
-/* ==========================================================================
    VERIFICACIÓN DE SESIÓN Y CONTROL DE PERMISOS / ROLES (ADMIN vs TECNICO)
    ========================================================================== */
 (function verificarSesion() {
@@ -83,7 +58,7 @@ async function apiFetch(url, options = {}) {
                 };
 
                 try {
-                    const respuesta = await apiFetch(`${window.location.origin}/api/usuarios`, {
+                    const respuesta = await fetch(`${window.location.origin}/api/usuarios`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(nuevoUsuario)
