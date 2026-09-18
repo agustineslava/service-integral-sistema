@@ -71,3 +71,13 @@
 2026-09-18T19:59:54: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
 2026-09-18T19:59:54: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
 2026-09-18T20:00:00: 💾 Iniciando backup automático de la base de datos...
+2026-09-18T20:31:06: ◇ injected env (16) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+2026-09-18T20:31:11: 🚀 Servidor de Service Integral activo.
+2026-09-18T20:31:11: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T20:31:11: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T20:31:11: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T20:36:01: ◇ injected env (16) from .env // tip: ⌘ enable debugging { debug: true }
+2026-09-18T20:36:02: 🚀 Servidor de Service Integral activo.
+2026-09-18T20:36:02: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T20:36:02: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T20:36:03: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin

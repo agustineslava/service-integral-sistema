@@ -72,6 +72,7 @@ function renderizarTabla(lista) {
                 <div class="celda-acciones">
                     <button class="btn-tabla btn-info btn-accion-info" data-id="${p.id}">Info</button>
                     <button class="btn-tabla btn-actualizar btn-accion-actualizar" data-id="${p.id}">Actualizar</button>
+                    <button class="btn-tabla btn-actualizar btn-accion-etiqueta" data-id="${p.id}" style="background-color: #6f42c1;" title="Imprimir código de barras">Etiqueta</button>
                     <button class="btn-tabla btn-eliminar btn-accion-eliminar" data-id="${p.id}">Eliminar</button>
                 </div>
             </td>
@@ -96,7 +97,10 @@ tablaCuerpo.addEventListener('click', (e) => {
         prepararActualizacion(id);
     } else if (boton.classList.contains('btn-accion-eliminar')) {
         eliminarProducto(id);
+    } else if (boton.classList.contains('btn-accion-etiqueta')) {
+        abrirModalEtiqueta(id);
     }
+    
 });
 
 /* ==========================================================================
@@ -728,5 +732,106 @@ if (btnExportarCSV) {
         enlaceDescarga.click();
         document.body.removeChild(enlaceDescarga);
         URL.revokeObjectURL(enlaceDescarga.href);
+    });
+}
+
+/* ==========================================================================
+   13. ROTULACIÓN: GENERACIÓN DE CÓDIGO DE BARRAS CON JSBARCODE
+   ========================================================================== */
+function abrirModalEtiqueta(id) {
+    const prod = productosLocales.find(p => p.id === id);
+    if (!prod) return;
+
+    // Nombre del comercio si existe configuración de marca blanca
+    const nombreComercio = document.querySelector('.login-titulo')?.textContent || 'Service Integral';
+    document.getElementById('etiqueta-comercio').textContent = nombreComercio;
+    document.getElementById('etiqueta-nombre').textContent = prod.nombre;
+    document.getElementById('etiqueta-codigo').textContent = `COD: ${prod.codigoDistribuidor || 'S/C'}`;
+    document.getElementById('etiqueta-distribuidor').textContent = `Proveedor: ${prod.distribuidor || 'No asignado'}`;
+
+    // Generar valor numérico / alfanumérico para el barcode (ID rellenado a 6 dígitos o código)
+    const valorBarra = (prod.codigoDistribuidor && prod.codigoDistribuidor.trim() !== '') 
+        ? prod.codigoDistribuidor.trim() 
+        : `ART-${String(prod.id).padStart(6, '0')}`;
+
+    try {
+        JsBarcode("#codigo-barras-svg", valorBarra, {
+            format: "CODE128",
+            lineColor: "#000",
+            width: 2,
+            height: 48,
+            displayValue: true,
+            fontSize: 13,
+            font: "monospace"
+        });
+    } catch (e) {
+        console.warn("Fallo al generar código de barras:", e);
+    }
+
+    document.getElementById('modal-etiqueta').style.display = 'block';
+}
+
+function imprimirEtiquetaModal() {
+    const contenido = document.getElementById('area-etiqueta-imprimible').innerHTML;
+    const ventanaImpresion = window.open('', '_blank', 'width=450,height=450');
+    ventanaImpresion.document.write(`
+        <html>
+            <head>
+                <title>Imprimir Etiqueta</title>
+                <style>
+                    body { font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; }
+                    h2, h3, p { margin: 4px 0; }
+                    svg { max-width: 100%; height: auto; }
+                </style>
+            </head>
+            <body onload="window.print(); window.close();">
+                ${contenido}
+            </body>
+        </html>
+    `);
+    ventanaImpresion.document.close();
+}
+
+/* ==========================================================================
+   14. CONSULTA DE HISTORIAL DE MOVIMIENTOS Y AUDITORÍA
+   ========================================================================== */
+const btnVerMovimientos = document.getElementById('btn-ver-movimientos');
+if (btnVerMovimientos) {
+    btnVerMovimientos.addEventListener('click', async () => {
+        const tbody = document.getElementById('tabla-movimientos-cuerpo');
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Consultando registros...</td></tr>';
+        document.getElementById('modal-movimientos').style.display = 'block';
+
+        try {
+            const res = await apiFetch('/api/movimientos-stock');
+            if (!res.ok) throw new Error('Error al cargar movimientos');
+            const data = await res.json();
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No hay movimientos registrados.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(m => {
+                const fecha = new Date(m.fecha).toLocaleString('es-AR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+                return `
+                    <tr>
+                        <td><small>${fecha}</small></td>
+                        <td><strong>${m.producto_nombre}</strong></td>
+                        <td><span class="badge-online" style="background-color: ${m.tipo === 'VENTA' ? 'var(--color-danger)' : 'var(--color-success)'}">${m.tipo}</span></td>
+                        <td>${m.cantidad_afectada} un.</td>
+                        <td><strong>${m.stock_resultante} un.</strong></td>
+                        <td>${m.usuario_nombre}</td>
+                        <td><small>${m.motivo || 'Sin nota'}</small></td>
+                    </tr>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: red;">No se pudo conectar con el servidor.</td></tr>';
+        }
     });
 }

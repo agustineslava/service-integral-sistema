@@ -69,16 +69,20 @@ echo  ENLACE DE ACCESO REMOTO GENERADO:
 echo  %MI_URL%
 echo ===================================================
 echo.
-echo ESCANEA ESTE CODIGO QR CON EL CELULAR PARA INGRESAR:
+echo ESCANEA EL CODIGO QR CON EL CELULAR PARA INGRESAR:
 echo.
-powershell -NoProfile -Command "try { $qr = Invoke-RestMethod -Uri 'https://qrenco.de/\%MI_URL\%/login.html' -TimeoutSec 3; Write-Host$qr } catch { Write-Host '[Aviso: Conectate usando el enlace superior]' }"
+
+:: Dibuja el código QR usando Node.js de forma 100% offline e instantánea
+node "%~dp0backend\qr.js" "%MI_URL%/login.html"
+
 echo.
-echo Esperando propagacion de red (3 segundos)...
+echo Esperando 3 segundos a la propagacion de Cloudflare...
 timeout /t 3 /nobreak >nul
 
+echo Abriendo navegador en la PC...
 start "" chrome "%MI_URL%/login.html"
 
 :FIN
 echo.
-echo Servidor en ejecucion. Presiona cualquier tecla para cerrar esta consola.
+echo Servidor en ejecucion. Presiona cualquier tecla para cerrar esta ventana.
 pause >nul

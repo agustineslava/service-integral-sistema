@@ -8,6 +8,8 @@
     <script src="auth-check.js"></script>
     <!-- 💾 ?v=1.2 obliga al navegador a limpiar el caché y cargar el último diseño adaptativo -->
     <script src="marca.js"></script>
+    <!-- 🏷️ Generador de Códigos de Barras en SVG -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
     <link rel="stylesheet" href="style.css?v=1.2">
 </head>
 <body>
@@ -32,7 +34,7 @@
             <nav class="menu-navegacion">
                 <ul>
                     <li><a href="index.html" class="active" id="nav-stock">Stock</a></li>
-                    <li><a href="#" id="nav-ventas">Ventas</a></li>
+                    <li><a href="reparaciones.html" id="nav-reparaciones">Taller / Reparaciones</a></li>
                     <li><a href="pedidos.html" id="nav-pedidos">Pedidos</a></li>
                     <!-- Botón de cambio rápido para Modo Claro / Oscuro -->
                     <li>
@@ -256,16 +258,25 @@
            5. TABLA INVENTARIO GENERAL
            ========================================================================== -->
         <section class="panel-tabla">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                 <h2 style="margin-bottom: 0;">Lista de Productos</h2>
-                <button type="button" id="btn-exportar-csv" class="btn btn-actualizar btn-svg-icono" style="padding: 8px 16px; font-size: 13px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    Exportar a Excel (CSV)
-                </button>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" id="btn-ver-movimientos" class="btn btn-info btn-svg-icono" style="padding: 8px 14px; font-size: 13px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 15px; height: 15px;">
+                            <path d="M12 8v4l3 3"></path>
+                            <circle cx="12" cy="12" r="9"></circle>
+                        </svg>
+                        Historial Movimientos
+                    </button>
+                    <button type="button" id="btn-exportar-csv" class="btn btn-actualizar btn-svg-icono" style="padding: 8px 14px; font-size: 13px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 15px; height: 15px;">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Exportar a Excel (CSV)
+                    </button>
+                </div>
             </div>
             <div class="tabla-wrapper">
                 <table>
@@ -517,5 +528,64 @@
        ========================================================================== -->
     <script src="utils-imagenes.js"></script>
     <script src="app.js"></script>
+
+    <!-- ==========================================================================
+       8. MODAL DE ETIQUETA PARA IMPRESIÓN
+       ========================================================================== -->
+       <!-- --- MODAL DE ETIQUETA PARA IMPRESIÓN --- -->
+    <div id="modal-etiqueta" class="modal">
+        <div class="modal-contenido modal-chico" style="max-width: 440px; height: auto; text-align: center;">
+            <span class="cerrar-modal" onclick="cerrarModal('modal-etiqueta')">&times;</span>
+            <h2 style="margin-bottom: 0.5rem; color: var(--si-blue-vibrant);">Etiqueta de Repuesto</h2>
+            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 1rem;">Rótulo de caja y bolsa para taller</p>
+            
+            <div id="area-etiqueta-imprimible" style="background: white; color: black; padding: 18px; border-radius: 8px; border: 2px dashed #333; margin-bottom: 1rem;">
+                <h3 id="etiqueta-comercio" style="margin: 0; font-size: 15px; text-transform: uppercase; color: #111;">Service Integral</h3>
+                <h2 id="etiqueta-nombre" style="margin: 6px 0; font-size: 16px; color: #000; font-weight: 800;">Bomba Whirlpool</h2>
+                <p id="etiqueta-codigo" style="margin: 2px 0; font-size: 13px; font-weight: bold; color: #333; font-family: monospace;">COD: WW01F02</p>
+                <p id="etiqueta-distribuidor" style="margin: 2px 0; font-size: 12px; color: #555;">Proveedor: Mabe</p>
+                
+                <div style="margin-top: 10px; display: flex; justify-content: center;">
+                    <svg id="codigo-barras-svg"></svg>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button type="button" class="btn btn-actualizar w-100" onclick="imprimirEtiquetaModal()">Imprimir Rótulo</button>
+                <button type="button" class="btn btn-eliminar w-100" onclick="cerrarModal('modal-etiqueta')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==========================================================================
+       9. MODAL HISTORIAL DE AUDITORÍA DE MOVIMIENTOS
+       ========================================================================== -->
+    <!-- --- MODAL HISTORIAL DE AUDITORÍA DE MOVIMIENTOS --- -->
+    <div id="modal-movimientos" class="modal">
+        <div class="modal-contenido" style="width: 85%; max-width: 1000px; height: 80vh; display: flex; flex-direction: column;">
+            <span class="cerrar-modal" onclick="cerrarModal('modal-movimientos')">&times;</span>
+            <h2 style="color: var(--si-blue-vibrant); margin-bottom: 0.5rem;">Historial de Movimientos de Stock</h2>
+            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;">Registro cronológico de ingresos, egresos y ajustes</p>
+
+            <div class="tabla-wrapper" style="flex: 1; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Repuesto</th>
+                            <th>Tipo</th>
+                            <th>Cantidad</th>
+                            <th>Stock Resultante</th>
+                            <th>Responsable</th>
+                            <th>Motivo / Nota</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-movimientos-cuerpo">
+                        <tr><td colspan="7" style="text-align: center;">Cargando historial...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

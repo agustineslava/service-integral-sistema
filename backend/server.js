@@ -436,7 +436,91 @@ app.post('/api/delete-image', (req, res) => {
 });
 
 /* ==========================================================================
-   9. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
+    9. MÓDULO: HISTORIAL DE MOVIMIENTOS Y AUDITORÍA DE STOCK
+   ========================================================================== */
+app.get('/api/movimientos-stock', (req, res) => {
+    const sql = 'SELECT * FROM movimientos_stock ORDER BY fecha DESC LIMIT 150';
+    db.query(sql, (err, rows) => {
+        if (err) {
+            console.error('Error al obtener auditoría de stock:', err);
+            return res.status(500).json({ error: 'Error al consultar historial de movimientos' });
+        }
+        res.json(rows);
+    });
+});
+
+/* ==========================================================================
+   10. MÓDULO: ÓRDENES DE REPARACIÓN Y CLIENTES DE TALLER
+   ========================================================================== */
+app.get('/api/reparaciones', (req, res) => {
+    const sql = 'SELECT * FROM reparaciones ORDER BY id DESC';
+    db.query(sql, (err, rows) => {
+        if (err) {
+            console.error('Error al obtener reparaciones:', err);
+            return res.status(500).json({ error: 'Error interno del servidor' });
+        }
+        res.json(rows);
+    });
+});
+
+app.post('/api/reparaciones', (req, res) => {
+    const { 
+        cliente_nombre, cliente_telefono, equipo, falla_declarada, 
+        diagnostico_tecnico, repuestos_usados, costo_mano_obra, 
+        costo_repuestos, estado, tecnico_asignado 
+    } = req.body;
+
+    if (!cliente_nombre || !equipo || !falla_declarada) {
+        return res.status(400).json({ error: 'Cliente, equipo y falla declarada son obligatorios' });
+    }
+
+    const manoObra = parseFloat(costo_mano_obra) || 0.00;
+    const repuestos = parseFloat(costo_repuestos) || 0.00;
+    const total = manoObra + repuestos;
+
+    const sql = `
+        INSERT INTO reparaciones 
+        (cliente_nombre, cliente_telefono, equipo, falla_declarada, diagnostico_tecnico, repuestos_usados, costo_mano_obra, costo_repuestos, total, estado, tecnico_asignado) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    db.query(sql, [
+        cliente_nombre, cliente_telefono || null, equipo, falla_declarada,
+        diagnostico_tecnico || null, repuestos_usados || null, manoObra, 
+        repuestos, total, estado || 'Pendiente', tecnico_asignado || null
+    ], (err, result) => {
+        if (err) {
+            console.error('Error al registrar reparación:', err);
+            return res.status(500).json({ error: 'Error al registrar orden de trabajo' });
+        }
+        res.status(201).json({ mensaje: 'Orden de trabajo registrada', id: result.insertId });
+    });
+});
+
+app.put('/api/reparaciones/:id/estado', (req, res) => {
+    const { id } = req.params;
+    const { estado } = req.body;
+    
+    let sql = 'UPDATE reparaciones SET estado = ?';
+    const params = [estado];
+
+    if (estado === 'Entregado') {
+        sql += ', fecha_entrega = NOW()';
+    }
+    sql += ' WHERE id = ?';
+    params.push(id);
+
+    db.query(sql, params, (err) => {
+        if (err) {
+            console.error('Error al actualizar estado:', err);
+            return res.status(500).json({ error: 'Error al actualizar el estado' });
+        }
+        res.json({ mensaje: 'Estado actualizado con éxito' });
+    });
+});
+
+/* ==========================================================================
+   11. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
    ========================================================================== */
 
 function realizarBackup() {
@@ -494,7 +578,7 @@ cron.schedule('0 20 * * *', () => {
 });
 
 /* ==========================================================================
-   10. INICIALIZACIÓN Y PUESTA EN MARCHA DEL SERVIDOR
+   12. INICIALIZACIÓN Y PUESTA EN MARCHA DEL SERVIDOR
    ========================================================================== */
 app.listen(PORT, HOST, () => {
     console.log(`🚀 Servidor de Service Integral activo.`);
