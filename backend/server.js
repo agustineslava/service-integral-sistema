@@ -14,16 +14,31 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const app = express();
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-const JWT_SECRET = process.env.JWT_SECRET || 'clave_secreta_service_integral_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+    console.error('❌ Falta JWT_SECRET en el archivo .env. El servidor no puede arrancar así.');
+    console.error('   Generá uno y agregalo a backend/.env, por ejemplo:');
+    console.error('   JWT_SECRET=' + require('crypto').randomBytes(48).toString('hex'));
+    process.exit(1);
+}
 
 /* ==========================================================================
    2. MIDDLEWARES DE LA APLICACIÓN
    ========================================================================== */
+// CSP desactivada porque el frontend usa onclick="..." inline en varios lugares.
+// El resto de los headers de seguridad de Helmet sí quedan activos.
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+}));
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
@@ -32,7 +47,18 @@ app.use(express.static(path.join(__dirname, '../frontend')));
    3. CONFIGURACIÓN DE MULTIMEDIA (CLOUDINARY & MULTER)
    ========================================================================== */
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // máximo 5MB por imagen
+    fileFilter: (req, file, cb) => {
+        const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        if (tiposPermitidos.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Tipo de archivo no permitido. Solo JPG, PNG, WEBP o GIF.'));
+        }
+    }
+});
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -53,26 +79,35 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-// Función para asegurar que el usuario Administrador existe con el hash correcto
+// Función para asegurar que exista un usuario Administrador inicial (solo la primera vez)
+const ADMIN_EMAIL_INICIAL = process.env.ADMIN_EMAIL_INICIAL;
+const ADMIN_PASSWORD_INICIAL = process.env.ADMIN_PASSWORD_INICIAL;
+
 function crearUsuarioAdminInicial() {
-    const emailAdmin = 'aguseslava11@gmail.com';
-    const passwordPlana = 'Agus1tin';
-    
-    // Generar hash válido con bcryptjs directamente en Node.js
-    const passwordHash = bcrypt.hashSync(passwordPlana, 10);
+    if (!ADMIN_EMAIL_INICIAL || !ADMIN_PASSWORD_INICIAL) {
+        console.log('ℹ️  ADMIN_EMAIL_INICIAL / ADMIN_PASSWORD_INICIAL no están definidos en .env — se omite la creación automática de administrador.');
+        return;
+    }
 
-    const query = `
-        INSERT INTO usuarios (nombre, email, password, rol) 
-        VALUES (?, ?, ?, 'ADMIN')
-        ON DUPLICATE KEY UPDATE password = ?;
-    `;
-
-    db.query(query, ['Agustín Eslava', emailAdmin, passwordHash, passwordHash], (err) => {
+    db.query('SELECT id FROM usuarios WHERE email = ?', [ADMIN_EMAIL_INICIAL], (err, rows) => {
         if (err) {
-            console.error('❌ Error al verificar/crear usuario Admin:', err);
-        } else {
-            console.log('✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin');
+            console.error('❌ Error al verificar usuario Admin inicial:', err.message);
+            return;
         }
+        if (rows.length > 0) return; // ya existe, no tocamos su contraseña
+
+        const passwordHash = bcrypt.hashSync(ADMIN_PASSWORD_INICIAL, 10);
+        db.query(
+            'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, "ADMIN")',
+            ['Administrador', ADMIN_EMAIL_INICIAL, passwordHash],
+            (errInsert) => {
+                if (errInsert) {
+                    console.error('❌ Error al crear usuario Admin inicial:', errInsert.message);
+                } else {
+                    console.log(`✅ Usuario Administrador inicial creado: ${ADMIN_EMAIL_INICIAL}`);
+                }
+            }
+        );
     });
 }
 
@@ -100,14 +135,164 @@ app.get('/api/config-comercio', (req, res) => {
 });
 
 /* ==========================================================================
+   5.0 MIDDLEWARES DE AUTENTICACIÓN Y AUTORIZACIÓN
+   ========================================================================== */
+
+function verificarToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+    if (!token) {
+        return res.status(401).json({ error: 'No autorizado. Iniciá sesión nuevamente.' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(401).json({ error: 'Sesión inválida o expirada. Iniciá sesión nuevamente.' });
+        }
+        req.usuario = decoded;
+        next();
+    });
+}
+
+function requiereAdmin(req, res, next) {
+    if (!req.usuario || req.usuario.rol !== 'ADMIN') {
+        return res.status(403).json({ error: 'No tenés permisos para realizar esta acción.' });
+    }
+    next();
+}
+
+/* ==========================================================================
+   5.1 VALIDACIÓN DE DATOS DE ENTRADA
+   ========================================================================== */
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validarProducto(body) {
+    const nombre = typeof body.nombre === 'string' ? body.nombre.trim() : '';
+    if (!nombre) return { valido: false, error: 'El nombre del producto es obligatorio.' };
+    if (nombre.length > 150) return { valido: false, error: 'El nombre no puede superar los 150 caracteres.' };
+
+    let precio = 0;
+    if (body.precio !== undefined && body.precio !== null && body.precio !== '') {
+        precio = Number(body.precio);
+        if (!Number.isFinite(precio) || precio < 0) return { valido: false, error: 'El precio tiene que ser un número mayor o igual a 0.' };
+    }
+
+    let stock = 0;
+    if (body.stock !== undefined && body.stock !== null && body.stock !== '') {
+        stock = Number(body.stock);
+        if (!Number.isInteger(stock) || stock < 0) return { valido: false, error: 'El stock tiene que ser un número entero mayor o igual a 0.' };
+    }
+
+    let stockMinimo = 0;
+    if (body.stockMinimo !== undefined && body.stockMinimo !== null && body.stockMinimo !== '') {
+        stockMinimo = Number(body.stockMinimo);
+        if (!Number.isInteger(stockMinimo) || stockMinimo < 0) return { valido: false, error: 'El stock mínimo tiene que ser un número entero mayor o igual a 0.' };
+    }
+
+    const distribuidor = body.distribuidor ? String(body.distribuidor).trim().slice(0, 100) : null;
+    const codigoDistribuidor = body.codigoDistribuidor ? String(body.codigoDistribuidor).trim().slice(0, 100) : null;
+    const categoria = body.categoria ? String(body.categoria).trim().slice(0, 50) : 'Otros';
+    const descripcion = body.descripcion ? String(body.descripcion).trim() : null;
+
+    const imagenes = {};
+    for (const campo of ['imagen_1', 'imagen_2', 'imagen_3']) {
+        const valor = body[campo];
+        if (!valor) { imagenes[campo] = null; continue; }
+        if (typeof valor !== 'string' || !/^https?:\/\//i.test(valor)) {
+            return { valido: false, error: `${campo} tiene que ser una URL válida (http/https).` };
+        }
+        imagenes[campo] = valor;
+    }
+
+    return { valido: true, datos: { nombre, precio, stock, stockMinimo, categoria, distribuidor, codigoDistribuidor, descripcion, ...imagenes } };
+}
+
+function validarUsuario(body) {
+    const nombre = typeof body.nombre === 'string' ? body.nombre.trim() : '';
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    const rol = body.rol === 'ADMIN' ? 'ADMIN' : 'TECNICO';
+
+    if (!nombre) return { valido: false, error: 'El nombre es obligatorio.' };
+    if (!EMAIL_REGEX.test(email)) return { valido: false, error: 'El correo electrónico no es válido.' };
+    if (password.length < 6) return { valido: false, error: 'La contraseña tiene que tener al menos 6 caracteres.' };
+
+    return { valido: true, datos: { nombre, email, password, rol } };
+}
+
+function validarStockMinimo(body) {
+    const stockMinimo = Number(body.stockMinimo);
+    if (!Number.isInteger(stockMinimo) || stockMinimo < 0) {
+        return { valido: false, error: 'El stock mínimo tiene que ser un número entero mayor o igual a 0.' };
+    }
+    return { valido: true, datos: { stockMinimo } };
+}
+
+/**
+ * Valida los datos de una orden de reparación (creación o edición).
+ */
+function validarReparacion(body) {
+    const cliente_nombre = typeof body.cliente_nombre === 'string' ? body.cliente_nombre.trim() : '';
+    const equipo = typeof body.equipo === 'string' ? body.equipo.trim() : '';
+    const falla_declarada = typeof body.falla_declarada === 'string' ? body.falla_declarada.trim() : '';
+
+    if (!cliente_nombre) return { valido: false, error: 'El nombre del cliente es obligatorio.' };
+    if (!equipo) return { valido: false, error: 'El equipo es obligatorio.' };
+    if (!falla_declarada) return { valido: false, error: 'La falla declarada es obligatoria.' };
+
+    const ESTADOS_VALIDOS = ['Pendiente', 'En Reparacion', 'Esperando Repuesto', 'Listo', 'Entregado', 'Cancelado'];
+    const estado = ESTADOS_VALIDOS.includes(body.estado) ? body.estado : 'Pendiente';
+
+    const costo_mano_obra = Number(body.costo_mano_obra);
+    const costo_repuestos = Number(body.costo_repuestos);
+    if (body.costo_mano_obra !== undefined && (!Number.isFinite(costo_mano_obra) || costo_mano_obra < 0)) {
+        return { valido: false, error: 'El costo de mano de obra tiene que ser un número mayor o igual a 0.' };
+    }
+    if (body.costo_repuestos !== undefined && (!Number.isFinite(costo_repuestos) || costo_repuestos < 0)) {
+        return { valido: false, error: 'El costo de repuestos tiene que ser un número mayor o igual a 0.' };
+    }
+
+    const repuestos_detalle = Array.isArray(body.repuestos_detalle) ? body.repuestos_detalle : [];
+
+    return {
+        valido: true,
+        datos: {
+            cliente_nombre,
+            cliente_telefono: body.cliente_telefono ? String(body.cliente_telefono).trim().slice(0, 50) : null,
+            direccion: body.direccion ? String(body.direccion).trim().slice(0, 255) : null,
+            tipo_cobertura: body.tipo_cobertura === 'En Garantia' ? 'En Garantia' : 'Fuera de Garantia',
+            equipo,
+            falla_declarada,
+            diagnostico_tecnico: body.diagnostico_tecnico ? String(body.diagnostico_tecnico).trim() : null,
+            repuestos_detalle,
+            costo_mano_obra: Number.isFinite(costo_mano_obra) ? costo_mano_obra : 0,
+            costo_repuestos: Number.isFinite(costo_repuestos) ? costo_repuestos : 0,
+            estado,
+            tecnico_asignado: body.tecnico_asignado ? String(body.tecnico_asignado).trim().slice(0, 100) : null
+        }
+    };
+}
+
+/* ==========================================================================
    5. ENDPOINTS DE AUTENTICACIÓN Y GESTIÓN DE USUARIOS
    ========================================================================== */
+
+// Máximo 8 intentos de login cada 10 minutos por IP (protege contra fuerza bruta)
+const limitadorLogin = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 8,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Demasiados intentos de inicio de sesión. Probá de nuevo en unos minutos.' }
+});
 
 /**
  * POST /api/login
  * Autentica usuario y devuelve Token JWT + información del perfil
  */
-app.post('/api/login', (req, res) => {
+app.post('/api/login', limitadorLogin, (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -153,19 +338,17 @@ app.post('/api/login', (req, res) => {
  * POST /api/usuarios
  * Registra un nuevo usuario en MySQL con contraseña encriptada (ADMIN / TECNICO)
  */
-app.post('/api/usuarios', (req, res) => {
-    const { nombre, email, password, rol } = req.body;
-
-    if (!nombre || !email || !password) {
-        return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+app.post('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
+    const validacion = validarUsuario(req.body);
+    if (!validacion.valido) {
+        return res.status(400).json({ error: validacion.error });
     }
+    const { nombre, email, password, rol } = validacion.datos;
 
-    // Encriptar la contraseña elegida
     const passwordHash = bcrypt.hashSync(password, 10);
-    const rolUsuario = rol || 'TECNICO';
 
     const sql = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
-    db.query(sql, [nombre, email, passwordHash, rolUsuario], (err, result) => {
+    db.query(sql, [nombre, email, passwordHash, rol], (err, result) => {
         if (err) {
             if (err.code === 'ER_DUP_ENTRY') {
                 return res.status(400).json({ error: 'El correo electrónico ya está registrado' });
@@ -181,7 +364,7 @@ app.post('/api/usuarios', (req, res) => {
    6. ENDPOINTS DE PRODUCTOS / STOCK (C.R.U.D.)
    ========================================================================== */
 
-app.get('/api/productos', (req, res) => {
+app.get('/api/productos', verificarToken, (req, res) => {
     const sql = 'SELECT * FROM productos ORDER BY id DESC';
     db.query(sql, (err, results) => {
         if (err) {
@@ -192,12 +375,12 @@ app.get('/api/productos', (req, res) => {
     });
 });
 
-app.post('/api/productos', (req, res) => {
-    const { 
-        nombre, precio, stock, stockMinimo, categoria, 
-        distribuidor, codigoDistribuidor, descripcion, 
-        imagen_1, imagen_2, imagen_3 
-    } = req.body;
+app.post('/api/productos', verificarToken, requiereAdmin, (req, res) => {
+    const validacion = validarProducto(req.body);
+    if (!validacion.valido) {
+        return res.status(400).json({ error: validacion.error });
+    }
+    const { nombre, precio, stock, stockMinimo, categoria, distribuidor, codigoDistribuidor, descripcion, imagen_1, imagen_2, imagen_3 } = validacion.datos;
 
     const sql = `INSERT INTO productos 
     (nombre, precio, stock, stockMinimo, categoria, distribuidor, codigoDistribuidor, descripcion, imagen_1, imagen_2, imagen_3) 
@@ -218,26 +401,40 @@ app.post('/api/productos', (req, res) => {
     });
 });
 
-app.delete('/api/productos/:id', (req, res) => {
+app.delete('/api/productos/:id', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
-    const sql = 'DELETE FROM productos WHERE id = ?';
 
-    db.query(sql, [id], (err, result) => {
-        if (err) {
-            console.error('Error al eliminar de MySQL:', err);
+    // Buscamos las imágenes ANTES de borrar la fila, para no dejar huérfanas en Cloudinary
+    db.query('SELECT imagen_1, imagen_2, imagen_3 FROM productos WHERE id = ?', [id], async (errSelect, rows) => {
+        if (errSelect) {
+            console.error('Error al buscar imágenes del producto a eliminar:', errSelect);
             return res.status(500).json({ error: 'Error al eliminar el producto' });
         }
-        res.json({ mensaje: 'Producto eliminado correctamente' });
+
+        const producto = rows[0];
+        if (producto) {
+            const imagenes = [producto.imagen_1, producto.imagen_2, producto.imagen_3].filter(Boolean);
+            await Promise.all(imagenes.map(url => borrarImagenDeCloudinary(url)));
+        }
+
+        db.query('DELETE FROM productos WHERE id = ?', [id], (errDelete) => {
+            if (errDelete) {
+                console.error('Error al eliminar de MySQL:', errDelete);
+                return res.status(500).json({ error: 'Error al eliminar el producto' });
+            }
+            res.json({ mensaje: 'Producto y sus imágenes eliminados correctamente' });
+        });
     });
 });
 
-app.put('/api/productos/:id', (req, res) => {
+app.put('/api/productos/:id', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
-    const { 
-        nombre, precio, stock, stockMinimo, categoria, 
-        distribuidor, codigoDistribuidor, descripcion, 
-        imagen_1, imagen_2, imagen_3 
-    } = req.body;
+
+    const validacion = validarProducto(req.body);
+    if (!validacion.valido) {
+        return res.status(400).json({ error: validacion.error });
+    }
+    const { nombre, precio, stock, stockMinimo, categoria, distribuidor, codigoDistribuidor, descripcion, imagen_1, imagen_2, imagen_3 } = validacion.datos;
 
     const sql = `UPDATE productos 
                  SET nombre = ?, precio = ?, stock = ?, stockMinimo = ?, categoria = ?, 
@@ -246,7 +443,7 @@ app.put('/api/productos/:id', (req, res) => {
                  WHERE id = ?`;
     
     db.query(sql, [
-        nombre, precio, stock, stockMinimo || 0, categoria || 'Otros',
+        nombre, precio, stock, stockMinimo, categoria,
         distribuidor, codigoDistribuidor, descripcion, 
         imagen_1, imagen_2, imagen_3, id
     ], (err, result) => {
@@ -258,9 +455,14 @@ app.put('/api/productos/:id', (req, res) => {
     });
 });
 
-app.post('/api/productos/:id/stock-minimo', (req, res) => {
+app.post('/api/productos/:id/stock-minimo', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
-    const { stockMinimo } = req.body;
+
+    const validacion = validarStockMinimo(req.body);
+    if (!validacion.valido) {
+        return res.status(400).json({ error: validacion.error });
+    }
+    const { stockMinimo } = validacion.datos;
 
     const sql = 'UPDATE productos SET stockMinimo = ? WHERE id = ?';
     
@@ -277,7 +479,7 @@ app.post('/api/productos/:id/stock-minimo', (req, res) => {
    7. ENDPOINTS DE PEDIDOS (CON TRANSACCIÓN Y AUTO-LIMPIEZA)
    ========================================================================== */
 
-app.post('/api/pedidos', (req, res) => {
+app.post('/api/pedidos', verificarToken, requiereAdmin, (req, res) => {
     const { notas, items } = req.body;
 
     db.getConnection((err, connection) => {
@@ -346,7 +548,7 @@ app.post('/api/pedidos', (req, res) => {
     });
 });
 
-app.get('/api/pedidos', (req, res) => {
+app.get('/api/pedidos', verificarToken, (req, res) => {
     const sql = 'SELECT * FROM pedidos ORDER BY fecha DESC';
     db.query(sql, (err, results) => {
         if (err) {
@@ -357,7 +559,7 @@ app.get('/api/pedidos', (req, res) => {
     });
 });
 
-app.get('/api/pedidos/:id/items', (req, res) => {
+app.get('/api/pedidos/:id/items', verificarToken, (req, res) => {
     const { id } = req.params;
     
     const sql = `
@@ -380,7 +582,37 @@ app.get('/api/pedidos/:id/items', (req, res) => {
    8. ENDPOINTS MULTIMEDIA (CLOUDINARY)
    ========================================================================== */
 
-app.post('/api/upload', upload.single('imagen'), (req, res) => {
+/**
+ * Extrae el public_id de Cloudinary a partir de una URL de imagen subida por este sistema.
+ */
+function extraerPublicId(imageUrl) {
+    if (!imageUrl || typeof imageUrl !== 'string') return null;
+    try {
+        const partesUrl = imageUrl.split('/');
+        const indiceUpload = partesUrl.indexOf('upload');
+        if (indiceUpload === -1) return null;
+        const rutaConExtension = partesUrl.slice(indiceUpload + 2).join('/');
+        return rutaConExtension.substring(0, rutaConExtension.lastIndexOf('.'));
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Borra una imagen de Cloudinary a partir de su URL, sin lanzar si falla
+ * (se usa en limpiezas donde un fallo de Cloudinary no debe bloquear el resto).
+ */
+async function borrarImagenDeCloudinary(imageUrl) {
+    const publicId = extraerPublicId(imageUrl);
+    if (!publicId) return;
+    try {
+        await cloudinary.uploader.destroy(publicId);
+    } catch (err) {
+        console.error(`⚠️ No se pudo borrar de Cloudinary la imagen (${imageUrl}):`, err.message);
+    }
+}
+
+app.post('/api/upload', verificarToken, requiereAdmin, upload.single('imagen'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No se subió ningún archivo' });
     }
@@ -403,42 +635,31 @@ app.post('/api/upload', upload.single('imagen'), (req, res) => {
     });
 });
 
-app.post('/api/delete-image', (req, res) => {
+app.post('/api/delete-image', verificarToken, requiereAdmin, (req, res) => {
     const { imageUrl } = req.body;
 
     if (!imageUrl) {
         return res.status(400).json({ error: 'Falta la URL de la imagen' });
     }
 
-    try {
-        const partesUrl = imageUrl.split('/');
-        const indiceUpload = partesUrl.indexOf('upload');
-        
-        if (indiceUpload === -1) {
-            return res.status(400).json({ error: 'La URL no pertenece a Cloudinary' });
-        }
-
-        const rutaConExtension = partesUrl.slice(indiceUpload + 2).join('/');
-        const publicId = rutaConExtension.substring(0, rutaConExtension.lastIndexOf('.'));
-
-        cloudinary.uploader.destroy(publicId, (err, result) => {
-            if (err) {
-                console.error('❌ Error al borrar en Cloudinary:', err);
-                return res.status(500).json({ error: 'No se pudo eliminar de la nube' });
-            }
-            res.json({ mensaje: 'Imagen eliminada de la nube con éxito', resultado: result });
-        });
-
-    } catch (error) {
-        console.error('Error en el proceso de borrado:', error);
-        res.status(500).json({ error: 'Error interno al procesar el borrado' });
+    const publicId = extraerPublicId(imageUrl);
+    if (!publicId) {
+        return res.status(400).json({ error: 'La URL no pertenece a Cloudinary' });
     }
+
+    cloudinary.uploader.destroy(publicId, (err, result) => {
+        if (err) {
+            console.error('❌ Error al borrar en Cloudinary:', err);
+            return res.status(500).json({ error: 'No se pudo eliminar de la nube' });
+        }
+        res.json({ mensaje: 'Imagen eliminada de la nube con éxito', resultado: result });
+    });
 });
 
 /* ==========================================================================
     9. MÓDULO: HISTORIAL DE MOVIMIENTOS Y AUDITORÍA DE STOCK
    ========================================================================== */
-app.get('/api/movimientos-stock', (req, res) => {
+app.get('/api/movimientos-stock', verificarToken, requiereAdmin, (req, res) => {
     const sql = 'SELECT * FROM movimientos_stock ORDER BY fecha DESC LIMIT 150';
     db.query(sql, (err, rows) => {
         if (err) {
@@ -454,7 +675,41 @@ app.get('/api/movimientos-stock', (req, res) => {
    ========================================================================== */
 
 // 1. Obtener todas las órdenes de servicio
-app.get('/api/reparaciones', (req, res) => {
+/**
+ * Descuenta stock por los repuestos usados en una reparación y deja registro
+ * en movimientos_stock. Se llama UNA sola vez por orden (ver guarda de
+ * stock_descontado en los dos endpoints que la usan) para no descontar dos veces
+ * si la orden se vuelve a guardar después de marcarse "Entregado".
+ */
+async function descontarStockPorReparacion(idOrden, equipo, tecnicoAsignado, listaRepuestos) {
+    for (const item of listaRepuestos) {
+        let targetId = item.producto_id;
+
+        if (!targetId && item.nombre) {
+            const [prodEncontrado] = await db.promise().query(
+                'SELECT id FROM productos WHERE LOWER(nombre) LIKE ? LIMIT 1',
+                [`%${item.nombre.toLowerCase().trim()}%`]
+            );
+            if (prodEncontrado.length > 0) targetId = prodEncontrado[0].id;
+        }
+
+        if (targetId && item.cantidad > 0) {
+            await db.promise().query(
+                'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
+                [item.cantidad, targetId]
+            );
+            await db.promise().query(
+                `INSERT INTO movimientos_stock 
+                 (producto_id, producto_nombre, usuario_nombre, tipo, cantidad_afectada, stock_resultante, motivo) 
+                 VALUES (?, ?, ?, 'REPARACION', ?, (SELECT stock FROM productos WHERE id = ?), ?)`,
+                [targetId, item.nombre, tecnicoAsignado || 'Técnico', item.cantidad, targetId, `Reparación #${idOrden} (${equipo})`]
+            );
+        }
+    }
+}
+
+// 1. Obtener todas las órdenes de servicio (ADMIN y TECNICO pueden consultar)
+app.get('/api/reparaciones', verificarToken, (req, res) => {
     const sql = 'SELECT * FROM reparaciones ORDER BY id DESC';
     db.query(sql, (err, rows) => {
         if (err) {
@@ -466,24 +721,19 @@ app.get('/api/reparaciones', (req, res) => {
 });
 
 // 2. Registrar nueva orden de servicio
-app.post('/api/reparaciones', (req, res) => {
-    const { 
-        cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, 
-        falla_declarada, diagnostico_tecnico, repuestos_detalle, 
-        costo_mano_obra, costo_repuestos, estado, tecnico_asignado 
-    } = req.body;
-
-    if (!cliente_nombre || !equipo || !falla_declarada) {
-        return res.status(400).json({ error: 'Cliente, equipo y falla son requeridos' });
+app.post('/api/reparaciones', verificarToken, requiereAdmin, (req, res) => {
+    const validacion = validarReparacion(req.body);
+    if (!validacion.valido) {
+        return res.status(400).json({ error: validacion.error });
     }
+    const {
+        cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo,
+        falla_declarada, diagnostico_tecnico, repuestos_detalle,
+        costo_mano_obra, costo_repuestos, estado, tecnico_asignado
+    } = validacion.datos;
 
-    const manoObra = parseFloat(costo_mano_obra) || 0.00;
-    const repuestos = parseFloat(costo_repuestos) || 0.00;
-    const total = manoObra + repuestos;
-
-    // Resumen plano para listados rápidos
-    const listaRepuestos = Array.isArray(repuestos_detalle) ? repuestos_detalle : [];
-    const repuestosResumen = listaRepuestos.map(r => `${r.nombre} (x${r.cantidad})`).join(', ') || 'Ninguno';
+    const total = costo_mano_obra + costo_repuestos;
+    const repuestosResumen = repuestos_detalle.map(r => `${r.nombre} (x${r.cantidad})`).join(', ') || 'Ninguno';
 
     const sql = `
         INSERT INTO reparaciones 
@@ -494,9 +744,9 @@ app.post('/api/reparaciones', (req, res) => {
     `;
 
     db.query(sql, [
-        cliente_nombre, cliente_telefono || null, direccion || null, tipo_cobertura || 'Fuera de Garantia',
-        equipo, falla_declarada, diagnostico_tecnico || null, repuestosResumen, JSON.stringify(listaRepuestos),
-        manoObra, repuestos, total, estado || 'Pendiente', tecnico_asignado || null
+        cliente_nombre, cliente_telefono, direccion, tipo_cobertura,
+        equipo, falla_declarada, diagnostico_tecnico, repuestosResumen, JSON.stringify(repuestos_detalle),
+        costo_mano_obra, costo_repuestos, total, estado, tecnico_asignado
     ], (err, result) => {
         if (err) {
             console.error('Error al registrar reparación:', err);
@@ -507,21 +757,22 @@ app.post('/api/reparaciones', (req, res) => {
 });
 
 // 3. Editar orden de servicio existente
-app.put('/api/reparaciones/:id', async (req, res) => {
+app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res) => {
     const { id } = req.params;
-    const { 
-        cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, 
-        falla_declarada, diagnostico_tecnico, repuestos_detalle, 
-        costo_mano_obra, costo_repuestos, estado, tecnico_asignado 
-    } = req.body;
 
-    const manoObra = parseFloat(costo_mano_obra) || 0.00;
-    const repuestos = parseFloat(costo_repuestos) || 0.00;
-    const total = manoObra + repuestos;
+    const validacion = validarReparacion(req.body);
+    if (!validacion.valido) {
+        return res.status(400).json({ error: validacion.error });
+    }
+    const {
+        cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo,
+        falla_declarada, diagnostico_tecnico, repuestos_detalle,
+        costo_mano_obra, costo_repuestos, estado, tecnico_asignado
+    } = validacion.datos;
 
-    const listaRepuestos = Array.isArray(repuestos_detalle) ? repuestos_detalle : [];
-    const repuestosResumen = listaRepuestos.length > 0 
-        ? listaRepuestos.map(r => `${r.nombre} (x${r.cantidad})`).join(', ') 
+    const total = costo_mano_obra + costo_repuestos;
+    const repuestosResumen = repuestos_detalle.length > 0
+        ? repuestos_detalle.map(r => `${r.nombre} (x${r.cantidad})`).join(', ')
         : 'Ninguno';
 
     try {
@@ -530,37 +781,12 @@ app.put('/api/reparaciones/:id', async (req, res) => {
 
         const ordenActual = ordenes[0];
 
-        // Si la orden está en Entregado, procesamos el descuento
-        if (estado === 'Entregado' && listaRepuestos.length > 0) {
-            for (const item of listaRepuestos) {
-                let targetId = item.producto_id;
-
-                // Si por alguna razón vino sin ID, buscarlo por nombre en MySQL
-                if (!targetId) {
-                    const [prodEncontrado] = await db.promise().query(
-                        'SELECT id FROM productos WHERE LOWER(nombre) LIKE ? LIMIT 1',
-                        [`%${item.nombre.toLowerCase().trim()}%`]
-                    );
-                    if (prodEncontrado.length > 0) {
-                        targetId = prodEncontrado[0].id;
-                        item.producto_id = targetId;
-                    }
-                }
-
-                if (targetId && item.cantidad > 0) {
-                    await db.promise().query(
-                        'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
-                        [item.cantidad, targetId]
-                    );
-
-                    await db.promise().query(
-                        `INSERT INTO movimientos_stock 
-                         (producto_id, producto_nombre, usuario_nombre, tipo, cantidad_afectada, stock_resultante, motivo) 
-                         VALUES (?, ?, ?, 'REPARACION', ?, (SELECT stock FROM productos WHERE id = ?), ?)`,
-                        [targetId, item.nombre, ordenActual.tecnico_asignado || 'Técnico', item.cantidad, targetId, `Reparación #${id} (${equipo})`]
-                    );
-                }
-            }
+        // Solo descontamos stock si pasa a "Entregado" y TODAVÍA no se había descontado antes
+        // (evita descontar de nuevo si esta orden ya entregada se vuelve a guardar/editar).
+        let debeMarcarDescontado = ordenActual.stock_descontado === 1;
+        if (estado === 'Entregado' && ordenActual.stock_descontado === 0 && repuestos_detalle.length > 0) {
+            await descontarStockPorReparacion(id, equipo, tecnico_asignado, repuestos_detalle);
+            debeMarcarDescontado = true;
         }
 
         const sql = `
@@ -568,14 +794,14 @@ app.put('/api/reparaciones/:id', async (req, res) => {
             SET cliente_nombre = ?, cliente_telefono = ?, direccion = ?, tipo_cobertura = ?, 
                 equipo = ?, falla_declarada = ?, diagnostico_tecnico = ?, repuestos_usados = ?, 
                 repuestos_detalle = ?, costo_mano_obra = ?, costo_repuestos = ?, total = ?, 
-                estado = ?, tecnico_asignado = ?, stock_descontado = 1, fecha_modificacion = NOW()
+                estado = ?, tecnico_asignado = ?, stock_descontado = ?, fecha_modificacion = NOW()
             WHERE id = ?
         `;
 
         await db.promise().query(sql, [
             cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada,
-            diagnostico_tecnico || null, repuestosResumen, JSON.stringify(listaRepuestos), manoObra, repuestos,
-            total, estado, tecnico_asignado || null, id
+            diagnostico_tecnico, repuestosResumen, JSON.stringify(repuestos_detalle), costo_mano_obra, costo_repuestos,
+            total, estado, tecnico_asignado, debeMarcarDescontado ? 1 : 0, id
         ]);
 
         res.json({ mensaje: 'Orden y stock actualizados correctamente' });
@@ -587,9 +813,14 @@ app.put('/api/reparaciones/:id', async (req, res) => {
 });
 
 // 4. Cambiar estado con descuento automático de stock al marcar 'Entregado'
-app.put('/api/reparaciones/:id/estado', async (req, res) => {
+app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (req, res) => {
     const { id } = req.params;
+    const ESTADOS_VALIDOS = ['Pendiente', 'En Reparacion', 'Esperando Repuesto', 'Listo', 'Entregado', 'Cancelado'];
     const { estado } = req.body;
+
+    if (!ESTADOS_VALIDOS.includes(estado)) {
+        return res.status(400).json({ error: 'Estado inválido' });
+    }
 
     try {
         const [ordenes] = await db.promise().query('SELECT * FROM reparaciones WHERE id = ?', [id]);
@@ -604,26 +835,12 @@ app.put('/api/reparaciones/:id/estado', async (req, res) => {
             debeDescontar = true;
             let items = [];
             try {
-                items = typeof orden.repuestos_detalle === 'string' 
-                    ? JSON.parse(orden.repuestos_detalle) 
+                items = typeof orden.repuestos_detalle === 'string'
+                    ? JSON.parse(orden.repuestos_detalle)
                     : (orden.repuestos_detalle || []);
             } catch (e) { items = []; }
 
-            for (const item of items) {
-                if (item.producto_id && item.cantidad > 0) {
-                    await db.promise().query(
-                        'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
-                        [item.cantidad, item.producto_id]
-                    );
-
-                    await db.promise().query(
-                        `INSERT INTO movimientos_stock 
-                         (producto_id, producto_nombre, usuario_nombre, tipo, cantidad_afectada, stock_resultante, motivo) 
-                         VALUES (?, ?, ?, 'REPARACION', ?, (SELECT stock FROM productos WHERE id = ?), ?)`,
-                        [item.producto_id, item.nombre, orden.tecnico_asignado || 'Técnico', item.cantidad, item.producto_id, `Reparación #${id} (${orden.equipo})`]
-                    );
-                }
-            }
+            await descontarStockPorReparacion(id, orden.equipo, orden.tecnico_asignado, items);
         }
 
         let updateSql = 'UPDATE reparaciones SET estado = ?, fecha_modificacion = NOW()';
@@ -644,9 +861,101 @@ app.put('/api/reparaciones/:id/estado', async (req, res) => {
 });
 
 /* ==========================================================================
+   9. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
+   ========================================================================== */
+
+function realizarBackup() {
+    const dbName = process.env.DB_NAME;
+    const dbUser = process.env.DB_USER;
+    const dbPassword = process.env.DB_PASSWORD;
+    const dbHost = process.env.DB_HOST || 'localhost';
+
+    const fechaActual = new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
+    const nombreArchivo = `backup_${dbName}_${fechaActual}.sql`;
+    const rutaCarpeta = path.join(__dirname, 'backups');
+    const rutaDestino = path.join(rutaCarpeta, nombreArchivo);
+
+    if (!fs.existsSync(rutaCarpeta)) {
+        fs.mkdirSync(rutaCarpeta, { recursive: true });
+    }
+
+    const mysqldumpPath = process.env.MYSQLDUMP_PATH || 'mysqldump';
+    const comando = `"${mysqldumpPath}" -h ${dbHost} -u ${dbUser} -p"${dbPassword}" ${dbName} > "${rutaDestino}"`;
+
+    console.log(`💾 Iniciando backup automático de la base de datos...`);
+
+    exec(comando, (error) => {
+        if (error) {
+            console.error(`❌ Error al ejecutar el backup: ${error.message}`);
+            return;
+        }
+        console.log(`✅ ¡Backup creado con éxito! Guardado en: ${rutaDestino}`);
+        limpiarBackupsViejos(rutaCarpeta, 7);
+        copiarBackupAUbicacionExterna(rutaDestino, nombreArchivo);
+    });
+}
+
+function limpiarBackupsViejos(rutaCarpeta, diasRetencion) {
+    fs.readdir(rutaCarpeta, (err, archivos) => {
+        if (err) return;
+        const limiteTiempo = Date.now() - (diasRetencion * 24 * 60 * 60 * 1000);
+
+        archivos.forEach(archivo => {
+            const rutaArchivo = path.join(rutaCarpeta, archivo);
+            fs.stat(rutaArchivo, (errStat, stats) => {
+                if (errStat) return;
+                if (stats.mtimeMs < limiteTiempo && archivo.endsWith('.sql')) {
+                    fs.unlink(rutaArchivo, () => {});
+                }
+            });
+        });
+    });
+}
+
+// Copia el backup a una carpeta externa (por ejemplo, sincronizada con OneDrive/Google Drive/Dropbox).
+// Si BACKUP_OFFSITE_DIR no está configurado, solo avisa una vez y sigue sin hacer nada.
+let avisoOffsiteMostrado = false;
+
+function copiarBackupAUbicacionExterna(rutaArchivoOrigen, nombreArchivo) {
+    const carpetaExterna = process.env.BACKUP_OFFSITE_DIR;
+
+    if (!carpetaExterna) {
+        if (!avisoOffsiteMostrado) {
+            console.log('ℹ️  BACKUP_OFFSITE_DIR no está configurado en .env — los backups solo quedan en esta PC. Se recomienda configurarlo.');
+            avisoOffsiteMostrado = true;
+        }
+        return;
+    }
+
+    if (!fs.existsSync(carpetaExterna)) {
+        console.error(`❌ BACKUP_OFFSITE_DIR apunta a una carpeta que no existe: ${carpetaExterna}`);
+        return;
+    }
+
+    const rutaDestinoExterno = path.join(carpetaExterna, nombreArchivo);
+
+    fs.copyFile(rutaArchivoOrigen, rutaDestinoExterno, (err) => {
+        if (err) {
+            console.error(`❌ No se pudo copiar el backup a la carpeta externa: ${err.message}`);
+            return;
+        }
+        console.log(`☁️  Backup copiado también a la carpeta externa: ${rutaDestinoExterno}`);
+        limpiarBackupsViejos(carpetaExterna, 7);
+    });
+}
+
+// Backup diario a las 20:00 hs, hora de Argentina
+cron.schedule('0 20 * * *', () => {
+    realizarBackup();
+}, {
+    scheduled: true,
+    timezone: 'America/Argentina/Buenos_Aires'
+});
+
+/* ==========================================================================
    12. INICIALIZACIÓN Y PUESTA EN MARCHA DEL SERVIDOR
    ========================================================================== */
 app.listen(PORT, HOST, () => {
     console.log(`🚀 Servidor de Service Integral activo.`);
-    console.log(`🔒 Cerrado localmente en: http://192.168.0.99:${PORT}`);
+    console.log(`🔒 Escuchando en el puerto ${PORT} (accesible en la red local por la IP de esta PC).`);
 });

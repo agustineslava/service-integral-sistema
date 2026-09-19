@@ -90,9 +90,8 @@ async function apiFetch(url, opciones = {}) {
                 };
 
                 try {
-                    const respuesta = await fetch(`${window.location.origin}/api/usuarios`, {
+                    const respuesta = await apiFetch(`${window.location.origin}/api/usuarios`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(nuevoUsuario)
                     });
 

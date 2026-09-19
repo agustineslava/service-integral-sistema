@@ -18,6 +18,21 @@ let productosLocales = [];
 // ID del producto que está siendo seleccionado para Ver Detalle o Modificar
 let idProductoSeleccionado = null;
 
+/**
+ * Escapa caracteres especiales de HTML antes de insertarlos con innerHTML.
+ * Evita que un nombre de producto, proveedor o descripción con < > " ' rompa
+ * el layout o ejecute HTML/JS no deseado (XSS).
+ */
+function escapeHtml(valor) {
+    if (valor === null || valor === undefined) return '';
+    return String(valor)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 
 /* ==========================================================================
    2. RENDIMIENTO Y CONTROL DE LA TABLA PRINCIPAL
@@ -62,12 +77,12 @@ function renderizarTabla(lista) {
 
         tr.innerHTML = `
             <td>${p.id}</td>
-            <td><strong>${p.nombre}</strong></td>
+            <td><strong>${escapeHtml(p.nombre)}</strong></td>
             <td>$${parseFloat(p.precio).toFixed(2)}</td>
             <td><strong>${p.stock}</strong></td>
             <td>${p.stockMinimo}</td>
-            <td>${p.distribuidor || 'No asignado'}</td>
-            <td><code class="cod-repuesto">${p.codigoDistribuidor || 'N/A'}</code></td>
+            <td>${escapeHtml(p.distribuidor || 'No asignado')}</td>
+            <td><code class="cod-repuesto">${escapeHtml(p.codigoDistribuidor || 'N/A')}</code></td>
             <td>
                 <div class="celda-acciones">
                     <button class="btn-tabla btn-info btn-accion-info" data-id="${p.id}">Info</button>

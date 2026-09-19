@@ -131,3 +131,8 @@
 2026-09-18T23:13:06: 🔒 Cerrado localmente en: http://192.168.0.99:3000
 2026-09-18T23:13:06: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
 2026-09-18T23:13:07: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T23:17:06: ◇ injected env (16) from .env // tip: ⌘ override existing { override: true }
+2026-09-18T23:17:07: 🚀 Servidor de Service Integral activo.
+2026-09-18T23:17:07: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T23:17:07: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T23:17:08: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin

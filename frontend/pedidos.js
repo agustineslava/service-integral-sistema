@@ -18,6 +18,21 @@ const tablaHistorialCuerpo = document.getElementById('tabla-historial-cuerpo');
 const modalDetallePedido = document.getElementById('modal-detalle-pedido');
 const tablaModalItemsCuerpo = document.getElementById('tabla-modal-items-cuerpo');
 
+let historialPedidosCache = []; // guarda el último historial recibido, para poder abrir el detalle sin romper el onclick
+
+/**
+ * Escapa caracteres especiales de HTML antes de insertarlos con innerHTML.
+ */
+function escapeHtml(valor) {
+    if (valor === null || valor === undefined) return '';
+    return String(valor)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Arrays globales para la gestión en memoria
 let productosInventario = [];
 let listaPedidoActual = [];
@@ -28,7 +43,7 @@ let listaPedidoActual = [];
    ========================================================================== */
 async function cargarDatos() {
     try {
-        const respuesta = await fetch(API_URL);
+        const respuesta = await apiFetch(API_URL);
         if (!respuesta.ok) throw new Error(`Código de error del servidor: ${respuesta.status}`);
         
         productosInventario = await respuesta.json();
@@ -97,8 +112,8 @@ function renderizarSugerenciasCriticas() {
 
         li.innerHTML = `
             <div>
-                <strong>${p.nombre}</strong> <br>
-                <small style="color: var(--text-muted);">Stock: ${p.stock} / Mín: ${p.stockMinimo} | Prov: ${p.distribuidor || 'S/A'}</small>
+                <strong>${escapeHtml(p.nombre)}</strong> <br>
+                <small style="color: var(--text-muted);">Stock: ${p.stock} / Mín: ${p.stockMinimo} | Prov: ${escapeHtml(p.distribuidor || 'S/A')}</small>
             </div>
             <button class="btn btn-actualizar" style="padding: 4px 10px; font-size: 0.8rem;" onclick="agregarAlPedido(${p.id}, ${cantidadSugerida})">➕ Añadir</button>
         `;
@@ -148,8 +163,8 @@ inputBuscar.addEventListener('input', () => {
         div.className = 'item-busqueda-sugerido';
         div.innerHTML = `
             <div>
-                <strong>${p.nombre}</strong> <br>
-                <small style="color: var(--text-muted);">Cód: ${p.codigoDistribuidor || 'S/C'} | Prov: ${p.distribuidor || 'S/A'}</small>
+                <strong>${escapeHtml(p.nombre)}</strong> <br>
+                <small style="color: var(--text-muted);">Cód: ${escapeHtml(p.codigoDistribuidor || 'S/C')} | Prov: ${escapeHtml(p.distribuidor || 'S/A')}</small>
             </div>
             <button class="btn btn-info" style="padding: 4px 8px; font-size: 0.85rem;" onclick="agregarAlPedido(${p.id}, 1)">➕</button>
         `;
@@ -210,9 +225,9 @@ function renderizarTablaPedido() {
     listaPedidoActual.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><code>${item.codigoDistribuidor}</code></td>
-            <td><strong>${item.nombre}</strong></td>
-            <td>${item.distribuidor}</td>
+            <td><code>${escapeHtml(item.codigoDistribuidor)}</code></td>
+            <td><strong>${escapeHtml(item.nombre)}</strong></td>
+            <td>${escapeHtml(item.distribuidor)}</td>
             <td>
                 <input type="number" min="1" value="${item.cantidad}" 
                     class="input-mini" style="width: 60px; text-align: center;"
@@ -286,9 +301,8 @@ btnGuardar.addEventListener('click', async () => {
     };
 
     try {
-        const respuesta = await fetch(`${window.location.origin}/api/pedidos`, {
+        const respuesta = await apiFetch(`${window.location.origin}/api/pedidos`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(datosPedido)
         });
 
@@ -317,10 +331,11 @@ btnGuardar.addEventListener('click', async () => {
    ========================================================================== */
 async function obtenerHistorialPedidos() {
     try {
-        const respuesta = await fetch(`${window.location.origin}/api/pedidos`);
+        const respuesta = await apiFetch(`${window.location.origin}/api/pedidos`);
         if (!respuesta.ok) throw new Error('No se pudo conectar para el historial');
         
         const historial = await respuesta.json();
+        historialPedidosCache = historial;
         renderizarHistorial(historial);
     } catch (error) {
         console.error('Error al cargar historial:', error);
@@ -351,10 +366,10 @@ function renderizarHistorial(lista) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td><strong>#${ped.id}</strong></td>
-            <td>${fechaLegible} hs.</td>
-            <td><span style="color: var(--text-muted); font-size: 0.9rem;">${ped.notas || 'Sin anotaciones adicionales'}</span></td>
+            <td>${escapeHtml(fechaLegible)} hs.</td>
+            <td><span style="color: var(--text-muted); font-size: 0.9rem;">${escapeHtml(ped.notas || 'Sin anotaciones adicionales')}</span></td>
             <td style="text-align: center;">
-                <button class="btn-tabla btn-info btn-svg-icono" onclick="verDetallePedido(${ped.id}, '${fechaLegible}', '${ped.notas || 'Sin notas.'}')" style="padding: 4px 10px;">
+                <button class="btn-tabla btn-info btn-svg-icono btn-ver-detalle-pedido" data-id="${ped.id}" style="padding: 4px 10px;">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
                         <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"></path>
                         <circle cx="12" cy="12" r="3"></circle>
@@ -366,6 +381,24 @@ function renderizarHistorial(lista) {
         tablaHistorialCuerpo.appendChild(tr);
     });
 }
+
+// Delegación: evita romper el HTML si una nota tiene comillas, y evita XSS
+// al no armar JS con datos que vienen de la base de datos.
+tablaHistorialCuerpo.addEventListener('click', (e) => {
+    const boton = e.target.closest('.btn-ver-detalle-pedido');
+    if (!boton) return;
+
+    const id = parseInt(boton.dataset.id, 10);
+    const ped = historialPedidosCache.find(p => p.id === id);
+    if (!ped) return;
+
+    const fechaLegible = new Date(ped.fecha).toLocaleString('es-AR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+    });
+
+    verDetallePedido(id, fechaLegible, ped.notas || 'Sin notas.');
+});
 
 
 /* ==========================================================================
@@ -380,7 +413,7 @@ async function verDetallePedido(id, fecha, notas) {
     modalDetallePedido.style.display = 'block';
 
     try {
-        const respuesta = await fetch(`${window.location.origin}/api/pedidos/${id}/items`);
+        const respuesta = await apiFetch(`${window.location.origin}/api/pedidos/${id}/items`);
         if (!respuesta.ok) throw new Error('Error al traer los repuestos');
         
         const items = await respuesta.json();
@@ -394,8 +427,8 @@ async function verDetallePedido(id, fecha, notas) {
         items.forEach(it => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><strong>${it.nombre || 'Repuesto eliminado'}</strong></td>
-                <td><code>${it.codigoDistribuidor || 'N/A'}</code></td>
+                <td><strong>${escapeHtml(it.nombre || 'Repuesto eliminado')}</strong></td>
+                <td><code>${escapeHtml(it.codigoDistribuidor || 'N/A')}</code></td>
                 <td style="text-align: center; font-weight: bold;">${it.cantidad} un.</td>
             `;
             tablaModalItemsCuerpo.appendChild(tr);

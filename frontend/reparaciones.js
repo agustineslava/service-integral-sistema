@@ -8,6 +8,21 @@ let repuestosAsignadosNuevo = [];
 let repuestosAsignadosEdit = [];
 
 /**
+ * Escapa caracteres especiales de HTML antes de insertarlos con innerHTML.
+ * Acá es particularmente importante: estos campos son datos de clientes reales
+ * del taller (nombre, teléfono, dirección), no solo nombres de productos.
+ */
+function escapeHtml(valor) {
+    if (valor === null || valor === undefined) return '';
+    return String(valor)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
  * Carga inicial: catálogo de repuestos de MySQL y lista de órdenes
  */
 async function inicializarModulo() {
@@ -89,18 +104,18 @@ function renderizarTablaReparaciones(lista) {
             <tr class="${claseFila}">
                 <td><strong>#${r.id}</strong></td>
                 <td>
-                    <strong>${r.cliente_nombre}</strong><br>
-                    <small style="color:var(--text-muted);">${r.cliente_telefono || 'Sin tel.'}</small><br>
-                    <small style="color:var(--si-blue-vibrant); font-size: 11px;">📍 ${r.direccion || 'Sin dirección'}</small>
+                    <strong>${escapeHtml(r.cliente_nombre)}</strong><br>
+                    <small style="color:var(--text-muted);">${escapeHtml(r.cliente_telefono || 'Sin tel.')}</small><br>
+                    <small style="color:var(--si-blue-vibrant); font-size: 11px;">📍 ${escapeHtml(r.direccion || 'Sin dirección')}</small>
                 </td>
                 <td>
-                    <strong>${r.equipo}</strong><br>
+                    <strong>${escapeHtml(r.equipo)}</strong><br>
                     <span style="font-size:11px; font-weight: bold; color: ${r.tipo_cobertura === 'En Garantia' ? 'var(--color-success)' : 'var(--text-muted)'};">
                         ${r.tipo_cobertura === 'En Garantia' ? '🛡️ En Garantía' : '🔧 Fuera de Garantía'}
                     </span>
                 </td>
-                <td><small>${r.falla_declarada}</small></td>
-                <td><strong style="color: var(--si-blue-vibrant); font-size: 12px;">${textoRepuestos}</strong></td>
+                <td><small>${escapeHtml(r.falla_declarada)}</small></td>
+                <td><strong style="color: var(--si-blue-vibrant); font-size: 12px;">${escapeHtml(textoRepuestos)}</strong></td>
                 <td><strong>$${parseFloat(r.total).toFixed(2)}</strong></td>
                 <td>
                     <small style="display:block;"><strong>Ingreso:</strong> ${fInicio}</small>
@@ -206,7 +221,7 @@ function renderizarChipsRepuestos(contexto) {
     contenedor.innerHTML = lista.map((r, i) => `
         <div class="item-repuesto-fila" style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-body); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 6px;">
             <span style="font-size: 13px;">
-                <strong>${r.nombre}</strong> (Cód: ${r.codigo}) — <strong>${r.cantidad} un.</strong>
+                <strong>${escapeHtml(r.nombre)}</strong> (Cód: ${escapeHtml(r.codigo)}) — <strong>${r.cantidad} un.</strong>
                 ${r.producto_id ? '<span style="color: var(--color-success); font-size: 11px; font-weight: bold;"> [En Stock]</span>' : '<span style="color: var(--si-yellow); font-size: 11px;"> [Sin vincular]</span>'}
             </span>
             <button type="button" class="btn-tabla btn-eliminar" style="padding: 2px 8px; font-size: 11px;" onclick="quitarRepuestoAsignado('${contexto}', ${i})">✕</button>
