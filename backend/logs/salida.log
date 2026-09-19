@@ -96,3 +96,38 @@
 2026-09-18T20:56:15: 🔒 Cerrado localmente en: http://192.168.0.99:3000
 2026-09-18T20:56:15: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
 2026-09-18T20:56:15: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T22:17:56: ◇ injected env (16) from .env // tip: ⌘ enable debugging { debug: true }
+2026-09-18T22:17:57: 🚀 Servidor de Service Integral activo.
+2026-09-18T22:17:57: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T22:17:57: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T22:17:57: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T22:54:48: ◇ injected env (16) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+2026-09-18T22:54:50: 🚀 Servidor de Service Integral activo.
+2026-09-18T22:54:50: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T22:54:50: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T22:54:50: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T23:01:04: ◇ injected env (16) from .env // tip: ⌘ override existing { override: true }
+2026-09-18T23:01:05: 🚀 Servidor de Service Integral activo.
+2026-09-18T23:01:05: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T23:01:05: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T23:01:05: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T23:01:26: ◇ injected env (16) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+2026-09-18T23:01:27: 🚀 Servidor de Service Integral activo.
+2026-09-18T23:01:27: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T23:01:27: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T23:01:28: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T23:02:29: ◇ injected env (16) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+2026-09-18T23:02:30: 🚀 Servidor de Service Integral activo.
+2026-09-18T23:02:30: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T23:02:30: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T23:02:31: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T23:12:46: ◇ injected env (16) from .env // tip: ⌘ override existing { override: true }
+2026-09-18T23:12:47: 🚀 Servidor de Service Integral activo.
+2026-09-18T23:12:47: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T23:12:47: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T23:12:47: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T23:13:05: ◇ injected env (16) from .env // tip: ⌘ enable debugging { debug: true }
+2026-09-18T23:13:06: 🚀 Servidor de Service Integral activo.
+2026-09-18T23:13:06: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T23:13:06: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T23:13:07: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin

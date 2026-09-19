@@ -18,7 +18,7 @@ async function inicializarModulo() {
         const datalist = document.getElementById('lista-repuestos-catalogo');
         if (datalist) {
             datalist.innerHTML = catalogoProductos.map(p => 
-                `<option value="${p.nombre} | Cód: ${p.codigoDistribuidor || 'S/C'}" data-id="${p.id}"></option>`
+                `<option value="${p.nombre} [Cód: ${p.codigoDistribuidor || 'S/C'}]" data-id="${p.id}"></option>`
             ).join('');
         }
 
@@ -45,7 +45,7 @@ async function cargarReparaciones() {
 }
 
 /**
- * Renderiza la tabla de equipos en taller con resaltado condicional
+ * Renderiza la tabla de equipos en taller
  */
 function renderizarTablaReparaciones(lista) {
     const tbody = document.getElementById('tabla-reparaciones-cuerpo');
@@ -57,12 +57,33 @@ function renderizarTablaReparaciones(lista) {
     }
 
     tbody.innerHTML = lista.map(r => {
-        // Resaltar en amarillo los estados activos de taller
         const esActivo = ['Pendiente', 'En Reparacion', 'Esperando Repuesto'].includes(r.estado);
         const claseFila = esActivo ? 'fila-estado-activo' : '';
 
         const fInicio = new Date(r.fecha_inicio).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' });
         const fModif = new Date(r.fecha_modificacion).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+        let claseBadge = 'badge-pendiente';
+        if (r.estado === 'En Reparacion') claseBadge = 'badge-en-reparacion';
+        else if (r.estado === 'Esperando Repuesto') claseBadge = 'badge-esperando-repuesto';
+        else if (r.estado === 'Listo') claseBadge = 'badge-listo';
+        else if (r.estado === 'Entregado') claseBadge = 'badge-entregado';
+        else if (r.estado === 'Cancelado') claseBadge = 'badge-cancelado';
+
+        // Mostrar texto de repuestos garantizando que nunca quede vacío si hay items
+        let textoRepuestos = r.repuestos_usados;
+        if (!textoRepuestos || textoRepuestos.trim() === '' || textoRepuestos === 'Ninguno') {
+            try {
+                const det = typeof r.repuestos_detalle === 'string' ? JSON.parse(r.repuestos_detalle) : r.repuestos_detalle;
+                if (Array.isArray(det) && det.length > 0) {
+                    textoRepuestos = det.map(it => `${it.nombre} (x${it.cantidad})`).join(', ');
+                } else {
+                    textoRepuestos = 'Ninguno';
+                }
+            } catch(e) {
+                textoRepuestos = 'Ninguno';
+            }
+        }
 
         return `
             <tr class="${claseFila}">
@@ -79,23 +100,18 @@ function renderizarTablaReparaciones(lista) {
                     </span>
                 </td>
                 <td><small>${r.falla_declarada}</small></td>
-                <td><small>${r.repuestos_usados || 'Ninguno'}</small></td>
+                <td><strong style="color: var(--si-blue-vibrant); font-size: 12px;">${textoRepuestos}</strong></td>
                 <td><strong>$${parseFloat(r.total).toFixed(2)}</strong></td>
                 <td>
                     <small style="display:block;"><strong>Ingreso:</strong> ${fInicio}</small>
                     <small style="display:block; color:var(--text-muted);"><strong>Modif:</strong> ${fModif} hs</small>
                 </td>
-                <td>
-                    <span class="badge-online" style="background-color: ${
-                        r.estado === 'Entregado' ? '#6c757d' :
-                        r.estado === 'Listo' ? 'var(--color-success)' :
-                        r.estado === 'Esperando Repuesto' ? '#e67e22' :
-                        r.estado === 'En Reparacion' ? 'var(--si-blue-vibrant)' : '#ffc107'
-                    }; color: ${['Pendiente', 'Esperando Repuesto'].includes(r.estado) ? '#000' : '#fff'};">
+                <td class="celda-estado-col">
+                    <span class="badge-estado-taller ${claseBadge}">
                         ${r.estado}
                     </span>
                 </td>
-                <td>
+                <td class="celda-acciones-col">
                     <div class="celda-acciones" style="flex-direction: column; gap: 4px;">
                         <select onchange="cambiarEstadoReparacion(${r.id}, this.value)" style="padding: 3px; font-size: 11px;">
                             <option value="" disabled selected>Mover a...</option>
@@ -107,8 +123,8 @@ function renderizarTablaReparaciones(lista) {
                             <option value="Cancelado">Cancelado</option>
                         </select>
                         <div style="display: flex; gap: 4px;">
-                            <button type="button" class="btn-tabla btn-info" onclick="abrirModalEditar(${r.id})" style="padding: 3px 6px; font-size: 11px;">Editar</button>
-                            <button type="button" class="btn-tabla btn-actualizar" onclick="enviarWhatsAppTecnico(${r.id})" style="padding: 3px 6px; font-size: 11px; background-color: #25d366;" title="Enviar datos al técnico">WA</button>
+                            <button type="button" class="btn-tabla btn-info" onclick="abrirModalEditar(${r.id})" style="padding: 3px 6px; font-size: 11px; flex: 1;">Editar</button>
+                            <button type="button" class="btn-tabla btn-actualizar" onclick="enviarWhatsAppTecnico(${r.id})" style="padding: 3px 6px; font-size: 11px; background-color: #25d366; flex: 1;" title="Enviar datos al técnico">WA</button>
                         </div>
                     </div>
                 </td>
@@ -137,20 +153,29 @@ if (inputBuscarReparaciones) {
 }
 
 /**
- * Gestión interactiva de repuestos en formulario (Creación y Edición)
+ * Añadir repuestos a la lista temporal
  */
 function agregarRepuestoAOrden(contexto) {
     const inputSelector = document.getElementById(contexto === 'nuevo' ? 'rep-input-selector' : 'edit-rep-input-selector');
     const inputCant = document.getElementById(contexto === 'nuevo' ? 'rep-input-cantidad' : 'edit-rep-input-cantidad');
-    const texto = inputSelector.value.trim();
+    const texto = (inputSelector.value || '').trim();
     const cantidad = parseInt(inputCant.value) || 1;
 
     if (!texto) return;
 
-    const encontrado = catalogoProductos.find(p => texto.includes(p.nombre) || (p.codigoDistribuidor && texto.includes(p.codigoDistribuidor)));
+    // 1. Limpiar el texto para obtener nombre o código puro
+    const textoLimpio = texto.toLowerCase();
+
+    // 2. Buscar en el catálogo local
+    const encontrado = catalogoProductos.find(p => {
+        const nombreMatch = p.nombre && textoLimpio.includes(p.nombre.toLowerCase());
+        const codigoMatch = p.codigoDistribuidor && textoLimpio.includes(String(p.codigoDistribuidor).toLowerCase());
+        return nombreMatch || codigoMatch;
+    });
+
     const nuevoItem = {
         producto_id: encontrado ? encontrado.id : null,
-        nombre: encontrado ? encontrado.nombre : texto,
+        nombre: encontrado ? encontrado.nombre : texto.replace(/\[.*?\]/, '').trim(),
         codigo: encontrado ? (encontrado.codigoDistribuidor || 'S/C') : 'S/C',
         cantidad: cantidad
     };
@@ -173,10 +198,18 @@ function renderizarChipsRepuestos(contexto) {
 
     if (!contenedor) return;
 
+    if (lista.length === 0) {
+        contenedor.innerHTML = '<p style="font-size: 12px; color: var(--text-muted); margin: 4px 0;">No hay repuestos agregados.</p>';
+        return;
+    }
+
     contenedor.innerHTML = lista.map((r, i) => `
-        <div class="item-repuesto-fila">
-            <span style="font-size: 12px; flex: 1;"><strong>${r.nombre}</strong> (Cód: ${r.codigo}) - <strong>${r.cantidad} un.</strong></span>
-            <button type="button" class="btn-tabla btn-eliminar" style="padding: 2px 6px; font-size: 11px;" onclick="quitarRepuestoAsignado('${contexto}', ${i})">✕</button>
+        <div class="item-repuesto-fila" style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-body); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 6px;">
+            <span style="font-size: 13px;">
+                <strong>${r.nombre}</strong> (Cód: ${r.codigo}) — <strong>${r.cantidad} un.</strong>
+                ${r.producto_id ? '<span style="color: var(--color-success); font-size: 11px; font-weight: bold;"> [En Stock]</span>' : '<span style="color: var(--si-yellow); font-size: 11px;"> [Sin vincular]</span>'}
+            </span>
+            <button type="button" class="btn-tabla btn-eliminar" style="padding: 2px 8px; font-size: 11px;" onclick="quitarRepuestoAsignado('${contexto}', ${i})">✕</button>
         </div>
     `).join('');
 }
@@ -192,74 +225,38 @@ function quitarRepuestoAsignado(contexto, index) {
 }
 
 /**
- * Alta de nueva orden de trabajo
- */
-const formReparacion = document.getElementById('form-reparacion');
-if (formReparacion) {
-    formReparacion.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const orden = {
-            cliente_nombre: document.getElementById('rep-cliente').value,
-            cliente_telefono: document.getElementById('rep-telefono').value,
-            direccion: document.getElementById('rep-direccion').value,
-            tipo_cobertura: document.getElementById('rep-cobertura').value,
-            equipo: document.getElementById('rep-equipo').value,
-            falla_declarada: document.getElementById('rep-falla').value,
-            repuestos_detalle: repuestosAsignadosNuevo,
-            costo_mano_obra: document.getElementById('rep-mano-obra').value,
-            costo_repuestos: document.getElementById('rep-costo-rep').value,
-            estado: document.getElementById('rep-estado').value
-        };
-
-        try {
-            const res = await apiFetch('/api/reparaciones', {
-                method: 'POST',
-                body: JSON.stringify(orden)
-            });
-
-            if (res.ok) {
-                alert('¡Orden de trabajo registrada con éxito!');
-                formReparacion.reset();
-                repuestosAsignadosNuevo = [];
-                renderizarChipsRepuestos('nuevo');
-                cargarReparaciones();
-            } else {
-                const errData = await res.json();
-                alert(errData.error || 'Error al guardar la orden.');
-            }
-        } catch (err) {
-            alert('No se pudo conectar con el servidor.');
-        }
-    });
-}
-
-/**
- * Cambio de estado con confirmación para descontar stock
+ * Cambio de estado con actualización reactiva e inmediata
  */
 async function cambiarEstadoReparacion(id, nuevoEstado) {
     if (nuevoEstado === 'Entregado') {
-        if (!confirm('¿Confirmás la entrega del equipo? Se descontarán del inventario los repuestos asignados que tengan código/ID.')) {
-            cargarReparaciones();
+        if (!confirm('¿Confirmás la entrega del equipo? Se descontarán del inventario los repuestos asignados vinculados al stock.')) {
+            await cargarReparaciones();
             return;
         }
     }
+
     try {
         const res = await apiFetch(`/api/reparaciones/${id}/estado`, {
             method: 'PUT',
             body: JSON.stringify({ estado: nuevoEstado })
         });
+
         if (res.ok) {
-            cargarReparaciones();
+            // Esperar explícitamente a que la base de datos devuelva los datos actualizados
+            await cargarReparaciones();
         } else {
-            alert('No se pudo actualizar el estado.');
+            const err = await res.json();
+            alert(err.error || 'No se pudo actualizar el estado.');
+            await cargarReparaciones();
         }
     } catch (e) {
         alert('Error de red al actualizar estado.');
+        await cargarReparaciones();
     }
 }
 
 /**
- * Abrir y guardar modal de edición completa
+ * Modal de Edición Completa
  */
 function abrirModalEditar(id) {
     const r = reparacionesLocales.find(x => x.id === id);
@@ -276,8 +273,15 @@ function abrirModalEditar(id) {
     document.getElementById('edit-rep-costo-rep').value = r.costo_repuestos;
     document.getElementById('edit-rep-estado').value = r.estado;
 
+    // Parsear de forma segura repuestos_detalle
     try {
-        repuestosAsignadosEdit = typeof r.repuestos_detalle === 'string' ? JSON.parse(r.repuestos_detalle) : (r.repuestos_detalle || []);
+        if (typeof r.repuestos_detalle === 'string' && r.repuestos_detalle.trim() !== '') {
+            repuestosAsignadosEdit = JSON.parse(r.repuestos_detalle);
+        } else if (Array.isArray(r.repuestos_detalle)) {
+            repuestosAsignadosEdit = [...r.repuestos_detalle];
+        } else {
+            repuestosAsignadosEdit = [];
+        }
     } catch (e) { 
         repuestosAsignadosEdit = []; 
     }
@@ -313,7 +317,7 @@ if (formEditarReparacion) {
             if (res.ok) {
                 alert('¡Orden actualizada con éxito!');
                 cerrarModal('modal-editar-reparacion');
-                cargarReparaciones();
+                await cargarReparaciones();
             } else {
                 alert('Error al modificar la orden.');
             }
@@ -324,7 +328,49 @@ if (formEditarReparacion) {
 }
 
 /**
- * Enviar ficha técnica al WhatsApp del técnico asignado
+ * Alta de nueva orden
+ */
+const formReparacion = document.getElementById('form-reparacion');
+if (formReparacion) {
+    formReparacion.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const orden = {
+            cliente_nombre: document.getElementById('rep-cliente').value,
+            cliente_telefono: document.getElementById('rep-telefono').value,
+            direccion: document.getElementById('rep-direccion').value,
+            tipo_cobertura: document.getElementById('rep-cobertura').value,
+            equipo: document.getElementById('rep-equipo').value,
+            falla_declarada: document.getElementById('rep-falla').value,
+            repuestos_detalle: repuestosAsignadosNuevo,
+            costo_mano_obra: document.getElementById('rep-mano-obra').value,
+            costo_repuestos: document.getElementById('rep-costo-rep').value,
+            estado: document.getElementById('rep-estado').value
+        };
+
+        try {
+            const res = await apiFetch('/api/reparaciones', {
+                method: 'POST',
+                body: JSON.stringify(orden)
+            });
+
+            if (res.ok) {
+                alert('¡Orden de trabajo registrada con éxito!');
+                formReparacion.reset();
+                repuestosAsignadosNuevo = [];
+                renderizarChipsRepuestos('nuevo');
+                await cargarReparaciones();
+            } else {
+                const errData = await res.json();
+                alert(errData.error || 'Error al guardar la orden.');
+            }
+        } catch (err) {
+            alert('No se pudo conectar con el servidor.');
+        }
+    });
+}
+
+/**
+ * WhatsApp
  */
 function enviarWhatsAppTecnico(id) {
     const r = reparacionesLocales.find(x => x.id === id);
@@ -337,17 +383,14 @@ function enviarWhatsAppTecnico(id) {
     if (r.direccion) msj += `📍 *Dirección:* ${r.direccion}\n`;
     msj += `⚙️ *Equipo:* ${r.equipo} (${r.tipo_cobertura})\n`;
     msj += `⚠️ *Falla Declarada:* ${r.falla_declarada}\n`;
-    msj += `🔩 *Repuestos Asignados:* ${r.repuestos_usados || 'Ninguno'}\n`;
+    msj += `🔩 *Repuestos:* ${r.repuestos_usados || 'Ninguno'}\n`;
     msj += `📌 *Estado:* ${r.estado}\n`;
-    msj += `💵 *Presupuesto Total:* $${parseFloat(r.total).toFixed(2)}\n`;
+    msj += `💵 *Total:* $${parseFloat(r.total).toFixed(2)}\n`;
 
     const urlWA = `https://api.whatsapp.com/send?text=${encodeURIComponent(msj)}`;
     window.open(urlWA, '_blank');
 }
 
-/**
- * Auxiliares de modal y tema
- */
 function cerrarModal(idModal) {
     const modal = document.getElementById(idModal);
     if (modal) modal.style.display = 'none';

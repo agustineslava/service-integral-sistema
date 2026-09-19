@@ -214,23 +214,67 @@ header {
     letter-spacing: 0.5px;
 }
 
-/* --- BUSCADOR INTERACTIVO --- */
+/* --- BUSCADOR Y FILTROS ADAPTATIVOS --- */
 .seccion-busqueda {
-    margin-bottom: 20px;
+    margin-bottom: 25px;
 }
 
-.buscador-avanzado {
-    display: flex;
-    align-items: center;
+.contenedor-filtros-grid {
     background-color: var(--bg-card);
-    padding: 15px;
-    border-radius: 8px;
     border: 1px solid var(--border-color);
-    gap: 10px;
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: grid;
+    /* Grid automático que salta de fila si no entran los 220px por elemento */
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 15px;
+    align-items: flex-end;
 }
 
-.buscador-avanzado input[type="text"] {
-    flex: 1;
+/* El input de búsqueda principal toma 2 columnas cuando hay espacio */
+.contenedor-filtros-grid .filtro-principal {
+    grid-column: span 2;
+}
+
+/* En pantallas chicas o con mucho zoom, el buscador vuelve a 1 sola columna */
+@media (max-width: 900px) {
+    .contenedor-filtros-grid .filtro-principal {
+        grid-column: span 1;
+    }
+}
+
+.grupo-filtro {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.grupo-filtro label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    white-space: nowrap; /* Evita que los textos se partan o monten */
+}
+
+.grupo-filtro input[type="text"],
+.grupo-filtro select {
+    width: 100%;
+    height: 42px;
+    padding: 8px 12px;
+    font-size: 14px;
+    border-radius: 8px;
+    background-color: var(--bg-body);
+    border: 1.5px solid var(--border-color);
+    color: var(--text-main);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.grupo-filtro input[type="text"]:focus,
+.grupo-filtro select:focus {
+    border-color: var(--si-blue-vibrant);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.15);
 }
 
 /* ==========================================================================

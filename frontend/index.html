@@ -204,19 +204,19 @@
         </section>
             
         <!-- ==========================================================================
-           4. BARRA AVANZADA: BUSCADOR, FILTROS Y ORDENAMIENTO
+           4. BARRA AVANZADA: BUSCADOR, FILTROS Y ORDENAMIENTO (RESPONSIVA)
            ========================================================================== -->
         <section class="seccion-busqueda">
-            <div class="buscador-avanzado" style="flex-wrap: wrap; gap: 12px;">
-                <!-- Campo de búsqueda -->
-                <div style="display: flex; align-items: center; gap: 8px; flex: 2; min-width: 260px;">
-                    <label for="input-buscador" style="margin-bottom: 0;">Buscar:</label>
+            <div class="contenedor-filtros-grid">
+                <!-- Campo de búsqueda principal -->
+                <div class="grupo-filtro filtro-principal">
+                    <label for="input-buscador">Buscar Repuesto / Artículo:</label>
                     <input type="text" id="input-buscador" placeholder="Escriba nombre, código, proveedor..." autocomplete="off">
                 </div>
 
-                <!-- Filtrar por Estado / Categoría -->
-                <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px;">
-                    <label for="select-filtro-estado" style="margin-bottom: 0;">Estado:</label>
+                <!-- Filtrar por Estado -->
+                <div class="grupo-filtro">
+                    <label for="select-filtro-estado">Estado de Stock:</label>
                     <select id="select-filtro-estado">
                         <option value="TODOS">Todos los estados</option>
                         <option value="CRITICO">⚠️ Solo Stock Crítico</option>
@@ -225,8 +225,9 @@
                     </select>
                 </div>
 
-                <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px;">
-                    <label for="select-filtro-categoria" style="margin-bottom: 0;">Categoría:</label>
+                <!-- Filtrar por Categoría -->
+                <div class="grupo-filtro">
+                    <label for="select-filtro-categoria">Categoría:</label>
                     <select id="select-filtro-categoria">
                         <option value="TODAS">Todas las categorías</option>
                         <option value="Lavarropas">Lavarropas</option>
@@ -237,9 +238,9 @@
                     </select>
                 </div>
 
-                <!-- Ordenar por Columna y Criterio -->
-                <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px;">
-                    <label for="select-ordenar" style="margin-bottom: 0;">Ordenar por:</label>
+                <!-- Ordenar por Criterio -->
+                <div class="grupo-filtro">
+                    <label for="select-ordenar">Ordenar por:</label>
                     <select id="select-ordenar">
                         <option value="id_desc">Más recientes primero</option>
                         <option value="id_asc">Más antiguos primero</option>
@@ -247,13 +248,13 @@
                         <option value="nombre_desc">Nombre (Z - A)</option>
                         <option value="precio_desc">Mayor precio</option>
                         <option value="precio_asc">Menor precio</option>
-                        <option value="stock_asc">Menor stock disponible</option>
-                        <option value="stock_desc">Mayor stock disponible</option>
+                        <option value="stock_asc">Menor stock</option>
+                        <option value="stock_desc">Mayor stock</option>
                     </select>
                 </div>
             </div>
         </section>
-
+        
         <!-- ==========================================================================
            5. TABLA INVENTARIO GENERAL
            ========================================================================== -->

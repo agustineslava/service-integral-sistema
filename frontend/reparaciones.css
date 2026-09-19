@@ -1,0 +1,83 @@
+/* ==========================================================================
+   ESTILOS EXCLUSIVOS DEL MÓDULO DE REPARACIONES Y TALLER
+   ========================================================================== */
+
+/* --- RESALTADO CONDICIONAL DE FILAS ACTIVAS --- */
+.fila-estado-activo {
+    background-color: rgba(255, 198, 0, 0.14) !important;
+    border-left: 5px solid var(--si-yellow) !important;
+}
+
+body.tema-claro .fila-estado-activo {
+    background-color: #fff9db !important;
+    border-left: 5px solid #f59f00 !important;
+}
+
+/* --- BADGES DE ESTADO (EVITAR QUE SE ROMPAN EN DOS LÍNEAS) --- */
+.badge-estado-taller {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    white-space: nowrap; /* Evita que "Esperando Repuesto" se corte */
+    text-align: center;
+    line-height: 1.2;
+}
+
+/* Colores dinámicos por estado */
+.badge-pendiente { background-color: #ffc107; color: #000; }
+.badge-en-reparacion { background-color: var(--si-blue-vibrant); color: #fff; }
+.badge-esperando-repuesto { background-color: #fd7e14; color: #fff; }
+.badge-listo { background-color: var(--color-success); color: #fff; }
+.badge-entregado { background-color: #6c757d; color: #fff; }
+.badge-cancelado { background-color: var(--color-danger); color: #fff; }
+
+/* Ancho protegido para celdas clave de la tabla */
+.celda-estado-col {
+    min-width: 140px;
+    text-align: center;
+}
+
+.celda-acciones-col {
+    min-width: 130px;
+}
+
+/* --- CHIPS DE REPUESTOS ASIGNADOS --- */
+.item-repuesto-fila {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+    background: var(--bg-body);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+/* --- ESTRUCTURA RESILIENTE DEL MODAL DE EDICIÓN --- */
+.modal-reparacion-contenedor {
+    max-width: 680px;
+    width: 92%;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+    overflow: hidden; /* Mantiene el encabezado y pie fijos */
+}
+
+.modal-reparacion-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 8px;
+    margin-bottom: 12px;
+}
+
+.modal-reparacion-pie {
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0; /* Nunca se achica ni se corta por el zoom */
+}

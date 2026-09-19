@@ -507,7 +507,7 @@ app.post('/api/reparaciones', (req, res) => {
 });
 
 // 3. Editar orden de servicio existente
-app.put('/api/reparaciones/:id', (req, res) => {
+app.put('/api/reparaciones/:id', async (req, res) => {
     const { id } = req.params;
     const { 
         cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, 
@@ -520,107 +520,127 @@ app.put('/api/reparaciones/:id', (req, res) => {
     const total = manoObra + repuestos;
 
     const listaRepuestos = Array.isArray(repuestos_detalle) ? repuestos_detalle : [];
-    const repuestosResumen = listaRepuestos.map(r => `${r.nombre} (x${r.cantidad})`).join(', ') || 'Ninguno';
+    const repuestosResumen = listaRepuestos.length > 0 
+        ? listaRepuestos.map(r => `${r.nombre} (x${r.cantidad})`).join(', ') 
+        : 'Ninguno';
 
-    const sql = `
-        UPDATE reparaciones 
-        SET cliente_nombre = ?, cliente_telefono = ?, direccion = ?, tipo_cobertura = ?, 
-            equipo = ?, falla_declarada = ?, diagnostico_tecnico = ?, repuestos_usados = ?, 
-            repuestos_detalle = ?, costo_mano_obra = ?, costo_repuestos = ?, total = ?, 
-            estado = ?, tecnico_asignado = ?, fecha_modificacion = NOW()
-        WHERE id = ?
-    `;
+    try {
+        const [ordenes] = await db.promise().query('SELECT * FROM reparaciones WHERE id = ?', [id]);
+        if (ordenes.length === 0) return res.status(404).json({ error: 'Orden no encontrada' });
 
-    db.query(sql, [
-        cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada,
-        diagnostico_tecnico, repuestosResumen, JSON.stringify(listaRepuestos), manoObra, repuestos,
-        total, estado, tecnico_asignado, id
-    ], (err) => {
-        if (err) {
-            console.error('Error al modificar reparación:', err);
-            return res.status(500).json({ error: 'Error al actualizar la orden' });
-        }
-        res.json({ mensaje: 'Orden de servicio actualizada' });
-    });
-});
+        const ordenActual = ordenes[0];
 
-// 4. Cambiar estado con descuento automático de stock al marcar 'Entregado'
-app.put('/api/reparaciones/:id/estado', (req, res) => {
-    const { id } = req.params;
-    const { estado } = req.body;
+        // Si la orden está en Entregado, procesamos el descuento
+        if (estado === 'Entregado' && listaRepuestos.length > 0) {
+            for (const item of listaRepuestos) {
+                let targetId = item.producto_id;
 
-    db.getConnection((err, conn) => {
-        if (err) return res.status(500).json({ error: 'Error en conexión' });
-
-        conn.beginTransaction(async (errTx) => {
-            if (errTx) { conn.release(); return res.status(500).json({ error: 'Error en transacción' }); }
-
-            try {
-                // Consultar estado actual y repuestos cargados
-                const [ordenes] = await conn.promise().query('SELECT * FROM reparaciones WHERE id = ? FOR UPDATE', [id]);
-                if (ordenes.length === 0) {
-                    await conn.promise().rollback();
-                    conn.release();
-                    return res.status(404).json({ error: 'Orden no encontrada' });
-                }
-
-                const orden = ordenes[0];
-                let debeDescontar = false;
-
-                // Descontar repuestos si pasa a 'Entregado' y aún no se descontaron
-                if (estado === 'Entregado' && orden.stock_descontado === 0) {
-                    debeDescontar = true;
-                    let items = [];
-                    try {
-                        items = typeof orden.repuestos_detalle === 'string' 
-                            ? JSON.parse(orden.repuestos_detalle) 
-                            : (orden.repuestos_detalle || []);
-                    } catch (e) { items = []; }
-
-                    for (const item of items) {
-                        if (item.producto_id && item.cantidad > 0) {
-                            // Descontar de productos
-                            await conn.promise().query(
-                                'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
-                                [item.cantidad, item.producto_id]
-                            );
-
-                            // Registrar en auditoría de movimientos
-                            await conn.promise().query(
-                                `INSERT INTO movimientos_stock 
-                                 (producto_id, producto_nombre, usuario_nombre, tipo, cantidad_afectada, stock_resultante, motivo) 
-                                 VALUES (?, ?, ?, 'REPARACION', ?, (SELECT stock FROM productos WHERE id = ?), ?)`,
-                                [item.producto_id, item.nombre, orden.tecnico_asignado || 'Técnico', item.cantidad, item.producto_id, `Reparación #${id} (${orden.equipo})`]
-                            );
-                        }
+                // Si por alguna razón vino sin ID, buscarlo por nombre en MySQL
+                if (!targetId) {
+                    const [prodEncontrado] = await db.promise().query(
+                        'SELECT id FROM productos WHERE LOWER(nombre) LIKE ? LIMIT 1',
+                        [`%${item.nombre.toLowerCase().trim()}%`]
+                    );
+                    if (prodEncontrado.length > 0) {
+                        targetId = prodEncontrado[0].id;
+                        item.producto_id = targetId;
                     }
                 }
 
-                let updateSql = 'UPDATE reparaciones SET estado = ?, fecha_modificacion = NOW()';
-                const updateParams = [estado];
+                if (targetId && item.cantidad > 0) {
+                    await db.promise().query(
+                        'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
+                        [item.cantidad, targetId]
+                    );
 
-                if (estado === 'Entregado') {
-                    updateSql += ', fecha_entrega = NOW()';
+                    await db.promise().query(
+                        `INSERT INTO movimientos_stock 
+                         (producto_id, producto_nombre, usuario_nombre, tipo, cantidad_afectada, stock_resultante, motivo) 
+                         VALUES (?, ?, ?, 'REPARACION', ?, (SELECT stock FROM productos WHERE id = ?), ?)`,
+                        [targetId, item.nombre, ordenActual.tecnico_asignado || 'Técnico', item.cantidad, targetId, `Reparación #${id} (${equipo})`]
+                    );
                 }
-                if (debeDescontar) {
-                    updateSql += ', stock_descontado = 1';
-                }
-                updateSql += ' WHERE id = ?';
-                updateParams.push(id);
-
-                await conn.promise().query(updateSql, updateParams);
-                await conn.promise().commit();
-                conn.release();
-
-                res.json({ mensaje: 'Estado actualizado correctamente' });
-            } catch (errorTx) {
-                await conn.promise().rollback();
-                conn.release();
-                console.error('Fallo en transición de estado:', errorTx);
-                res.status(500).json({ error: 'No se pudo completar el cambio de estado' });
             }
-        });
-    });
+        }
+
+        const sql = `
+            UPDATE reparaciones 
+            SET cliente_nombre = ?, cliente_telefono = ?, direccion = ?, tipo_cobertura = ?, 
+                equipo = ?, falla_declarada = ?, diagnostico_tecnico = ?, repuestos_usados = ?, 
+                repuestos_detalle = ?, costo_mano_obra = ?, costo_repuestos = ?, total = ?, 
+                estado = ?, tecnico_asignado = ?, stock_descontado = 1, fecha_modificacion = NOW()
+            WHERE id = ?
+        `;
+
+        await db.promise().query(sql, [
+            cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada,
+            diagnostico_tecnico || null, repuestosResumen, JSON.stringify(listaRepuestos), manoObra, repuestos,
+            total, estado, tecnico_asignado || null, id
+        ]);
+
+        res.json({ mensaje: 'Orden y stock actualizados correctamente' });
+
+    } catch (err) {
+        console.error('Error al modificar reparación:', err);
+        res.status(500).json({ error: 'Error al actualizar la orden' });
+    }
+});
+
+// 4. Cambiar estado con descuento automático de stock al marcar 'Entregado'
+app.put('/api/reparaciones/:id/estado', async (req, res) => {
+    const { id } = req.params;
+    const { estado } = req.body;
+
+    try {
+        const [ordenes] = await db.promise().query('SELECT * FROM reparaciones WHERE id = ?', [id]);
+        if (ordenes.length === 0) {
+            return res.status(404).json({ error: 'Orden no encontrada' });
+        }
+
+        const orden = ordenes[0];
+        let debeDescontar = false;
+
+        if (estado === 'Entregado' && orden.stock_descontado === 0) {
+            debeDescontar = true;
+            let items = [];
+            try {
+                items = typeof orden.repuestos_detalle === 'string' 
+                    ? JSON.parse(orden.repuestos_detalle) 
+                    : (orden.repuestos_detalle || []);
+            } catch (e) { items = []; }
+
+            for (const item of items) {
+                if (item.producto_id && item.cantidad > 0) {
+                    await db.promise().query(
+                        'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
+                        [item.cantidad, item.producto_id]
+                    );
+
+                    await db.promise().query(
+                        `INSERT INTO movimientos_stock 
+                         (producto_id, producto_nombre, usuario_nombre, tipo, cantidad_afectada, stock_resultante, motivo) 
+                         VALUES (?, ?, ?, 'REPARACION', ?, (SELECT stock FROM productos WHERE id = ?), ?)`,
+                        [item.producto_id, item.nombre, orden.tecnico_asignado || 'Técnico', item.cantidad, item.producto_id, `Reparación #${id} (${orden.equipo})`]
+                    );
+                }
+            }
+        }
+
+        let updateSql = 'UPDATE reparaciones SET estado = ?, fecha_modificacion = NOW()';
+        const updateParams = [estado];
+
+        if (estado === 'Entregado') updateSql += ', fecha_entrega = NOW()';
+        if (debeDescontar) updateSql += ', stock_descontado = 1';
+        
+        updateSql += ' WHERE id = ?';
+        updateParams.push(id);
+
+        await db.promise().query(updateSql, updateParams);
+        res.json({ mensaje: 'Estado actualizado correctamente' });
+    } catch (error) {
+        console.error('Error al actualizar estado:', error);
+        res.status(500).json({ error: 'Error interno al actualizar estado' });
+    }
 });
 
 /* ==========================================================================

@@ -7,27 +7,7 @@
     <script src="auth-check.js"></script>
     <script src="marca.js"></script>
     <link rel="stylesheet" href="style.css?v=1.3">
-    <style>
-        /* Resaltado de estados críticos y activos de taller */
-        .fila-estado-activo {
-            background-color: rgba(255, 198, 0, 0.16) !important;
-            border-left: 5px solid var(--si-yellow) !important;
-        }
-        body.tema-claro .fila-estado-activo {
-            background-color: #fff9db !important;
-            border-left: 5px solid #f59f00 !important;
-        }
-        .item-repuesto-fila {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            margin-bottom: 8px;
-            background: var(--bg-body);
-            padding: 8px;
-            border-radius: 6px;
-            border: 1px solid var(--border-color);
-        }
-    </style>
+    <link rel="stylesheet" href="reparaciones.css?v=1.1">
 </head>
 <body>
     <header>
@@ -136,13 +116,11 @@
             </form>
         </section>
 
-        <!-- BUSCADOR DE CLIENTES Y SERVICIOS -->
+      <!-- BUSCADOR DE CLIENTES Y SERVICIOS (ANCHO COMPLETO) -->
         <section class="seccion-busqueda">
-            <div class="buscador-avanzado">
-                <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                    <label for="input-buscar-reparaciones" style="margin-bottom: 0;">Buscar Servicio:</label>
-                    <input type="text" id="input-buscar-reparaciones" placeholder="Buscar por cliente, teléfono, dirección, equipo o falla..." autocomplete="off">
-                </div>
+            <div class="buscador-avanzado" style="display: flex; align-items: center; width: 100%; gap: 12px; padding: 12px 18px;">
+                <label for="input-buscar-reparaciones" style="margin-bottom: 0; white-space: nowrap; font-weight: bold; color: var(--text-main);">Buscar Servicio:</label>
+                <input type="text" id="input-buscar-reparaciones" placeholder="Buscar por cliente, teléfono, dirección, equipo o falla..." autocomplete="off" style="flex: 1; width: 100%; height: 42px;">
             </div>
         </section>
 
@@ -174,50 +152,55 @@
 
     <!-- MODAL PARA EDITAR ÓRDEN COMPLETA -->
     <div id="modal-editar-reparacion" class="modal">
-        <div class="modal-contenido modal-chico" style="max-width: 650px; height: 90vh;">
+        <div class="modal-contenido modal-reparacion-contenedor">
             <span class="cerrar-modal" onclick="cerrarModal('modal-editar-reparacion')">&times;</span>
-            <h2 style="color: var(--si-blue-vibrant); margin-bottom: 1rem;">Editar Orden de Trabajo</h2>
+            <h2 style="color: var(--si-blue-vibrant); margin-bottom: 1rem; flex-shrink: 0;">Editar Orden de Trabajo</h2>
             
-            <form id="form-editar-reparacion" style="display: flex; flex-direction: column; height: 100%;">
+            <form id="form-editar-reparacion" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
                 <input type="hidden" id="edit-rep-id">
-                <div class="form-scroll-zona">
+                
+                <!-- Área con scroll interno garantizado -->
+                <div class="modal-reparacion-scroll">
                     <div class="fila-formulario">
                         <div class="campo w-50">
-                            <label>Cliente:</label>
-                            <input type="text" id="edit-rep-cliente" required>
+                            <label for="edit-rep-cliente">Cliente:</label>
+                            <input type="text" id="edit-rep-cliente" required autocomplete="off">
                         </div>
                         <div class="campo w-50">
-                            <label>Teléfono:</label>
-                            <input type="text" id="edit-rep-telefono">
+                            <label for="edit-rep-telefono">Teléfono:</label>
+                            <input type="text" id="edit-rep-telefono" autocomplete="off">
                         </div>
                     </div>
+
                     <div class="fila-formulario">
                         <div class="campo w-50">
-                            <label>Dirección:</label>
-                            <input type="text" id="edit-rep-direccion">
+                            <label for="edit-rep-direccion">Dirección:</label>
+                            <input type="text" id="edit-rep-direccion" autocomplete="off">
                         </div>
                         <div class="campo w-50">
-                            <label>Cobertura:</label>
+                            <label for="edit-rep-cobertura">Cobertura:</label>
                             <select id="edit-rep-cobertura">
                                 <option value="Fuera de Garantia">Fuera de Garantía</option>
                                 <option value="En Garantia">En Garantía</option>
                             </select>
                         </div>
                     </div>
+
                     <div class="campo">
-                        <label>Equipo:</label>
-                        <input type="text" id="edit-rep-equipo" required>
+                        <label for="edit-rep-equipo">Equipo:</label>
+                        <input type="text" id="edit-rep-equipo" required autocomplete="off">
                     </div>
+
                     <div class="campo">
-                        <label>Falla Declarada:</label>
-                        <input type="text" id="edit-rep-falla" required>
+                        <label for="edit-rep-falla">Falla Declarada:</label>
+                        <input type="text" id="edit-rep-falla" required autocomplete="off">
                     </div>
 
                     <div class="campo" style="margin-top: 10px;">
                         <label>Repuestos Asignados:</label>
-                        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                            <input type="text" id="edit-rep-input-selector" list="lista-repuestos-catalogo" placeholder="Añadir repuesto..." style="flex: 2;" autocomplete="off">
-                            <input type="number" id="edit-rep-input-cantidad" min="1" value="1" style="width: 75px; text-align: center;">
+                        <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+                            <input type="text" id="edit-rep-input-selector" list="lista-repuestos-catalogo" placeholder="Añadir repuesto..." style="flex: 2; min-width: 200px;" autocomplete="off">
+                            <input type="number" id="edit-rep-input-cantidad" min="1" value="1" style="width: 70px; text-align: center;">
                             <button type="button" class="btn btn-info" onclick="agregarRepuestoAOrden('edit')">+ Añadir</button>
                         </div>
                         <div id="contenedor-repuestos-asignados-edit"></div>
@@ -225,15 +208,15 @@
 
                     <div class="fila-formulario">
                         <div class="campo w-33">
-                            <label>Mano de Obra ($):</label>
+                            <label for="edit-rep-mano-obra">Mano de Obra ($):</label>
                             <input type="number" id="edit-rep-mano-obra" min="0" step="0.01">
                         </div>
                         <div class="campo w-33">
-                            <label>Costo Repuestos ($):</label>
+                            <label for="edit-rep-costo-rep">Costo Repuestos ($):</label>
                             <input type="number" id="edit-rep-costo-rep" min="0" step="0.01">
                         </div>
                         <div class="campo w-33">
-                            <label>Estado:</label>
+                            <label for="edit-rep-estado">Estado:</label>
                             <select id="edit-rep-estado">
                                 <option value="Pendiente">Pendiente</option>
                                 <option value="En Reparacion">En Reparación</option>
@@ -245,7 +228,11 @@
                         </div>
                     </div>
                 </div>
-                <button type="submit" class="btn btn-actualizar" style="margin-top: 10px;">Guardar Modificaciones</button>
+
+                <!-- Botón fijo protegido contra zoom -->
+                <div class="modal-reparacion-pie">
+                    <button type="submit" class="btn btn-actualizar w-100" style="padding: 12px; font-size: 15px;">Guardar Modificaciones</button>
+                </div>
             </form>
         </div>
     </div>
