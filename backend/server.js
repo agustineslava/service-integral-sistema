@@ -450,8 +450,10 @@ app.get('/api/movimientos-stock', (req, res) => {
 });
 
 /* ==========================================================================
-   10. MÓDULO: ÓRDENES DE REPARACIÓN Y CLIENTES DE TALLER
+   MÓDULO: GESTIÓN INTEGRAL DE REPARACIONES Y TALLER
    ========================================================================== */
+
+// 1. Obtener todas las órdenes de servicio
 app.get('/api/reparaciones', (req, res) => {
     const sql = 'SELECT * FROM reparaciones ORDER BY id DESC';
     db.query(sql, (err, rows) => {
@@ -463,118 +465,162 @@ app.get('/api/reparaciones', (req, res) => {
     });
 });
 
+// 2. Registrar nueva orden de servicio
 app.post('/api/reparaciones', (req, res) => {
     const { 
-        cliente_nombre, cliente_telefono, equipo, falla_declarada, 
-        diagnostico_tecnico, repuestos_usados, costo_mano_obra, 
-        costo_repuestos, estado, tecnico_asignado 
+        cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, 
+        falla_declarada, diagnostico_tecnico, repuestos_detalle, 
+        costo_mano_obra, costo_repuestos, estado, tecnico_asignado 
     } = req.body;
 
     if (!cliente_nombre || !equipo || !falla_declarada) {
-        return res.status(400).json({ error: 'Cliente, equipo y falla declarada son obligatorios' });
+        return res.status(400).json({ error: 'Cliente, equipo y falla son requeridos' });
     }
 
     const manoObra = parseFloat(costo_mano_obra) || 0.00;
     const repuestos = parseFloat(costo_repuestos) || 0.00;
     const total = manoObra + repuestos;
 
+    // Resumen plano para listados rápidos
+    const listaRepuestos = Array.isArray(repuestos_detalle) ? repuestos_detalle : [];
+    const repuestosResumen = listaRepuestos.map(r => `${r.nombre} (x${r.cantidad})`).join(', ') || 'Ninguno';
+
     const sql = `
         INSERT INTO reparaciones 
-        (cliente_nombre, cliente_telefono, equipo, falla_declarada, diagnostico_tecnico, repuestos_usados, costo_mano_obra, costo_repuestos, total, estado, tecnico_asignado) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada, 
+         diagnostico_tecnico, repuestos_usados, repuestos_detalle, costo_mano_obra, costo_repuestos, 
+         total, estado, tecnico_asignado, fecha_inicio, fecha_modificacion) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `;
 
     db.query(sql, [
-        cliente_nombre, cliente_telefono || null, equipo, falla_declarada,
-        diagnostico_tecnico || null, repuestos_usados || null, manoObra, 
-        repuestos, total, estado || 'Pendiente', tecnico_asignado || null
+        cliente_nombre, cliente_telefono || null, direccion || null, tipo_cobertura || 'Fuera de Garantia',
+        equipo, falla_declarada, diagnostico_tecnico || null, repuestosResumen, JSON.stringify(listaRepuestos),
+        manoObra, repuestos, total, estado || 'Pendiente', tecnico_asignado || null
     ], (err, result) => {
         if (err) {
             console.error('Error al registrar reparación:', err);
-            return res.status(500).json({ error: 'Error al registrar orden de trabajo' });
+            return res.status(500).json({ error: 'No se pudo guardar la orden' });
         }
-        res.status(201).json({ mensaje: 'Orden de trabajo registrada', id: result.insertId });
+        res.status(201).json({ mensaje: 'Orden creada', id: result.insertId });
     });
 });
 
+// 3. Editar orden de servicio existente
+app.put('/api/reparaciones/:id', (req, res) => {
+    const { id } = req.params;
+    const { 
+        cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, 
+        falla_declarada, diagnostico_tecnico, repuestos_detalle, 
+        costo_mano_obra, costo_repuestos, estado, tecnico_asignado 
+    } = req.body;
+
+    const manoObra = parseFloat(costo_mano_obra) || 0.00;
+    const repuestos = parseFloat(costo_repuestos) || 0.00;
+    const total = manoObra + repuestos;
+
+    const listaRepuestos = Array.isArray(repuestos_detalle) ? repuestos_detalle : [];
+    const repuestosResumen = listaRepuestos.map(r => `${r.nombre} (x${r.cantidad})`).join(', ') || 'Ninguno';
+
+    const sql = `
+        UPDATE reparaciones 
+        SET cliente_nombre = ?, cliente_telefono = ?, direccion = ?, tipo_cobertura = ?, 
+            equipo = ?, falla_declarada = ?, diagnostico_tecnico = ?, repuestos_usados = ?, 
+            repuestos_detalle = ?, costo_mano_obra = ?, costo_repuestos = ?, total = ?, 
+            estado = ?, tecnico_asignado = ?, fecha_modificacion = NOW()
+        WHERE id = ?
+    `;
+
+    db.query(sql, [
+        cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada,
+        diagnostico_tecnico, repuestosResumen, JSON.stringify(listaRepuestos), manoObra, repuestos,
+        total, estado, tecnico_asignado, id
+    ], (err) => {
+        if (err) {
+            console.error('Error al modificar reparación:', err);
+            return res.status(500).json({ error: 'Error al actualizar la orden' });
+        }
+        res.json({ mensaje: 'Orden de servicio actualizada' });
+    });
+});
+
+// 4. Cambiar estado con descuento automático de stock al marcar 'Entregado'
 app.put('/api/reparaciones/:id/estado', (req, res) => {
     const { id } = req.params;
     const { estado } = req.body;
-    
-    let sql = 'UPDATE reparaciones SET estado = ?';
-    const params = [estado];
 
-    if (estado === 'Entregado') {
-        sql += ', fecha_entrega = NOW()';
-    }
-    sql += ' WHERE id = ?';
-    params.push(id);
+    db.getConnection((err, conn) => {
+        if (err) return res.status(500).json({ error: 'Error en conexión' });
 
-    db.query(sql, params, (err) => {
-        if (err) {
-            console.error('Error al actualizar estado:', err);
-            return res.status(500).json({ error: 'Error al actualizar el estado' });
-        }
-        res.json({ mensaje: 'Estado actualizado con éxito' });
-    });
-});
+        conn.beginTransaction(async (errTx) => {
+            if (errTx) { conn.release(); return res.status(500).json({ error: 'Error en transacción' }); }
 
-/* ==========================================================================
-   11. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
-   ========================================================================== */
-
-function realizarBackup() {
-    const dbName = process.env.DB_NAME;
-    const dbUser = process.env.DB_USER;
-    const dbPassword = process.env.DB_PASSWORD;
-    const dbHost = process.env.DB_HOST || 'localhost';
-
-    const fechaActual = new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
-    const nombreArchivo = `backup_${dbName}_${fechaActual}.sql`;
-    const rutaCarpeta = path.join(__dirname, 'backups');
-    const rutaDestino = path.join(rutaCarpeta, nombreArchivo);
-
-    if (!fs.existsSync(rutaCarpeta)) {
-        fs.mkdirSync(rutaCarpeta, { recursive: true });
-    }
-
-    const mysqldumpPath = 'D:\\Program Files\\MySQL\\MySQL Workbench 8.0 CE\\mysqldump.exe';
-    const comando = `"${mysqldumpPath}" -h ${dbHost} -u ${dbUser} -p"${dbPassword}" ${dbName} > "${rutaDestino}"`;
-
-    console.log(`💾 Iniciando backup automático de la base de datos...`);
-
-    exec(comando, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`❌ Error al ejecutar el backup: ${error.message}`);
-            return;
-        }
-        console.log(`✅ ¡Backup creado con éxito! Guardado en: ${rutaDestino}`);
-        limpiarBackupsViejos(rutaCarpeta, 7);
-    });
-}
-
-function limpiarBackupsViejos(rutaCarpeta, diasRetencion) {
-    fs.readdir(rutaCarpeta, (err, archivos) => {
-        if (err) return;
-        const limiteTiempo = Date.now() - (diasRetencion * 24 * 60 * 60 * 1000);
-
-        archivos.forEach(archivo => {
-            const rutaArchivo = path.join(rutaCarpeta, archivo);
-            fs.stat(rutaArchivo, (errStat, stats) => {
-                if (errStat) return;
-                if (stats.mtimeMs < limiteTiempo && archivo.endsWith('.sql')) {
-                    fs.unlink(rutaArchivo, () => {});
+            try {
+                // Consultar estado actual y repuestos cargados
+                const [ordenes] = await conn.promise().query('SELECT * FROM reparaciones WHERE id = ? FOR UPDATE', [id]);
+                if (ordenes.length === 0) {
+                    await conn.promise().rollback();
+                    conn.release();
+                    return res.status(404).json({ error: 'Orden no encontrada' });
                 }
-            });
+
+                const orden = ordenes[0];
+                let debeDescontar = false;
+
+                // Descontar repuestos si pasa a 'Entregado' y aún no se descontaron
+                if (estado === 'Entregado' && orden.stock_descontado === 0) {
+                    debeDescontar = true;
+                    let items = [];
+                    try {
+                        items = typeof orden.repuestos_detalle === 'string' 
+                            ? JSON.parse(orden.repuestos_detalle) 
+                            : (orden.repuestos_detalle || []);
+                    } catch (e) { items = []; }
+
+                    for (const item of items) {
+                        if (item.producto_id && item.cantidad > 0) {
+                            // Descontar de productos
+                            await conn.promise().query(
+                                'UPDATE productos SET stock = GREATEST(0, stock - ?) WHERE id = ?',
+                                [item.cantidad, item.producto_id]
+                            );
+
+                            // Registrar en auditoría de movimientos
+                            await conn.promise().query(
+                                `INSERT INTO movimientos_stock 
+                                 (producto_id, producto_nombre, usuario_nombre, tipo, cantidad_afectada, stock_resultante, motivo) 
+                                 VALUES (?, ?, ?, 'REPARACION', ?, (SELECT stock FROM productos WHERE id = ?), ?)`,
+                                [item.producto_id, item.nombre, orden.tecnico_asignado || 'Técnico', item.cantidad, item.producto_id, `Reparación #${id} (${orden.equipo})`]
+                            );
+                        }
+                    }
+                }
+
+                let updateSql = 'UPDATE reparaciones SET estado = ?, fecha_modificacion = NOW()';
+                const updateParams = [estado];
+
+                if (estado === 'Entregado') {
+                    updateSql += ', fecha_entrega = NOW()';
+                }
+                if (debeDescontar) {
+                    updateSql += ', stock_descontado = 1';
+                }
+                updateSql += ' WHERE id = ?';
+                updateParams.push(id);
+
+                await conn.promise().query(updateSql, updateParams);
+                await conn.promise().commit();
+                conn.release();
+
+                res.json({ mensaje: 'Estado actualizado correctamente' });
+            } catch (errorTx) {
+                await conn.promise().rollback();
+                conn.release();
+                console.error('Fallo en transición de estado:', errorTx);
+                res.status(500).json({ error: 'No se pudo completar el cambio de estado' });
+            }
         });
     });
-}
-
-cron.schedule('0 20 * * *', () => {
-    realizarBackup();
-}, {
-    scheduled: true,
-    timezone: "America/Argentina/Buenos_Aires" 
 });
 
 /* ==========================================================================

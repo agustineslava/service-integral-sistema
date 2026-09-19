@@ -81,3 +81,18 @@
 2026-09-18T20:36:02: 🔒 Cerrado localmente en: http://192.168.0.99:3000
 2026-09-18T20:36:02: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
 2026-09-18T20:36:03: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T20:54:41: ◇ injected env (16) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+2026-09-18T20:54:42: 🚀 Servidor de Service Integral activo.
+2026-09-18T20:54:42: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T20:54:42: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T20:54:43: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T20:55:56: ◇ injected env (16) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+2026-09-18T20:55:57: 🚀 Servidor de Service Integral activo.
+2026-09-18T20:55:57: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T20:55:57: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T20:55:57: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T20:56:14: ◇ injected env (16) from .env // tip: ⌘ override existing { override: true }
+2026-09-18T20:56:15: 🚀 Servidor de Service Integral activo.
+2026-09-18T20:56:15: 🔒 Cerrado localmente en: http://192.168.0.99:3000
+2026-09-18T20:56:15: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T20:56:15: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin

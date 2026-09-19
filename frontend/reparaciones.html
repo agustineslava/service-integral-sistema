@@ -6,7 +6,28 @@
     <title>Service Integral - Taller y Reparaciones</title>
     <script src="auth-check.js"></script>
     <script src="marca.js"></script>
-    <link rel="stylesheet" href="style.css?v=1.2">
+    <link rel="stylesheet" href="style.css?v=1.3">
+    <style>
+        /* Resaltado de estados críticos y activos de taller */
+        .fila-estado-activo {
+            background-color: rgba(255, 198, 0, 0.16) !important;
+            border-left: 5px solid var(--si-yellow) !important;
+        }
+        body.tema-claro .fila-estado-activo {
+            background-color: #fff9db !important;
+            border-left: 5px solid #f59f00 !important;
+        }
+        .item-repuesto-fila {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+            background: var(--bg-body);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -27,8 +48,8 @@
                     <li><a href="pedidos.html">Pedidos</a></li>
                     <li>
                         <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema">
-                            <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
-                            <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                            <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+                            <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
                         </button>
                     </li>
                 </ul>
@@ -42,7 +63,7 @@
             <p>Control de aparatos de clientes, fallas declaradas, repuestos asignados y estado de entrega.</p>
         </div>
 
-        <!-- Formulario para ingresar aparato -->
+        <!-- FORMULARIO DE INGRESO DE EQUIPO -->
         <section class="panel-formulario">
             <h2>Ingresar Nuevo Equipo</h2>
             <form id="form-reparacion">
@@ -56,20 +77,39 @@
                         <input type="text" id="rep-telefono" placeholder="Ej: 2364123456" autocomplete="off">
                     </div>
                     <div class="campo w-33">
-                        <label for="rep-equipo">Equipo y Modelo:</label>
-                        <input type="text" id="rep-equipo" required placeholder="Ej: Lavarropas Drean Next 8.12" autocomplete="off">
+                        <label for="rep-direccion">Domicilio / Dirección:</label>
+                        <input type="text" id="rep-direccion" placeholder="Ej: San Martín 450" autocomplete="off">
                     </div>
                 </div>
 
                 <div class="fila-formulario">
+                    <div class="campo w-25">
+                        <label for="rep-cobertura">Cobertura:</label>
+                        <select id="rep-cobertura">
+                            <option value="Fuera de Garantia">Fuera de Garantía</option>
+                            <option value="En Garantia">En Garantía</option>
+                        </select>
+                    </div>
+                    <div class="campo w-33">
+                        <label for="rep-equipo">Equipo y Modelo:</label>
+                        <input type="text" id="rep-equipo" required placeholder="Ej: Lavarropas Drean Next 8.12" autocomplete="off">
+                    </div>
                     <div class="campo w-50">
                         <label for="rep-falla">Falla Declarada por el Cliente:</label>
-                        <input type="text" id="rep-falla" required placeholder="Ej: No centrifuga y hace ruido metálico" autocomplete="off">
+                        <input type="text" id="rep-falla" required placeholder="Ej: No centrifuga y hace ruido" autocomplete="off">
                     </div>
-                    <div class="campo w-50">
-                        <label for="rep-repuestos">Repuestos Utilizados / Asignados:</label>
-                        <input type="text" id="rep-repuestos" placeholder="Ej: Bomba de desagote + Fuelle Drean" autocomplete="off">
+                </div>
+
+                <!-- SELECCIÓN MÚLTIPLE DE REPUESTOS -->
+                <div class="campo" style="margin-bottom: 15px;">
+                    <label>Repuestos Utilizados / Asignados:</label>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+                        <input type="text" id="rep-input-selector" list="lista-repuestos-catalogo" placeholder="Buscar repuesto por nombre o código de distribuidor..." style="flex: 2; min-width: 260px;" autocomplete="off">
+                        <datalist id="lista-repuestos-catalogo"></datalist>
+                        <input type="number" id="rep-input-cantidad" min="1" value="1" style="width: 75px; text-align: center;">
+                        <button type="button" class="btn btn-info" onclick="agregarRepuestoAOrden('nuevo')">+ Asignar Repuesto</button>
                     </div>
+                    <div id="contenedor-repuestos-asignados-nuevo" style="margin-top: 5px;"></div>
                 </div>
 
                 <div class="fila-formulario">
@@ -84,9 +124,10 @@
                     <div class="campo w-33">
                         <label for="rep-estado">Estado Inicial:</label>
                         <select id="rep-estado">
-                            <option value="Pendiente">Pendiente de Revisión</option>
+                            <option value="Pendiente">Pendiente</option>
                             <option value="En Reparacion">En Reparación</option>
-                            <option value="Listo">Listo para Retirar</option>
+                            <option value="Esperando Repuesto">Esperando Repuesto</option>
+                            <option value="Listo">Listo</option>
                         </select>
                     </div>
                 </div>
@@ -95,7 +136,17 @@
             </form>
         </section>
 
-        <!-- Tabla de Órdenes de Trabajo -->
+        <!-- BUSCADOR DE CLIENTES Y SERVICIOS -->
+        <section class="seccion-busqueda">
+            <div class="buscador-avanzado">
+                <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                    <label for="input-buscar-reparaciones" style="margin-bottom: 0;">Buscar Servicio:</label>
+                    <input type="text" id="input-buscar-reparaciones" placeholder="Buscar por cliente, teléfono, dirección, equipo o falla..." autocomplete="off">
+                </div>
+            </div>
+        </section>
+
+        <!-- TABLA DE ÓRDENES ACTIVAS -->
         <section class="panel-tabla">
             <h2>Equipos en Servicio Técnico</h2>
             <div class="tabla-wrapper">
@@ -103,122 +154,105 @@
                     <thead>
                         <tr>
                             <th>Orden #</th>
-                            <th>Cliente</th>
-                            <th>Equipo</th>
-                            <th>Falla Declarada</th>
+                            <th>Cliente y Domicilio</th>
+                            <th>Equipo y Garantía</th>
+                            <th>Falla</th>
                             <th>Repuestos</th>
-                            <th>Total Presupuesto</th>
-                            <th>Estado Actual</th>
-                            <th style="text-align: center;">Cambiar Estado</th>
+                            <th>Total</th>
+                            <th>Fechas (Inicio / Modif.)</th>
+                            <th>Estado</th>
+                            <th style="text-align: center;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="tabla-reparaciones-cuerpo">
-                        <tr><td colspan="8" style="text-align:center;">Cargando reparaciones...</td></tr>
+                        <tr><td colspan="9" style="text-align:center;">Cargando reparaciones...</td></tr>
                     </tbody>
                 </table>
             </div>
         </section>
     </main>
 
-    <script>
-        // Lógica de carga y cambio de estados para reparaciones
-        async function cargarReparaciones() {
-            const tbody = document.getElementById('tabla-reparaciones-cuerpo');
-            try {
-                const res = await apiFetch('/api/reparaciones');
-                const datos = await res.json();
+    <!-- MODAL PARA EDITAR ÓRDEN COMPLETA -->
+    <div id="modal-editar-reparacion" class="modal">
+        <div class="modal-contenido modal-chico" style="max-width: 650px; height: 90vh;">
+            <span class="cerrar-modal" onclick="cerrarModal('modal-editar-reparacion')">&times;</span>
+            <h2 style="color: var(--si-blue-vibrant); margin-bottom: 1rem;">Editar Orden de Trabajo</h2>
+            
+            <form id="form-editar-reparacion" style="display: flex; flex-direction: column; height: 100%;">
+                <input type="hidden" id="edit-rep-id">
+                <div class="form-scroll-zona">
+                    <div class="fila-formulario">
+                        <div class="campo w-50">
+                            <label>Cliente:</label>
+                            <input type="text" id="edit-rep-cliente" required>
+                        </div>
+                        <div class="campo w-50">
+                            <label>Teléfono:</label>
+                            <input type="text" id="edit-rep-telefono">
+                        </div>
+                    </div>
+                    <div class="fila-formulario">
+                        <div class="campo w-50">
+                            <label>Dirección:</label>
+                            <input type="text" id="edit-rep-direccion">
+                        </div>
+                        <div class="campo w-50">
+                            <label>Cobertura:</label>
+                            <select id="edit-rep-cobertura">
+                                <option value="Fuera de Garantia">Fuera de Garantía</option>
+                                <option value="En Garantia">En Garantía</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="campo">
+                        <label>Equipo:</label>
+                        <input type="text" id="edit-rep-equipo" required>
+                    </div>
+                    <div class="campo">
+                        <label>Falla Declarada:</label>
+                        <input type="text" id="edit-rep-falla" required>
+                    </div>
 
-                if (datos.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No hay equipos en reparación registrados.</td></tr>';
-                    return;
-                }
+                    <div class="campo" style="margin-top: 10px;">
+                        <label>Repuestos Asignados:</label>
+                        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                            <input type="text" id="edit-rep-input-selector" list="lista-repuestos-catalogo" placeholder="Añadir repuesto..." style="flex: 2;" autocomplete="off">
+                            <input type="number" id="edit-rep-input-cantidad" min="1" value="1" style="width: 75px; text-align: center;">
+                            <button type="button" class="btn btn-info" onclick="agregarRepuestoAOrden('edit')">+ Añadir</button>
+                        </div>
+                        <div id="contenedor-repuestos-asignados-edit"></div>
+                    </div>
 
-                tbody.innerHTML = datos.map(r => `
-                    <tr>
-                        <td><strong>#${r.id}</strong></td>
-                        <td>${r.cliente_nombre}<br><small style="color:var(--text-muted);">${r.cliente_telefono || ''}</small></td>
-                        <td><strong>${r.equipo}</strong></td>
-                        <td><small>${r.falla_declarada}</small></td>
-                        <td><small>${r.repuestos_usados || 'Ninguno'}</small></td>
-                        <td><strong>$${parseFloat(r.total).toFixed(2)}</strong></td>
-                        <td>
-                            <span class="badge-online" style="background-color: ${
-                                r.estado === 'Entregado' ? '#6c757d' :
-                                r.estado === 'Listo' ? 'var(--color-success)' :
-                                r.estado === 'En Reparacion' ? 'var(--si-blue-vibrant)' : '#ffc107'
-                            }; color: ${r.estado === 'Pendiente' ? '#000' : '#fff'};">
-                                ${r.estado}
-                            </span>
-                        </td>
-                        <td style="text-align: center;">
-                            <select onchange="cambiarEstadoReparacion(${r.id}, this.value)" style="padding: 4px 6px; font-size: 12px;">
-                                <option value="" disabled selected>Mover a...</option>
+                    <div class="fila-formulario">
+                        <div class="campo w-33">
+                            <label>Mano de Obra ($):</label>
+                            <input type="number" id="edit-rep-mano-obra" min="0" step="0.01">
+                        </div>
+                        <div class="campo w-33">
+                            <label>Costo Repuestos ($):</label>
+                            <input type="number" id="edit-rep-costo-rep" min="0" step="0.01">
+                        </div>
+                        <div class="campo w-33">
+                            <label>Estado:</label>
+                            <select id="edit-rep-estado">
                                 <option value="Pendiente">Pendiente</option>
                                 <option value="En Reparacion">En Reparación</option>
+                                <option value="Esperando Repuesto">Esperando Repuesto</option>
                                 <option value="Listo">Listo</option>
                                 <option value="Entregado">Entregado</option>
                                 <option value="Cancelado">Cancelado</option>
                             </select>
-                        </td>
-                    </tr>
-                `).join('');
-            } catch (err) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:red;">Fallo de conexión al cargar equipos.</td></tr>';
-            }
-        }
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-actualizar" style="margin-top: 10px;">Guardar Modificaciones</button>
+            </form>
+        </div>
+    </div>
 
-        async function cambiarEstadoReparacion(id, nuevoEstado) {
-            try {
-                const res = await apiFetch(`/api/reparaciones/${id}/estado`, {
-                    method: 'PUT',
-                    body: JSON.stringify({ estado: nuevoEstado })
-                });
-                if (res.ok) {
-                    cargarReparaciones();
-                } else {
-                    alert('No se pudo actualizar el estado.');
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
-        document.getElementById('form-reparacion').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const orden = {
-                cliente_nombre: document.getElementById('rep-cliente').value,
-                cliente_telefono: document.getElementById('rep-telefono').value,
-                equipo: document.getElementById('rep-equipo').value,
-                falla_declarada: document.getElementById('rep-falla').value,
-                repuestos_usados: document.getElementById('rep-repuestos').value,
-                costo_mano_obra: document.getElementById('rep-mano-obra').value,
-                costo_repuestos: document.getElementById('rep-costo-rep').value,
-                estado: document.getElementById('rep-estado').value
-            };
-
-            try {
-                const res = await apiFetch('/api/reparaciones', {
-                    method: 'POST',
-                    body: JSON.stringify(orden)
-                });
-                if (res.ok) {
-                    alert('¡Orden de trabajo registrada con éxito!');
-                    document.getElementById('form-reparacion').reset();
-                    cargarReparaciones();
-                } else {
-                    const data = await res.json();
-                    alert(data.error || 'Error al guardar.');
-                }
-            } catch (err) {
-                alert('No se pudo conectar con el servidor.');
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const temaGuardado = localStorage.getItem('tema-preferido');
-            if (temaGuardado === 'claro') document.body.classList.add('tema-claro');
-            cargarReparaciones();
-        });
-    </script>
+    <!-- ==========================================================================
+       SCRIPTS DE CONTROL
+       ========================================================================== -->
+    <script src="reparaciones.js"></script>
 </body>
 </html>
