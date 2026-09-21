@@ -360,6 +360,120 @@ app.post('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
     });
 });
 
+/**
+ * Lista los usuarios del sistema (sin el hash de la contraseña). Solo ADMIN.
+ */
+app.get('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
+    db.query('SELECT id, nombre, email, rol, creado_en FROM usuarios ORDER BY nombre ASC', (err, rows) => {
+        if (err) {
+            console.error('Error al listar usuarios:', err);
+            return res.status(500).json({ error: 'Error interno del servidor' });
+        }
+        res.json(rows);
+    });
+});
+
+/**
+ * Da de baja un usuario. Solo ADMIN. Con dos protecciones para no dejar
+ * el sistema sin acceso por accidente:
+ *  - No podés eliminar tu propia cuenta mientras estás logueado con ella.
+ *  - No se puede eliminar el último ADMIN que queda en el sistema.
+ */
+app.delete('/api/usuarios/:id', verificarToken, requiereAdmin, (req, res) => {
+    const idABorrar = parseInt(req.params.id, 10);
+
+    if (idABorrar === req.usuario.id) {
+        return res.status(400).json({ error: 'No podés eliminar tu propio usuario mientras estás logueado con él.' });
+    }
+
+    db.query('SELECT id, rol FROM usuarios WHERE id = ?', [idABorrar], (err, rows) => {
+        if (err) {
+            console.error('Error al buscar usuario a eliminar:', err);
+            return res.status(500).json({ error: 'Error interno del servidor' });
+        }
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+
+        const usuarioABorrar = rows[0];
+
+        const continuarBorrado = () => {
+            db.query('DELETE FROM usuarios WHERE id = ?', [idABorrar], (errDelete) => {
+                if (errDelete) {
+                    console.error('Error al eliminar usuario:', errDelete);
+                    return res.status(500).json({ error: 'Error al eliminar el usuario' });
+                }
+                res.json({ mensaje: 'Usuario eliminado con éxito' });
+            });
+        };
+
+        if (usuarioABorrar.rol === 'ADMIN') {
+            db.query("SELECT COUNT(*) AS total FROM usuarios WHERE rol = 'ADMIN'", (errCount, resultCount) => {
+                if (errCount) {
+                    console.error('Error al contar administradores:', errCount);
+                    return res.status(500).json({ error: 'Error interno del servidor' });
+                }
+                if (resultCount[0].total <= 1) {
+                    return res.status(400).json({ error: 'No podés eliminar el único administrador del sistema.' });
+                }
+                continuarBorrado();
+            });
+        } else {
+            continuarBorrado();
+        }
+    });
+});
+
+// Máximo 10 intentos cada 15 minutos por IP (protege la verificación de "contraseña actual" contra fuerza bruta)
+const limitadorCambioPassword = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Demasiados intentos. Probá de nuevo en unos minutos.' }
+});
+
+/**
+ * Permite a cualquier usuario logueado (ADMIN o TECNICO) cambiar SU PROPIA
+ * contraseña, confirmando la actual. No hace falta ser ADMIN: cada quien
+ * cambia la suya.
+ */
+app.post('/api/usuarios/cambiar-password', verificarToken, limitadorCambioPassword, (req, res) => {
+    const { passwordActual, passwordNueva } = req.body;
+
+    if (!passwordActual || !passwordNueva) {
+        return res.status(400).json({ error: 'Faltan datos.' });
+    }
+    if (typeof passwordNueva !== 'string' || passwordNueva.length < 6) {
+        return res.status(400).json({ error: 'La contraseña nueva tiene que tener al menos 6 caracteres.' });
+    }
+
+    db.query('SELECT * FROM usuarios WHERE id = ?', [req.usuario.id], (err, rows) => {
+        if (err) {
+            console.error('Error al buscar usuario para cambio de password:', err);
+            return res.status(500).json({ error: 'Error interno del servidor' });
+        }
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+
+        const usuario = rows[0];
+        const coincide = bcrypt.compareSync(passwordActual, usuario.password);
+        if (!coincide) {
+            return res.status(401).json({ error: 'La contraseña actual no es correcta.' });
+        }
+
+        const nuevoHash = bcrypt.hashSync(passwordNueva, 10);
+        db.query('UPDATE usuarios SET password = ? WHERE id = ?', [nuevoHash, req.usuario.id], (errUpdate) => {
+            if (errUpdate) {
+                console.error('Error al actualizar password:', errUpdate);
+                return res.status(500).json({ error: 'No se pudo actualizar la contraseña' });
+            }
+            res.json({ mensaje: 'Contraseña actualizada con éxito' });
+        });
+    });
+});
+
 /* ==========================================================================
    6. ENDPOINTS DE PRODUCTOS / STOCK (C.R.U.D.)
    ========================================================================== */

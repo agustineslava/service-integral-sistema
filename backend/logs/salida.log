@@ -136,3 +136,63 @@
 2026-09-18T23:17:07: 🔒 Cerrado localmente en: http://192.168.0.99:3000
 2026-09-18T23:17:07: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
 2026-09-18T23:17:08: ✅ Usuario Administrador listo: aguseslava11@gmail.com / Agus1tin
+2026-09-18T23:44:12: ◇ injected env (16) from .env // tip: ⌘ suppress logs { quiet: true }
+2026-09-18T23:44:13: 🚀 Servidor de Service Integral activo.
+2026-09-18T23:44:13: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-18T23:44:13: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T23:46:56: ◇ injected env (16) from .env // tip: ⌘ override existing { override: true }
+2026-09-18T23:46:57: 🚀 Servidor de Service Integral activo.
+2026-09-18T23:46:57: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-18T23:46:57: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-18T23:47:50: ◇ injected env (16) from .env // tip: ⌘ enable debugging { debug: true }
+2026-09-18T23:47:51: 🚀 Servidor de Service Integral activo.
+2026-09-18T23:47:51: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-18T23:47:51: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:01:29: ◇ injected env (16) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+2026-09-21T18:01:45: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:01:45: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:01:46: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:02:05: ◇ injected env (16) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+2026-09-21T18:02:06: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:02:06: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:02:06: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:02:26: ◇ injected env (16) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+2026-09-21T18:02:28: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:02:28: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:02:28: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:02:53: ◇ injected env (16) from .env // tip: ⌘ enable debugging { debug: true }
+2026-09-21T18:02:54: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:02:54: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:02:54: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:13:44: ◇ injected env (16) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+2026-09-21T18:13:45: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:13:45: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:13:45: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:14:08: ◇ injected env (16) from .env // tip: ⌘ enable debugging { debug: true }
+2026-09-21T18:14:09: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:14:09: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:14:09: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:14:31: ◇ injected env (16) from .env // tip: ⌘ suppress logs { quiet: true }
+2026-09-21T18:14:32: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:14:32: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:14:32: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:16:33: ◇ injected env (16) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+2026-09-21T18:16:34: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:16:34: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:16:34: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:27:34: ◇ injected env (16) from .env // tip: ⌘ override existing { override: true }
+2026-09-21T18:27:35: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:27:35: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:27:35: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:30:26: ◇ injected env (16) from .env // tip: ⌘ suppress logs { quiet: true }
+2026-09-21T18:30:27: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:30:27: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:30:27: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:31:34: ◇ injected env (16) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+2026-09-21T18:31:35: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:31:35: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:31:35: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:32:03: ◇ injected env (16) from .env // tip: ⌘ override existing { override: true }
+2026-09-21T18:32:05: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:32:05: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:32:05: ✅ Pool de conexiones de MySQL established con éxito de forma segura.

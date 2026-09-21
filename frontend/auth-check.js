@@ -1,4 +1,17 @@
 /**
+ * Escapa caracteres especiales de HTML antes de insertarlos con innerHTML.
+ */
+function escapeHtml(valor) {
+    if (valor === null || valor === undefined) return '';
+    return String(valor)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
  * Wrapper de fetch que inyecta automáticamente el token Bearer JWT
  * y redirige a login si la sesión caducó.
  */
@@ -55,6 +68,9 @@ async function apiFetch(url, opciones = {}) {
                     <button onclick="abrirModalCrearUsuario()" class="btn-tabla btn-actualizar" style="padding: 5px 10px; font-size: 11px; margin-left: 8px;">
                         + Usuario
                     </button>
+                    <button onclick="abrirModalGestionarUsuarios()" class="btn-tabla btn-info" style="padding: 5px 10px; font-size: 11px; margin-left: 8px;">
+                        👥 Usuarios
+                    </button>
                 `;
             }
 
@@ -67,6 +83,9 @@ async function apiFetch(url, opciones = {}) {
                     <span><strong>${usuario.nombre}</strong> (${usuario.rol})</span>
                 </div>
                 ${botonCrearUsuarioHTML}
+                <button onclick="abrirModalCambiarPassword()" class="btn-tabla btn-info" style="padding: 5px 10px; font-size: 11px; margin-left: 8px;">
+                    🔑 Cambiar contraseña
+                </button>
                 <button onclick="cerrarSesion()" class="btn-tabla btn-eliminar btn-salir">Salir</button>
             `;
         }
@@ -159,6 +178,162 @@ function aplicarModoSoloConsulta() {
 function abrirModalCrearUsuario() {
     const modal = document.getElementById('modal-crear-usuario');
     if (modal) modal.style.display = 'block';
+}
+
+/**
+ * Abre el modal de "Gestionar Usuarios": lista todos los usuarios del sistema
+ * y permite eliminarlos (solo ADMIN, el backend protege contra auto-borrado
+ * y contra dejar el sistema sin ningún administrador).
+ */
+function abrirModalGestionarUsuarios() {
+    let modal = document.getElementById('modal-gestionar-usuarios');
+
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-gestionar-usuarios';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-contenido modal-chico">
+                <span class="cerrar-modal" onclick="cerrarModal('modal-gestionar-usuarios')">&times;</span>
+                <h2>Usuarios del sistema</h2>
+                <div id="lista-usuarios-gestion" style="margin-top: 1rem; max-height: 60vh; overflow-y: auto;">
+                    <p class="texto-vacio">Cargando usuarios...</p>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    modal.style.display = 'block';
+    cargarListaUsuarios();
+}
+
+async function cargarListaUsuarios() {
+    const contenedor = document.getElementById('lista-usuarios-gestion');
+    const usuarioActual = JSON.parse(localStorage.getItem('usuario_actual') || '{}');
+
+    try {
+        const respuesta = await apiFetch(`${window.location.origin}/api/usuarios`);
+        if (!respuesta.ok) throw new Error('No se pudo obtener la lista de usuarios');
+        const usuarios = await respuesta.json();
+
+        if (usuarios.length === 0) {
+            contenedor.innerHTML = '<p class="texto-vacio">No hay usuarios registrados.</p>';
+            return;
+        }
+
+        contenedor.innerHTML = usuarios.map(u => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 8px;">
+                <div style="font-size: 13px;">
+                    <strong>${escapeHtml(u.nombre)}</strong> ${u.id === usuarioActual.id ? '<span style="color: var(--text-muted);">(vos)</span>' : ''}<br>
+                    <span style="color: var(--text-muted);">${escapeHtml(u.email)} — ${escapeHtml(u.rol)}</span>
+                </div>
+                <button
+                    class="btn-tabla btn-eliminar"
+                    style="padding: 4px 10px; font-size: 11px;"
+                    onclick="eliminarUsuario(${u.id}, '${escapeHtml(u.nombre).replace(/'/g, "\\'")}')"
+                    ${u.id === usuarioActual.id ? 'disabled title="No podés eliminar tu propio usuario"' : ''}
+                >Eliminar</button>
+            </div>
+        `).join('');
+
+    } catch (error) {
+        console.error('Error al cargar usuarios:', error);
+        contenedor.innerHTML = '<p style="color: var(--color-danger, #dc3545);">No se pudo cargar la lista de usuarios.</p>';
+    }
+}
+
+async function eliminarUsuario(id, nombre) {
+    if (!confirm(`¿Seguro que querés eliminar al usuario "${nombre}"? Esta acción no se puede deshacer.`)) return;
+
+    try {
+        const respuesta = await apiFetch(`${window.location.origin}/api/usuarios/${id}`, { method: 'DELETE' });
+        const data = await respuesta.json();
+
+        if (respuesta.ok) {
+            cargarListaUsuarios(); // refresca la lista
+        } else {
+            alert(data.error || 'No se pudo eliminar el usuario.');
+        }
+    } catch (error) {
+        console.error('Error al eliminar usuario:', error);
+        alert('No se pudo conectar con el servidor.');
+    }
+}
+
+/**
+ * Abre el modal de "cambiar mi contraseña". Lo crea la primera vez que se
+ * necesita e inyecta en el <body>, así funciona en cualquier página sin
+ * tener que agregar el HTML del modal a mano en index.html/pedidos.html/reparaciones.html.
+ */
+function abrirModalCambiarPassword() {
+    let modal = document.getElementById('modal-cambiar-password');
+
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-cambiar-password';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-contenido modal-chico">
+                <span class="cerrar-modal" onclick="cerrarModal('modal-cambiar-password')">&times;</span>
+                <h2>Cambiar mi contraseña</h2>
+                <form id="form-cambiar-password" style="margin-top: 1rem;">
+                    <div class="campo">
+                        <label for="cambiar-password-actual">Contraseña actual:</label>
+                        <div class="campo-password-wrapper">
+                            <input type="password" id="cambiar-password-actual" required>
+                            <button type="button" class="btn-toggle-password" onclick="toggleVisibilidadPassword('cambiar-password-actual', this)" aria-label="Mostrar contraseña">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="campo">
+                        <label for="cambiar-password-nueva">Contraseña nueva (mínimo 6 caracteres):</label>
+                        <div class="campo-password-wrapper">
+                            <input type="password" id="cambiar-password-nueva" required minlength="6">
+                            <button type="button" class="btn-toggle-password" onclick="toggleVisibilidadPassword('cambiar-password-nueva', this)" aria-label="Mostrar contraseña">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="mensaje-cambiar-password" style="color: var(--color-danger, #dc3545); font-size: 13px; margin-bottom: 8px; display:none;"></div>
+                    <button type="submit" class="btn btn-crear w-100">Guardar nueva contraseña</button>
+                </form>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        document.getElementById('form-cambiar-password').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const passwordActual = document.getElementById('cambiar-password-actual').value;
+            const passwordNueva = document.getElementById('cambiar-password-nueva').value;
+            const mensajeDiv = document.getElementById('mensaje-cambiar-password');
+            mensajeDiv.style.display = 'none';
+
+            try {
+                const respuesta = await apiFetch(`${window.location.origin}/api/usuarios/cambiar-password`, {
+                    method: 'POST',
+                    body: JSON.stringify({ passwordActual, passwordNueva })
+                });
+                const data = await respuesta.json();
+
+                if (respuesta.ok) {
+                    alert('¡Contraseña actualizada con éxito!');
+                    document.getElementById('form-cambiar-password').reset();
+                    cerrarModal('modal-cambiar-password');
+                } else {
+                    mensajeDiv.textContent = data.error || 'No se pudo cambiar la contraseña.';
+                    mensajeDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error al cambiar contraseña:', error);
+                mensajeDiv.textContent = 'No se pudo conectar con el servidor.';
+                mensajeDiv.style.display = 'block';
+            }
+        });
+    }
+
+    modal.style.display = 'block';
 }
 
 function cerrarSesion() {

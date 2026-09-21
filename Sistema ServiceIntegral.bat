@@ -76,9 +76,46 @@ echo.
 node "%~dp0backend\qr.js" "%MI_URL%/login.html"
 
 echo.
-echo Esperando 3 segundos a la propagacion de Cloudflare...
-timeout /t 3 /nobreak >nul
+echo Verificando que el enlace ya este activo antes de abrir el navegador...
 
+set /a intentos_ping=0
+
+:VERIFICAR_URL
+timeout /t 1 /nobreak >nul
+set /a intentos_ping+=1
+
+:: Consultamos el DNS de Cloudflare (1.1.1.1) en vez del DNS de tu red:
+:: el DNS de tu proveedor de internet a veces "recuerda" por varios minutos
+:: que el dominio no existia en el primer intento, aunque ya este activo.
+powershell -NoProfile -Command "try { $h = ([uri]'%MI_URL%').Host; Resolve-DnsName -Name $h -Server 1.1.1.1 -ErrorAction Stop | Out-Null; Invoke-WebRequest -Uri '%MI_URL%/login.html' -UseBasicParsing -TimeoutSec 3 | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
+
+if %errorlevel%==0 (
+    echo Enlace activo, abriendo navegador...
+    goto ABRIR_NAVEGADOR
+)
+
+:: Cada pocos intentos, limpiamos la cache de DNS local por las dudas
+set /a resto_flush=intentos_ping %% 5
+if %resto_flush%==0 ipconfig /flushdns >nul 2>&1
+
+if %intentos_ping% LSS 30 (
+    echo Esperando propagacion de Cloudflare... %intentos_ping% de 30
+    goto VERIFICAR_URL
+)
+
+echo.
+echo [AVISO] El enlace no respondio despues de 30 intentos. Posibles causas:
+echo  - El DNS de tu red esta cacheando el error viejo
+echo  - Cloudflare tardo mas de lo normal esta vez
+echo  - Un firewall o antivirus esta bloqueando la conexion saliente
+echo.
+echo Detalle tecnico del ultimo intento:
+powershell -NoProfile -Command "try { $h = ([uri]'%MI_URL%').Host; Resolve-DnsName -Name $h -Server 1.1.1.1 -ErrorAction Stop | Out-Null; Invoke-WebRequest -Uri '%MI_URL%/login.html' -UseBasicParsing -TimeoutSec 3 | Out-Null } catch { Write-Host $_.Exception.Message }"
+echo.
+echo Se va a abrir el navegador igual. Si falla, esperá unos segundos y
+echo recargá la pagina, o probá "ipconfig /flushdns" en una consola aparte.
+
+:ABRIR_NAVEGADOR
 echo Abriendo navegador en la PC...
 start "" chrome "%MI_URL%/login.html"
 
