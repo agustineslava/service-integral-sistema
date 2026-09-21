@@ -59,34 +59,46 @@ async function apiFetch(url, opciones = {}) {
     const usuario = JSON.parse(usuarioGuardado);
 
     document.addEventListener('DOMContentLoaded', () => {
-        // A. Renderizar información del usuario en el Header
+        // A. Renderizar información del usuario en el Header (Menú Desplegable Compacto)
         const contenedorUsuario = document.getElementById('info-usuario-header');
         if (contenedorUsuario) {
-            let botonCrearUsuarioHTML = '';
-            if (usuario.rol === 'ADMIN') {
-                botonCrearUsuarioHTML = `
-                    <button onclick="abrirModalCrearUsuario()" class="btn-tabla btn-actualizar" style="padding: 5px 10px; font-size: 11px; margin-left: 8px;">
-                        + Usuario
-                    </button>
-                    <button onclick="abrirModalGestionarUsuarios()" class="btn-tabla btn-info" style="padding: 5px 10px; font-size: 11px; margin-left: 8px;">
-                        👥 Usuarios
-                    </button>
-                `;
-            }
+            const opcionesAdminHTML = usuario.rol === 'ADMIN' ? `
+                <button type="button" class="dropdown-item-btn" onclick="abrirModalCrearUsuario(); cerrarMenuUsuario();">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Nuevo Usuario
+                </button>
+                <button type="button" class="dropdown-item-btn" onclick="abrirModalGestionarUsuarios(); cerrarMenuUsuario();">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    Gestionar Usuarios
+                </button>
+            ` : '';
 
             contenedorUsuario.innerHTML = `
-                <div class="usuario-tag">
-                    <svg class="icono-usuario-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
-                    </svg>
-                    <span><strong>${usuario.nombre}</strong> (${usuario.rol})</span>
+                <div class="usuario-dropdown-wrapper" id="dropdown-usuario-contenedor">
+                    <button type="button" class="btn-usuario-perfil" onclick="toggleMenuUsuario(event)">
+                        <svg class="icono-usuario-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        <span>${escapeHtml(usuario.nombre)}</span>
+                        <svg class="icono-flecha-dropdown" viewBox="0 0 24 24">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+
+                    <div class="dropdown-menu-usuario" id="menu-desplegable-usuario">
+                        <div class="dropdown-info-rol">Perfil: ${escapeHtml(usuario.rol)}</div>
+                        ${opcionesAdminHTML}
+                        <button type="button" class="dropdown-item-btn" onclick="abrirModalCambiarPassword(); cerrarMenuUsuario();">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            Cambiar Contraseña
+                        </button>
+                        <button type="button" class="dropdown-item-btn btn-peligro" onclick="cerrarSesion()">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                            Cerrar Sesión
+                        </button>
+                    </div>
                 </div>
-                ${botonCrearUsuarioHTML}
-                <button onclick="abrirModalCambiarPassword()" class="btn-tabla btn-info" style="padding: 5px 10px; font-size: 11px; margin-left: 8px;">
-                    🔑 Cambiar contraseña
-                </button>
-                <button onclick="cerrarSesion()" class="btn-tabla btn-eliminar btn-salir">Salir</button>
             `;
         }
 
@@ -362,3 +374,27 @@ function toggleVisibilidadPassword(idInput, boton) {
         `;
     }
 }
+
+/* Control interactivo del Menú Desplegable de Usuario */
+function toggleMenuUsuario(e) {
+    e.stopPropagation();
+    const contenedor = document.getElementById('dropdown-usuario-contenedor');
+    if (contenedor) {
+        contenedor.classList.toggle('activo');
+    }
+}
+
+function cerrarMenuUsuario() {
+    const contenedor = document.getElementById('dropdown-usuario-contenedor');
+    if (contenedor) {
+        contenedor.classList.remove('activo');
+    }
+}
+
+// Cierra el menú al hacer clic en cualquier parte fuera de él
+document.addEventListener('click', (e) => {
+    const contenedor = document.getElementById('dropdown-usuario-contenedor');
+    if (contenedor && !contenedor.contains(e.target)) {
+        contenedor.classList.remove('activo');
+    }
+});

@@ -1294,3 +1294,116 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     stroke-width: 2;
     fill: none;
 }
+
+/* ==========================================================================
+   16.MENÚ DESPLEGABLE DE USUARIO (HEADER LIMPIO)
+   ========================================================================== */
+.usuario-dropdown-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+/* Botón interactivo de la pastilla de usuario */
+.btn-usuario-perfil {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 7px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn-usuario-perfil:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+}
+
+.icono-flecha-dropdown {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    stroke-width: 2.5;
+    fill: none;
+    transition: transform 0.2s ease;
+}
+
+.usuario-dropdown-wrapper.activo .icono-flecha-dropdown {
+    transform: rotate(180deg);
+}
+
+/* Tarjeta flotante del menú */
+.dropdown-menu-usuario {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 210px;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+    padding: 6px;
+    z-index: 1000;
+    animation: fadeInDropdown 0.15s ease-out;
+}
+
+.usuario-dropdown-wrapper.activo .dropdown-menu-usuario {
+    display: block;
+}
+
+@keyframes fadeInDropdown {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-info-rol {
+    padding: 8px 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+    color: var(--si-blue-vibrant);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 4px;
+}
+
+.dropdown-item-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.dropdown-item-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+body.tema-claro .dropdown-item-btn:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dropdown-item-btn.btn-peligro {
+    color: var(--color-danger);
+    margin-top: 4px;
+    border-top: 1px solid var(--border-color);
+    border-radius: 0 0 6px 6px;
+}
+
+.dropdown-item-btn.btn-peligro:hover {
+    background-color: rgba(220, 53, 69, 0.12);
+}

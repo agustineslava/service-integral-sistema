@@ -196,3 +196,15 @@
 2026-09-21T18:32:05: 🚀 Servidor de Service Integral activo.
 2026-09-21T18:32:05: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
 2026-09-21T18:32:05: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:34:11: ◇ injected env (16) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+2026-09-21T18:34:12: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:34:12: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:34:12: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T18:55:53: ◇ injected env (16) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+2026-09-21T18:55:54: 🚀 Servidor de Service Integral activo.
+2026-09-21T18:55:54: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T18:55:54: ✅ Pool de conexiones de MySQL established con éxito de forma segura.
+2026-09-21T19:00:05: ◇ injected env (16) from .env // tip: ⌘ suppress logs { quiet: true }
+2026-09-21T19:00:06: 🚀 Servidor de Service Integral activo.
+2026-09-21T19:00:06: 🔒 Escuchando en el puerto 3000 (accesible en la red local por la IP de esta PC).
+2026-09-21T19:00:06: ✅ Pool de conexiones de MySQL established con éxito de forma segura.

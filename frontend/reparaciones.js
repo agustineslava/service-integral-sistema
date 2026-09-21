@@ -140,6 +140,7 @@ function renderizarTablaReparaciones(lista) {
                         <div style="display: flex; gap: 4px;">
                             <button type="button" class="btn-tabla btn-info" onclick="abrirModalEditar(${r.id})" style="padding: 3px 6px; font-size: 11px; flex: 1;">Editar</button>
                             <button type="button" class="btn-tabla btn-actualizar" onclick="enviarWhatsAppTecnico(${r.id})" style="padding: 3px 6px; font-size: 11px; background-color: #25d366; flex: 1;" title="Enviar datos al técnico">WA</button>
+                            <button type="button" class="btn-tabla btn-eliminar" onclick="eliminarReparacion(${r.id}, '${escapeHtml(r.equipo)}', '${escapeHtml(r.cliente_nombre)}')" style="padding: 3px 6px; font-size: 11px; flex: 1;" title="Eliminar orden">Borrar</button>
                         </div>
                     </div>
                 </td>
@@ -435,3 +436,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     inicializarModulo();
 });
+
+/**
+ * Eliminar orden de trabajo del taller
+ */
+async function eliminarReparacion(id, equipo, cliente) {
+    const confirmacion = confirm(`¿Estás seguro de que querés eliminar la orden #${id} (${equipo} de ${cliente})?\n\nEsta acción no se puede deshacer.`);
+    if (!confirmacion) return;
+
+    try {
+        const res = await apiFetch(`/api/reparaciones/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (res.ok) {
+            alert(`Orden #${id} eliminada correctamente.`);
+            await cargarReparaciones();
+        } else {
+            const err = await res.json();
+            alert(err.error || 'No se pudo eliminar la orden.');
+        }
+    } catch (e) {
+        console.error('Error al intentar eliminar:', e);
+        alert('Error de conexión con el servidor.');
+    }
+}

@@ -376,7 +376,7 @@ app.get('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
 /**
  * Da de baja un usuario. Solo ADMIN. Con dos protecciones para no dejar
  * el sistema sin acceso por accidente:
- *  - No podés eliminar tu propia cuenta mientras estás logueado con ella.
+ *  - No se puede eliminar tu propia cuenta mientras estás logueado con ella.
  *  - No se puede eliminar el último ADMIN que queda en el sistema.
  */
 app.delete('/api/usuarios/:id', verificarToken, requiereAdmin, (req, res) => {
@@ -785,7 +785,7 @@ app.get('/api/movimientos-stock', verificarToken, requiereAdmin, (req, res) => {
 });
 
 /* ==========================================================================
-   MÓDULO: GESTIÓN INTEGRAL DE REPARACIONES Y TALLER
+   10. MÓDULO: GESTIÓN INTEGRAL DE REPARACIONES Y TALLER
    ========================================================================== */
 
 // 1. Obtener todas las órdenes de servicio
@@ -895,13 +895,24 @@ app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res)
 
         const ordenActual = ordenes[0];
 
-        // Solo descontamos stock si pasa a "Entregado" y TODAVÍA no se había descontado antes
-        // (evita descontar de nuevo si esta orden ya entregada se vuelve a guardar/editar).
+        // =========================================================================
+        // ACÁ VA EL BLOQUE:
+        // =========================================================================
+        let repuestosPrevios = [];
+        try {
+            repuestosPrevios = typeof ordenActual.repuestos_detalle === 'string'
+                ? JSON.parse(ordenActual.repuestos_detalle)
+                : (ordenActual.repuestos_detalle || []);
+        } catch (e) { repuestosPrevios = []; }
+
+        const antesNoTeniaRepuestos = repuestosPrevios.length === 0;
         let debeMarcarDescontado = ordenActual.stock_descontado === 1;
-        if (estado === 'Entregado' && ordenActual.stock_descontado === 0 && repuestos_detalle.length > 0) {
+
+        if (estado === 'Entregado' && (ordenActual.stock_descontado === 0 || antesNoTeniaRepuestos) && repuestos_detalle.length > 0) {
             await descontarStockPorReparacion(id, equipo, tecnico_asignado, repuestos_detalle);
             debeMarcarDescontado = true;
         }
+        // =========================================================================
 
         const sql = `
             UPDATE reparaciones 
@@ -973,9 +984,27 @@ app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (re
         res.status(500).json({ error: 'Error interno al actualizar estado' });
     }
 });
+// 5. Eliminar una orden de reparación (Solo ADMIN)
+app.delete('/api/reparaciones/:id', verificarToken, requiereAdmin, (req, res) => {
+    const { id } = req.params;
+
+    const sql = 'DELETE FROM reparaciones WHERE id = ?';
+    db.query(sql, [id], (err, result) => {
+        if (err) {
+            console.error('Error al eliminar reparación:', err);
+            return res.status(500).json({ error: 'Error al eliminar la orden de trabajo' });
+        }
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Orden no encontrada' });
+        }
+
+        res.json({ mensaje: 'Orden de servicio eliminada correctamente' });
+    });
+});
 
 /* ==========================================================================
-   9. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
+   11. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
    ========================================================================== */
 
 function realizarBackup() {
