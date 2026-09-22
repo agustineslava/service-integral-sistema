@@ -33,8 +33,6 @@ if (!JWT_SECRET) {
 /* ==========================================================================
    2. MIDDLEWARES DE LA APLICACIÓN
    ========================================================================== */
-// CSP desactivada porque el frontend usa onclick="..." inline en varios lugares.
-// El resto de los headers de seguridad de Helmet sí quedan activos.
 app.use(helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false
@@ -79,13 +77,12 @@ const db = mysql.createPool({
     queueLimit: 0
 });
 
-// Función para asegurar que exista un usuario Administrador inicial (solo la primera vez)
 const ADMIN_EMAIL_INICIAL = process.env.ADMIN_EMAIL_INICIAL;
 const ADMIN_PASSWORD_INICIAL = process.env.ADMIN_PASSWORD_INICIAL;
 
 function crearUsuarioAdminInicial() {
     if (!ADMIN_EMAIL_INICIAL || !ADMIN_PASSWORD_INICIAL) {
-        console.log('ℹ️  ADMIN_EMAIL_INICIAL / ADMIN_PASSWORD_INICIAL no están definidos en .env — se omite la creación automática de administrador.');
+        console.log('ℹ️  ADMIN_EMAIL_INICIAL / ADMIN_PASSWORD_INICIAL no están definidos en .env.');
         return;
     }
 
@@ -94,7 +91,7 @@ function crearUsuarioAdminInicial() {
             console.error('❌ Error al verificar usuario Admin inicial:', err.message);
             return;
         }
-        if (rows.length > 0) return; // ya existe, no tocamos su contraseña
+        if (rows.length > 0) return;
 
         const passwordHash = bcrypt.hashSync(ADMIN_PASSWORD_INICIAL, 10);
         db.query(
@@ -111,15 +108,12 @@ function crearUsuarioAdminInicial() {
     });
 }
 
-// Comprobación de estado inicial de conexión con MySQL
 db.query('SELECT 1', (err) => {
     if (err) {
         console.error('❌ Error al conectar al Pool de MySQL:', err.message);
         return;
     }
-    console.log('✅ Pool de conexiones de MySQL established con éxito de forma segura.');
-    
-    // Generar/Sincronizar el usuario admin apenas confirma la base de datos
+    console.log('✅ Pool de conexiones de MySQL establecido con éxito de forma segura.');
     crearUsuarioAdminInicial();
 });
 
@@ -222,6 +216,23 @@ function validarUsuario(body) {
     return { valido: true, datos: { nombre, email, password, rol } };
 }
 
+function validarCliente(body) {
+    const nombre = capitalizarPalabras(body.nombre);
+    if (!nombre) return { valido: false, error: 'El nombre del cliente es obligatorio.' };
+    if (nombre.length > 150) return { valido: false, error: 'El nombre no puede superar los 150 caracteres.' };
+
+    return {
+        valido: true,
+        datos: {
+            nombre,
+            telefono: body.telefono ? String(body.telefono).trim().slice(0, 50) : null,
+            direccion: capitalizarPalabras(body.direccion),
+            email: body.email ? String(body.email).trim().slice(0, 150) : null,
+            notas: capitalizarPrimeraLetra(body.notas)
+        }
+    };
+}
+
 function validarStockMinimo(body) {
     const stockMinimo = Number(body.stockMinimo);
     if (!Number.isInteger(stockMinimo) || stockMinimo < 0) {
@@ -230,13 +241,10 @@ function validarStockMinimo(body) {
     return { valido: true, datos: { stockMinimo } };
 }
 
-/**
- * Valida los datos de una orden de reparación (creación o edición).
- */
 function validarReparacion(body) {
-    const cliente_nombre = typeof body.cliente_nombre === 'string' ? body.cliente_nombre.trim() : '';
-    const equipo = typeof body.equipo === 'string' ? body.equipo.trim() : '';
-    const falla_declarada = typeof body.falla_declarada === 'string' ? body.falla_declarada.trim() : '';
+    const cliente_nombre = capitalizarPalabras(body.cliente_nombre);
+    const equipo = capitalizarPalabras(body.equipo);
+    const falla_declarada = capitalizarPrimeraLetra(body.falla_declarada);
 
     if (!cliente_nombre) return { valido: false, error: 'El nombre del cliente es obligatorio.' };
     if (!equipo) return { valido: false, error: 'El equipo es obligatorio.' };
@@ -261,11 +269,12 @@ function validarReparacion(body) {
         datos: {
             cliente_nombre,
             cliente_telefono: body.cliente_telefono ? String(body.cliente_telefono).trim().slice(0, 50) : null,
-            direccion: body.direccion ? String(body.direccion).trim().slice(0, 255) : null,
+            direccion: capitalizarPalabras(body.direccion),
             tipo_cobertura: body.tipo_cobertura === 'En Garantia' ? 'En Garantia' : 'Fuera de Garantia',
             equipo,
             falla_declarada,
             diagnostico_tecnico: body.diagnostico_tecnico ? String(body.diagnostico_tecnico).trim() : null,
+            notas_servicio: capitalizarPrimeraLetra(body.notas_servicio),
             repuestos_detalle,
             costo_mano_obra: Number.isFinite(costo_mano_obra) ? costo_mano_obra : 0,
             costo_repuestos: Number.isFinite(costo_repuestos) ? costo_repuestos : 0,
@@ -279,7 +288,6 @@ function validarReparacion(body) {
    5. ENDPOINTS DE AUTENTICACIÓN Y GESTIÓN DE USUARIOS
    ========================================================================== */
 
-// Máximo 8 intentos de login cada 10 minutos por IP (protege contra fuerza bruta)
 const limitadorLogin = rateLimit({
     windowMs: 10 * 60 * 1000,
     max: 8,
@@ -288,10 +296,6 @@ const limitadorLogin = rateLimit({
     message: { error: 'Demasiados intentos de inicio de sesión. Probá de nuevo en unos minutos.' }
 });
 
-/**
- * POST /api/login
- * Autentica usuario y devuelve Token JWT + información del perfil
- */
 app.post('/api/login', limitadorLogin, (req, res) => {
     const { email, password } = req.body;
 
@@ -307,14 +311,11 @@ app.post('/api/login', limitadorLogin, (req, res) => {
         }
 
         const usuario = results[0];
-
-        // Comparar contraseña ingresada con la encriptada
         const passwordValida = bcrypt.compareSync(password, usuario.password);
         if (!passwordValida) {
             return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
         }
 
-        // Generar Token JWT con sus datos de perfil/rol
         const token = jwt.sign(
             { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol },
             JWT_SECRET,
@@ -334,17 +335,12 @@ app.post('/api/login', limitadorLogin, (req, res) => {
     });
 });
 
-/**
- * POST /api/usuarios
- * Registra un nuevo usuario en MySQL con contraseña encriptada (ADMIN / TECNICO)
- */
 app.post('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
     const validacion = validarUsuario(req.body);
     if (!validacion.valido) {
         return res.status(400).json({ error: validacion.error });
     }
     const { nombre, email, password, rol } = validacion.datos;
-
     const passwordHash = bcrypt.hashSync(password, 10);
 
     const sql = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
@@ -360,9 +356,6 @@ app.post('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
     });
 });
 
-/**
- * Lista los usuarios del sistema (sin el hash de la contraseña). Solo ADMIN.
- */
 app.get('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
     db.query('SELECT id, nombre, email, rol, creado_en FROM usuarios ORDER BY nombre ASC', (err, rows) => {
         if (err) {
@@ -373,12 +366,6 @@ app.get('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
     });
 });
 
-/**
- * Da de baja un usuario. Solo ADMIN. Con dos protecciones para no dejar
- * el sistema sin acceso por accidente:
- *  - No se puede eliminar tu propia cuenta mientras estás logueado con ella.
- *  - No se puede eliminar el último ADMIN que queda en el sistema.
- */
 app.delete('/api/usuarios/:id', verificarToken, requiereAdmin, (req, res) => {
     const idABorrar = parseInt(req.params.id, 10);
 
@@ -424,7 +411,6 @@ app.delete('/api/usuarios/:id', verificarToken, requiereAdmin, (req, res) => {
     });
 });
 
-// Máximo 10 intentos cada 15 minutos por IP (protege la verificación de "contraseña actual" contra fuerza bruta)
 const limitadorCambioPassword = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
@@ -433,11 +419,6 @@ const limitadorCambioPassword = rateLimit({
     message: { error: 'Demasiados intentos. Probá de nuevo en unos minutos.' }
 });
 
-/**
- * Permite a cualquier usuario logueado (ADMIN o TECNICO) cambiar SU PROPIA
- * contraseña, confirmando la actual. No hace falta ser ADMIN: cada quien
- * cambia la suya.
- */
 app.post('/api/usuarios/cambiar-password', verificarToken, limitadorCambioPassword, (req, res) => {
     const { passwordActual, passwordNueva } = req.body;
 
@@ -518,7 +499,6 @@ app.post('/api/productos', verificarToken, requiereAdmin, (req, res) => {
 app.delete('/api/productos/:id', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
 
-    // Buscamos las imágenes ANTES de borrar la fila, para no dejar huérfanas en Cloudinary
     db.query('SELECT imagen_1, imagen_2, imagen_3 FROM productos WHERE id = ?', [id], async (errSelect, rows) => {
         if (errSelect) {
             console.error('Error al buscar imágenes del producto a eliminar:', errSelect);
@@ -579,7 +559,6 @@ app.post('/api/productos/:id/stock-minimo', verificarToken, requiereAdmin, (req,
     const { stockMinimo } = validacion.datos;
 
     const sql = 'UPDATE productos SET stockMinimo = ? WHERE id = ?';
-    
     db.query(sql, [stockMinimo, id], (err, result) => {
         if (err) {
             console.error('❌ Error al actualizar stock mínimo en MySQL:', err.message);
@@ -620,7 +599,6 @@ app.post('/api/pedidos', verificarToken, requiereAdmin, (req, res) => {
                 }
 
                 const pedidoId = result.insertId;
-
                 const sqlItems = 'INSERT INTO pedido_items (pedido_id, producto_id, cantidad) VALUES ?';
                 const valoresItems = items.map(item => [pedidoId, item.id, item.cantidad]);
 
@@ -650,7 +628,7 @@ app.post('/api/pedidos', verificarToken, requiereAdmin, (req, res) => {
                             if (errLimpieza) {
                                 console.error('⚠️ Error al limpiar pedidos viejos:', errLimpieza);
                             } else if (resultLimpieza.affectedRows > 0) {
-                                console.log(`🧹 Limpieza: Se eliminaron ${resultLimpieza.affectedRows} pedidos viejos de más de 2 meses.`);
+                                console.log(`🧹 Limpieza: Se eliminaron ${resultLimpieza.affectedRows} pedidos viejos.`);
                             }
                         });
 
@@ -696,9 +674,6 @@ app.get('/api/pedidos/:id/items', verificarToken, (req, res) => {
    8. ENDPOINTS MULTIMEDIA (CLOUDINARY)
    ========================================================================== */
 
-/**
- * Extrae el public_id de Cloudinary a partir de una URL de imagen subida por este sistema.
- */
 function extraerPublicId(imageUrl) {
     if (!imageUrl || typeof imageUrl !== 'string') return null;
     try {
@@ -712,10 +687,6 @@ function extraerPublicId(imageUrl) {
     }
 }
 
-/**
- * Borra una imagen de Cloudinary a partir de su URL, sin lanzar si falla
- * (se usa en limpiezas donde un fallo de Cloudinary no debe bloquear el resto).
- */
 async function borrarImagenDeCloudinary(imageUrl) {
     const publicId = extraerPublicId(imageUrl);
     if (!publicId) return;
@@ -785,16 +756,122 @@ app.get('/api/movimientos-stock', verificarToken, requiereAdmin, (req, res) => {
 });
 
 /* ==========================================================================
-   10. MÓDULO: GESTIÓN INTEGRAL DE REPARACIONES Y TALLER
+   10. MÓDULO: CLIENTES (HISTORIAL Y GESTIÓN)
    ========================================================================== */
 
-// 1. Obtener todas las órdenes de servicio
-/**
- * Descuenta stock por los repuestos usados en una reparación y deja registro
- * en movimientos_stock. Se llama UNA sola vez por orden (ver guarda de
- * stock_descontado en los dos endpoints que la usan) para no descontar dos veces
- * si la orden se vuelve a guardar después de marcarse "Entregado".
- */
+// 1. Listar clientes (con búsqueda por nombre, teléfono o dirección)
+app.get('/api/clientes', verificarToken, (req, res) => {
+    const { buscar } = req.query;
+
+    let sql = `
+        SELECT c.*, COUNT(r.id) AS cantidad_reparaciones
+        FROM clientes c
+        LEFT JOIN reparaciones r ON r.cliente_id = c.id
+    `;
+    const params = [];
+
+    if (buscar && buscar.trim() !== '') {
+        const termino = `%${buscar.trim().toLowerCase()}%`;
+        sql += `
+            WHERE LOWER(c.nombre) LIKE ? 
+               OR LOWER(c.telefono) LIKE ? 
+               OR LOWER(c.direccion) LIKE ?
+        `;
+        params.push(termino, termino, termino);
+    }
+
+    sql += ' GROUP BY c.id ORDER BY c.nombre ASC';
+
+    db.query(sql, params, (err, rows) => {
+        if (err) {
+            console.error('Error al listar clientes:', err);
+            return res.status(500).json({ error: 'Error al consultar clientes' });
+        }
+        res.json(rows);
+    });
+});
+
+// 2. Detalle de un cliente puntual
+app.get('/api/clientes/:id', verificarToken, (req, res) => {
+    db.query('SELECT * FROM clientes WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err) {
+            console.error('Error al obtener cliente:', err);
+            return res.status(500).json({ error: 'Error interno del servidor' });
+        }
+        if (rows.length === 0) return res.status(404).json({ error: 'Cliente no encontrado' });
+        res.json(rows[0]);
+    });
+});
+
+// 3. Historial completo de reparaciones de un cliente
+app.get('/api/clientes/:id/reparaciones', verificarToken, (req, res) => {
+    db.query(
+        'SELECT * FROM reparaciones WHERE cliente_id = ? ORDER BY fecha_inicio DESC',
+        [req.params.id],
+        (err, rows) => {
+            if (err) {
+                console.error('Error al obtener historial del cliente:', err);
+                return res.status(500).json({ error: 'Error interno del servidor' });
+            }
+            res.json(rows);
+        }
+    );
+});
+
+// 4. Editar los datos de un cliente
+app.put('/api/clientes/:id', verificarToken, requiereAdmin, (req, res) => {
+    const validacion = validarCliente(req.body);
+    if (!validacion.valido) {
+        return res.status(400).json({ error: validacion.error });
+    }
+    const { nombre, telefono, direccion, email, notas } = validacion.datos;
+
+    const sql = 'UPDATE clientes SET nombre = ?, telefono = ?, direccion = ?, email = ?, notas = ? WHERE id = ?';
+    db.query(sql, [nombre, telefono, direccion, email, notas, req.params.id], (err) => {
+        if (err) {
+            console.error('Error al actualizar cliente:', err);
+            return res.status(500).json({ error: 'Error interno del servidor' });
+        }
+        res.json({ mensaje: 'Cliente actualizado con éxito' });
+    });
+});
+
+async function resolverOCrearCliente(nombre, telefono, direccion) {
+    const telefonoLimpio = telefono ? String(telefono).trim() : null;
+    const nombreLimpio = String(nombre).trim();
+
+    let clienteExistente;
+    if (telefonoLimpio) {
+        [clienteExistente] = await db.promise().query(
+            'SELECT id, direccion FROM clientes WHERE telefono = ? LIMIT 1',
+            [telefonoLimpio]
+        );
+    } else {
+        [clienteExistente] = await db.promise().query(
+            'SELECT id, direccion FROM clientes WHERE nombre = ? AND telefono IS NULL LIMIT 1',
+            [nombreLimpio]
+        );
+    }
+
+    if (clienteExistente && clienteExistente.length > 0) {
+        const cliente = clienteExistente[0];
+        if (!cliente.direccion && direccion) {
+            await db.promise().query('UPDATE clientes SET direccion = ? WHERE id = ?', [direccion, cliente.id]);
+        }
+        return cliente.id;
+    }
+
+    const [resultado] = await db.promise().query(
+        'INSERT INTO clientes (nombre, telefono, direccion) VALUES (?, ?, ?)',
+        [nombreLimpio, telefonoLimpio, direccion || null]
+    );
+    return resultado.insertId;
+}
+
+/* ==========================================================================
+   11. MÓDULO: GESTIÓN INTEGRAL DE REPARACIONES Y TALLER
+   ========================================================================== */
+
 async function descontarStockPorReparacion(idOrden, equipo, tecnicoAsignado, listaRepuestos) {
     for (const item of listaRepuestos) {
         let targetId = item.producto_id;
@@ -822,7 +899,7 @@ async function descontarStockPorReparacion(idOrden, equipo, tecnicoAsignado, lis
     }
 }
 
-// 1. Obtener todas las órdenes de servicio (ADMIN y TECNICO pueden consultar)
+// 1. Obtener todas las órdenes de servicio
 app.get('/api/reparaciones', verificarToken, (req, res) => {
     const sql = 'SELECT * FROM reparaciones ORDER BY id DESC';
     db.query(sql, (err, rows) => {
@@ -835,39 +912,42 @@ app.get('/api/reparaciones', verificarToken, (req, res) => {
 });
 
 // 2. Registrar nueva orden de servicio
-app.post('/api/reparaciones', verificarToken, requiereAdmin, (req, res) => {
+app.post('/api/reparaciones', verificarToken, requiereAdmin, async (req, res) => {
     const validacion = validarReparacion(req.body);
     if (!validacion.valido) {
         return res.status(400).json({ error: validacion.error });
     }
     const {
         cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo,
-        falla_declarada, diagnostico_tecnico, repuestos_detalle,
+        falla_declarada, diagnostico_tecnico, notas_servicio, repuestos_detalle,
         costo_mano_obra, costo_repuestos, estado, tecnico_asignado
     } = validacion.datos;
 
     const total = costo_mano_obra + costo_repuestos;
     const repuestosResumen = repuestos_detalle.map(r => `${r.nombre} (x${r.cantidad})`).join(', ') || 'Ninguno';
 
-    const sql = `
-        INSERT INTO reparaciones 
-        (cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada, 
-         diagnostico_tecnico, repuestos_usados, repuestos_detalle, costo_mano_obra, costo_repuestos, 
-         total, estado, tecnico_asignado, fecha_inicio, fecha_modificacion) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-    `;
+    try {
+        const clienteId = await resolverOCrearCliente(cliente_nombre, cliente_telefono, direccion);
 
-    db.query(sql, [
-        cliente_nombre, cliente_telefono, direccion, tipo_cobertura,
-        equipo, falla_declarada, diagnostico_tecnico, repuestosResumen, JSON.stringify(repuestos_detalle),
-        costo_mano_obra, costo_repuestos, total, estado, tecnico_asignado
-    ], (err, result) => {
-        if (err) {
-            console.error('Error al registrar reparación:', err);
-            return res.status(500).json({ error: 'No se pudo guardar la orden' });
-        }
+        const sql = `
+            INSERT INTO reparaciones 
+            (cliente_id, cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada, 
+             diagnostico_tecnico, notas_servicio, repuestos_usados, repuestos_detalle, costo_mano_obra, costo_repuestos, 
+             total, estado, tecnico_asignado, fecha_inicio, fecha_modificacion) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        `;
+
+        const [result] = await db.promise().query(sql, [
+            clienteId, cliente_nombre, cliente_telefono, direccion, tipo_cobertura,
+            equipo, falla_declarada, diagnostico_tecnico, notas_servicio, repuestosResumen,
+            JSON.stringify(repuestos_detalle), costo_mano_obra, costo_repuestos, total, estado, tecnico_asignado
+        ]);
+
         res.status(201).json({ mensaje: 'Orden creada', id: result.insertId });
-    });
+    } catch (err) {
+        console.error('Error al registrar reparación:', err);
+        res.status(500).json({ error: 'No se pudo guardar la orden' });
+    }
 });
 
 // 3. Editar orden de servicio existente
@@ -880,7 +960,7 @@ app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res)
     }
     const {
         cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo,
-        falla_declarada, diagnostico_tecnico, repuestos_detalle,
+        falla_declarada, diagnostico_tecnico, notas_servicio, repuestos_detalle,
         costo_mano_obra, costo_repuestos, estado, tecnico_asignado
     } = validacion.datos;
 
@@ -895,9 +975,6 @@ app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res)
 
         const ordenActual = ordenes[0];
 
-        // =========================================================================
-        // ACÁ VA EL BLOQUE:
-        // =========================================================================
         let repuestosPrevios = [];
         try {
             repuestosPrevios = typeof ordenActual.repuestos_detalle === 'string'
@@ -912,20 +989,21 @@ app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res)
             await descontarStockPorReparacion(id, equipo, tecnico_asignado, repuestos_detalle);
             debeMarcarDescontado = true;
         }
-        // =========================================================================
+
+        const clienteId = await resolverOCrearCliente(cliente_nombre, cliente_telefono, direccion);
 
         const sql = `
             UPDATE reparaciones 
-            SET cliente_nombre = ?, cliente_telefono = ?, direccion = ?, tipo_cobertura = ?, 
-                equipo = ?, falla_declarada = ?, diagnostico_tecnico = ?, repuestos_usados = ?, 
+            SET cliente_id = ?, cliente_nombre = ?, cliente_telefono = ?, direccion = ?, tipo_cobertura = ?, 
+                equipo = ?, falla_declarada = ?, diagnostico_tecnico = ?, notas_servicio = ?, repuestos_usados = ?, 
                 repuestos_detalle = ?, costo_mano_obra = ?, costo_repuestos = ?, total = ?, 
                 estado = ?, tecnico_asignado = ?, stock_descontado = ?, fecha_modificacion = NOW()
             WHERE id = ?
         `;
 
         await db.promise().query(sql, [
-            cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada,
-            diagnostico_tecnico, repuestosResumen, JSON.stringify(repuestos_detalle), costo_mano_obra, costo_repuestos,
+            clienteId, cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada,
+            diagnostico_tecnico, notas_servicio, repuestosResumen, JSON.stringify(repuestos_detalle), costo_mano_obra, costo_repuestos,
             total, estado, tecnico_asignado, debeMarcarDescontado ? 1 : 0, id
         ]);
 
@@ -984,7 +1062,8 @@ app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (re
         res.status(500).json({ error: 'Error interno al actualizar estado' });
     }
 });
-// 5. Eliminar una orden de reparación (Solo ADMIN)
+
+// 5. Eliminar orden de trabajo (Solo ADMIN)
 app.delete('/api/reparaciones/:id', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
 
@@ -1004,7 +1083,7 @@ app.delete('/api/reparaciones/:id', verificarToken, requiereAdmin, (req, res) =>
 });
 
 /* ==========================================================================
-   11. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
+   12. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
    ========================================================================== */
 
 function realizarBackup() {
@@ -1055,8 +1134,6 @@ function limpiarBackupsViejos(rutaCarpeta, diasRetencion) {
     });
 }
 
-// Copia el backup a una carpeta externa (por ejemplo, sincronizada con OneDrive/Google Drive/Dropbox).
-// Si BACKUP_OFFSITE_DIR no está configurado, solo avisa una vez y sigue sin hacer nada.
 let avisoOffsiteMostrado = false;
 
 function copiarBackupAUbicacionExterna(rutaArchivoOrigen, nombreArchivo) {
@@ -1064,7 +1141,7 @@ function copiarBackupAUbicacionExterna(rutaArchivoOrigen, nombreArchivo) {
 
     if (!carpetaExterna) {
         if (!avisoOffsiteMostrado) {
-            console.log('ℹ️  BACKUP_OFFSITE_DIR no está configurado en .env — los backups solo quedan en esta PC. Se recomienda configurarlo.');
+            console.log('ℹ️  BACKUP_OFFSITE_DIR no está configurado en .env.');
             avisoOffsiteMostrado = true;
         }
         return;
@@ -1087,7 +1164,6 @@ function copiarBackupAUbicacionExterna(rutaArchivoOrigen, nombreArchivo) {
     });
 }
 
-// Backup diario a las 20:00 hs, hora de Argentina
 cron.schedule('0 20 * * *', () => {
     realizarBackup();
 }, {
@@ -1096,9 +1172,9 @@ cron.schedule('0 20 * * *', () => {
 });
 
 /* ==========================================================================
-   12. INICIALIZACIÓN Y PUESTA EN MARCHA DEL SERVIDOR
+   13. INICIALIZACIÓN Y PUESTA EN MARCHA DEL SERVIDOR
    ========================================================================== */
 app.listen(PORT, HOST, () => {
     console.log(`🚀 Servidor de Service Integral activo.`);
-    console.log(`🔒 Escuchando en el puerto ${PORT} (accesible en la red local por la IP de esta PC).`);
+    console.log(`🔒 Escuchando en el puerto ${PORT}.`);
 });

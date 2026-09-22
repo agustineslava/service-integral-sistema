@@ -25,6 +25,7 @@
                 <ul>
                     <li><a href="index.html">Stock</a></li>
                     <li><a href="reparaciones.html" class="active">Taller / Reparaciones</a></li>
+                    <li><a href="clientes.html">Clientes</a></li>
                     <li><a href="pedidos.html">Pedidos</a></li>
                     <li>
                         <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema">
@@ -80,6 +81,12 @@
                     </div>
                 </div>
 
+                <!-- NOTAS DE SERVICIO Y LOGÍSTICA (ANCHO COMPLETO) -->
+                <div class="campo" style="margin-bottom: 15px;">
+                    <label for="rep-notas">Notas de Servicio / Logística:</label>
+                    <textarea id="rep-notas" rows="2" placeholder="Ej: Retirar martes por la tarde. Portón negro sin timbre. Llamar antes al llegar." style="width: 100%; font-family: inherit; resize: vertical;"></textarea>
+                </div>
+
                 <!-- SELECCIÓN MÚLTIPLE DE REPUESTOS -->
                 <div class="campo" style="margin-bottom: 15px;">
                     <label>Repuestos Utilizados / Asignados:</label>
@@ -116,11 +123,25 @@
             </form>
         </section>
 
-      <!-- BUSCADOR DE CLIENTES Y SERVICIOS (ANCHO COMPLETO) -->
+        <!-- BUSCADOR COMBINADO (TEXTO + FILTRO DE ESTADO) -->
         <section class="seccion-busqueda">
-            <div class="buscador-avanzado" style="display: flex; align-items: center; width: 100%; gap: 12px; padding: 12px 18px;">
-                <label for="input-buscar-reparaciones" style="margin-bottom: 0; white-space: nowrap; font-weight: bold; color: var(--text-main);">Buscar Servicio:</label>
-                <input type="text" id="input-buscar-reparaciones" placeholder="Buscar por cliente, teléfono, dirección, equipo o falla..." autocomplete="off" style="flex: 1; width: 100%; height: 42px;">
+            <div class="contenedor-filtros-grid" style="align-items: flex-end; gap: 15px;">
+                <div class="grupo-filtro filtro-principal" style="flex: 2;">
+                    <label for="input-buscar-reparaciones" style="font-weight: bold; color: var(--text-main); margin-bottom: 6px;">Buscar Servicio:</label>
+                    <input type="text" id="input-buscar-reparaciones" placeholder="Buscar por cliente, teléfono, dirección, equipo, falla o notas..." autocomplete="off" style="width: 100%; height: 42px;">
+                </div>
+                <div class="grupo-filtro" style="flex: 1; min-width: 190px;">
+                    <label for="select-filtro-estado-rep" style="font-weight: bold; color: var(--text-main); margin-bottom: 6px;">Estado:</label>
+                    <select id="select-filtro-estado-rep" style="width: 100%; height: 42px;">
+                        <option value="TODOS">-- Todos los Estados --</option>
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="En Reparacion">En Reparación</option>
+                        <option value="Esperando Repuesto">Esperando Repuesto</option>
+                        <option value="Listo">Listo</option>
+                        <option value="Entregado">Entregado</option>
+                        <option value="Cancelado">Cancelado</option>
+                    </select>
+                </div>
             </div>
         </section>
 
@@ -135,6 +156,7 @@
                             <th>Cliente y Domicilio</th>
                             <th>Equipo y Garantía</th>
                             <th>Falla</th>
+                            <th>Notas / Logística</th>
                             <th>Repuestos</th>
                             <th>Total</th>
                             <th>Fechas (Inicio / Modif.)</th>
@@ -143,7 +165,7 @@
                         </tr>
                     </thead>
                     <tbody id="tabla-reparaciones-cuerpo">
-                        <tr><td colspan="9" style="text-align:center;">Cargando reparaciones...</td></tr>
+                        <tr><td colspan="10" style="text-align:center;">Cargando reparaciones...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -195,6 +217,11 @@
                         <label for="edit-rep-falla">Falla Declarada:</label>
                         <input type="text" id="edit-rep-falla" required autocomplete="off">
                     </div>
+                    
+                    <div class="campo" style="margin-top: 10px;">
+                        <label for="edit-rep-notas">Notas de Servicio / Logística:</label>
+                        <textarea id="edit-rep-notas" rows="2" placeholder="Indicaciones de visita, retiro o entrega..." style="width: 100%; font-family: inherit; resize: vertical;"></textarea>
+                    </div>
 
                     <div class="campo" style="margin-top: 10px;">
                         <label>Repuestos Asignados:</label>
@@ -237,9 +264,7 @@
         </div>
     </div>
 
-    <!-- ==========================================================================
-       SCRIPTS DE CONTROL
-       ========================================================================== -->
+    <!-- SCRIPTS DE CONTROL -->
     <script src="reparaciones.js"></script>
 </body>
 </html>

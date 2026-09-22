@@ -9,8 +9,6 @@ let repuestosAsignadosEdit = [];
 
 /**
  * Escapa caracteres especiales de HTML antes de insertarlos con innerHTML.
- * Acá es particularmente importante: estos campos son datos de clientes reales
- * del taller (nombre, teléfono, dirección), no solo nombres de productos.
  */
 function escapeHtml(valor) {
     if (valor === null || valor === undefined) return '';
@@ -20,6 +18,30 @@ function escapeHtml(valor) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+/**
+ * Capitaliza la primera letra de cada palabra (Nombres, Calles, Modelos)
+ * Ej: "carlos lopez" -> "Carlos Lopez"
+ */
+function capitalizarPalabras(texto) {
+    if (!texto || typeof texto !== 'string') return null;
+    return texto
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+        .join(' ');
+}
+
+/**
+ * Capitaliza solo la primera letra de la oración (Fallas, Notas)
+ * Ej: "no arranca el motor" -> "No arranca el motor"
+ */
+function capitalizarPrimeraLetra(texto) {
+    if (!texto || typeof texto !== 'string') return null;
+    const limpio = texto.trim();
+    return limpio.charAt(0).toUpperCase() + limpio.slice(1);
 }
 
 /**
@@ -51,10 +73,10 @@ async function cargarReparaciones() {
     try {
         const res = await apiFetch('/api/reparaciones');
         reparacionesLocales = await res.json();
-        renderizarTablaReparaciones(reparacionesLocales);
+        filtrarYRenderizarReparaciones();
     } catch (e) {
         if (tbody) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:red;">Fallo al conectar con el servidor.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:red;">Fallo al conectar con el servidor.</td></tr>';
         }
     }
 }
@@ -67,7 +89,7 @@ function renderizarTablaReparaciones(lista) {
     if (!tbody) return;
 
     if (lista.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No se encontraron órdenes coincidentes.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">No se encontraron órdenes coincidentes.</td></tr>';
         return;
     }
 
@@ -85,7 +107,6 @@ function renderizarTablaReparaciones(lista) {
         else if (r.estado === 'Entregado') claseBadge = 'badge-entregado';
         else if (r.estado === 'Cancelado') claseBadge = 'badge-cancelado';
 
-        // Mostrar texto de repuestos garantizando que nunca quede vacío si hay items
         let textoRepuestos = r.repuestos_usados;
         if (!textoRepuestos || textoRepuestos.trim() === '' || textoRepuestos === 'Ninguno') {
             try {
@@ -114,7 +135,16 @@ function renderizarTablaReparaciones(lista) {
                         ${r.tipo_cobertura === 'En Garantia' ? '🛡️ En Garantía' : '🔧 Fuera de Garantía'}
                     </span>
                 </td>
-                <td><small>${escapeHtml(r.falla_declarada)}</small></td>
+                <td>
+                    <small>${escapeHtml(r.falla_declarada)}</small>
+                </td>
+                <td style="max-width: 180px;">
+                    ${r.notas_servicio ? `
+                        <div style="font-size: 12px; color: var(--si-yellow); background: rgba(255, 198, 0, 0.08); padding: 5px 8px; border-radius: 5px; border-left: 3px solid var(--si-yellow); line-height: 1.3;">
+                            <strong>📝</strong> ${escapeHtml(r.notas_servicio)}
+                        </div>
+                    ` : '<small style="color: var(--text-muted); font-style: italic;">Sin notas</small>'}
+                </td>
                 <td><strong style="color: var(--si-blue-vibrant); font-size: 12px;">${escapeHtml(textoRepuestos)}</strong></td>
                 <td><strong>$${parseFloat(r.total).toFixed(2)}</strong></td>
                 <td>
@@ -150,22 +180,41 @@ function renderizarTablaReparaciones(lista) {
 }
 
 /**
- * Búsqueda combinada en tiempo real
+ * Búsqueda combinada reactiva (Texto + Estado)
  */
-const inputBuscarReparaciones = document.getElementById('input-buscar-reparaciones');
-if (inputBuscarReparaciones) {
-    inputBuscarReparaciones.addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase().trim();
-        const filtrados = reparacionesLocales.filter(r => 
+function filtrarYRenderizarReparaciones() {
+    const inputTexto = document.getElementById('input-buscar-reparaciones');
+    const selectEstado = document.getElementById('select-filtro-estado-rep');
+
+    const term = inputTexto ? inputTexto.value.toLowerCase().trim() : '';
+    const estadoFiltro = selectEstado ? selectEstado.value : 'TODOS';
+
+    const filtrados = reparacionesLocales.filter(r => {
+        const coincideEstado = (estadoFiltro === 'TODOS') || (r.estado === estadoFiltro);
+        const coincideTexto = term === '' || (
             (r.cliente_nombre || '').toLowerCase().includes(term) ||
             (r.cliente_telefono || '').toLowerCase().includes(term) ||
             (r.direccion || '').toLowerCase().includes(term) ||
             (r.equipo || '').toLowerCase().includes(term) ||
             (r.falla_declarada || '').toLowerCase().includes(term) ||
+            (r.notas_servicio || '').toLowerCase().includes(term) ||
+            (r.repuestos_usados || '').toLowerCase().includes(term) ||
             String(r.id).includes(term)
         );
-        renderizarTablaReparaciones(filtrados);
+        return coincideEstado && coincideTexto;
     });
+
+    renderizarTablaReparaciones(filtrados);
+}
+
+const inputBuscarReparaciones = document.getElementById('input-buscar-reparaciones');
+if (inputBuscarReparaciones) {
+    inputBuscarReparaciones.addEventListener('input', filtrarYRenderizarReparaciones);
+}
+
+const selectFiltroEstadoRep = document.getElementById('select-filtro-estado-rep');
+if (selectFiltroEstadoRep) {
+    selectFiltroEstadoRep.addEventListener('change', filtrarYRenderizarReparaciones);
 }
 
 /**
@@ -179,10 +228,7 @@ function agregarRepuestoAOrden(contexto) {
 
     if (!texto) return;
 
-    // 1. Limpiar el texto para obtener nombre o código puro
     const textoLimpio = texto.toLowerCase();
-
-    // 2. Buscar en el catálogo local
     const encontrado = catalogoProductos.find(p => {
         const nombreMatch = p.nombre && textoLimpio.includes(p.nombre.toLowerCase());
         const codigoMatch = p.codigoDistribuidor && textoLimpio.includes(String(p.codigoDistribuidor).toLowerCase());
@@ -258,7 +304,6 @@ async function cambiarEstadoReparacion(id, nuevoEstado) {
         });
 
         if (res.ok) {
-            // Esperar explícitamente a que la base de datos devuelva los datos actualizados
             await cargarReparaciones();
         } else {
             const err = await res.json();
@@ -285,11 +330,14 @@ function abrirModalEditar(id) {
     document.getElementById('edit-rep-cobertura').value = r.tipo_cobertura || 'Fuera de Garantia';
     document.getElementById('edit-rep-equipo').value = r.equipo;
     document.getElementById('edit-rep-falla').value = r.falla_declarada;
+    
+    const inputNotas = document.getElementById('edit-rep-notas');
+    if (inputNotas) inputNotas.value = r.notas_servicio || '';
+
     document.getElementById('edit-rep-mano-obra').value = r.costo_mano_obra;
     document.getElementById('edit-rep-costo-rep').value = r.costo_repuestos;
     document.getElementById('edit-rep-estado').value = r.estado;
 
-    // Parsear de forma segura repuestos_detalle
     try {
         if (typeof r.repuestos_detalle === 'string' && r.repuestos_detalle.trim() !== '') {
             repuestosAsignadosEdit = JSON.parse(r.repuestos_detalle);
@@ -310,14 +358,21 @@ const formEditarReparacion = document.getElementById('form-editar-reparacion');
 if (formEditarReparacion) {
     formEditarReparacion.addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        const inputSelector = document.getElementById('edit-rep-input-selector');
+        if (inputSelector && inputSelector.value.trim() !== '') {
+            agregarRepuestoAOrden('edit');
+        }
+
         const id = document.getElementById('edit-rep-id').value;
         const ordenModificada = {
-            cliente_nombre: document.getElementById('edit-rep-cliente').value,
-            cliente_telefono: document.getElementById('edit-rep-telefono').value,
-            direccion: document.getElementById('edit-rep-direccion').value,
+            cliente_nombre: capitalizarPalabras(document.getElementById('edit-rep-cliente').value),
+            cliente_telefono: document.getElementById('edit-rep-telefono').value.trim(),
+            direccion: capitalizarPalabras(document.getElementById('edit-rep-direccion').value),
             tipo_cobertura: document.getElementById('edit-rep-cobertura').value,
-            equipo: document.getElementById('edit-rep-equipo').value,
-            falla_declarada: document.getElementById('edit-rep-falla').value,
+            equipo: capitalizarPalabras(document.getElementById('edit-rep-equipo').value),
+            falla_declarada: capitalizarPrimeraLetra(document.getElementById('edit-rep-falla').value),
+            notas_servicio: document.getElementById('edit-rep-notas') ? capitalizarPrimeraLetra(document.getElementById('edit-rep-notas').value) : null,
             repuestos_detalle: repuestosAsignadosEdit,
             costo_mano_obra: document.getElementById('edit-rep-mano-obra').value,
             costo_repuestos: document.getElementById('edit-rep-costo-rep').value,
@@ -335,7 +390,8 @@ if (formEditarReparacion) {
                 cerrarModal('modal-editar-reparacion');
                 await cargarReparaciones();
             } else {
-                alert('Error al modificar la orden.');
+                const err = await res.json();
+                alert(err.error || 'Error al modificar la orden.');
             }
         } catch (err) {
             alert('No se pudo conectar con el servidor.');
@@ -344,19 +400,26 @@ if (formEditarReparacion) {
 }
 
 /**
- * Alta de nueva orden
+ * Alta de nueva orden con capitalización automática
  */
 const formReparacion = document.getElementById('form-reparacion');
 if (formReparacion) {
     formReparacion.addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        const inputSelector = document.getElementById('rep-input-selector');
+        if (inputSelector && inputSelector.value.trim() !== '') {
+            agregarRepuestoAOrden('nuevo');
+        }
+
         const orden = {
-            cliente_nombre: document.getElementById('rep-cliente').value,
-            cliente_telefono: document.getElementById('rep-telefono').value,
-            direccion: document.getElementById('rep-direccion').value,
+            cliente_nombre: capitalizarPalabras(document.getElementById('rep-cliente').value),
+            cliente_telefono: document.getElementById('rep-telefono').value.trim(),
+            direccion: capitalizarPalabras(document.getElementById('rep-direccion').value),
             tipo_cobertura: document.getElementById('rep-cobertura').value,
-            equipo: document.getElementById('rep-equipo').value,
-            falla_declarada: document.getElementById('rep-falla').value,
+            equipo: capitalizarPalabras(document.getElementById('rep-equipo').value),
+            falla_declarada: capitalizarPrimeraLetra(document.getElementById('rep-falla').value),
+            notas_servicio: document.getElementById('rep-notas') ? capitalizarPrimeraLetra(document.getElementById('rep-notas').value) : null,
             repuestos_detalle: repuestosAsignadosNuevo,
             costo_mano_obra: document.getElementById('rep-mano-obra').value,
             costo_repuestos: document.getElementById('rep-costo-rep').value,
@@ -372,6 +435,7 @@ if (formReparacion) {
             if (res.ok) {
                 alert('¡Orden de trabajo registrada con éxito!');
                 formReparacion.reset();
+                if (document.getElementById('rep-notas')) document.getElementById('rep-notas').value = '';
                 repuestosAsignadosNuevo = [];
                 renderizarChipsRepuestos('nuevo');
                 await cargarReparaciones();
@@ -386,7 +450,7 @@ if (formReparacion) {
 }
 
 /**
- * WhatsApp
+ * Enviar ficha al técnico por WhatsApp
  */
 function enviarWhatsAppTecnico(id) {
     const r = reparacionesLocales.find(x => x.id === id);
@@ -399,12 +463,38 @@ function enviarWhatsAppTecnico(id) {
     if (r.direccion) msj += `📍 *Dirección:* ${r.direccion}\n`;
     msj += `⚙️ *Equipo:* ${r.equipo} (${r.tipo_cobertura})\n`;
     msj += `⚠️ *Falla Declarada:* ${r.falla_declarada}\n`;
+    if (r.notas_servicio) msj += `📝 *Notas/Logística:* ${r.notas_servicio}\n`;
     msj += `🔩 *Repuestos:* ${r.repuestos_usados || 'Ninguno'}\n`;
     msj += `📌 *Estado:* ${r.estado}\n`;
     msj += `💵 *Total:* $${parseFloat(r.total).toFixed(2)}\n`;
 
     const urlWA = `https://api.whatsapp.com/send?text=${encodeURIComponent(msj)}`;
     window.open(urlWA, '_blank');
+}
+
+/**
+ * Eliminar orden de trabajo del taller
+ */
+async function eliminarReparacion(id, equipo, cliente) {
+    const confirmacion = confirm(`¿Estás seguro de que querés eliminar la orden #${id} (${equipo} de ${cliente})?\n\nEsta acción no se puede deshacer.`);
+    if (!confirmacion) return;
+
+    try {
+        const res = await apiFetch(`/api/reparaciones/${id}`, {
+            method: 'DELETE'
+        });
+
+        if (res.ok) {
+            alert(`Orden #${id} eliminada correctamente.`);
+            await cargarReparaciones();
+        } else {
+            const err = await res.json();
+            alert(err.error || 'No se pudo eliminar la orden.');
+        }
+    } catch (e) {
+        console.error('Error al intentar eliminar:', e);
+        alert('Error de conexión con el servidor.');
+    }
 }
 
 function cerrarModal(idModal) {
@@ -436,28 +526,3 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     inicializarModulo();
 });
-
-/**
- * Eliminar orden de trabajo del taller
- */
-async function eliminarReparacion(id, equipo, cliente) {
-    const confirmacion = confirm(`¿Estás seguro de que querés eliminar la orden #${id} (${equipo} de ${cliente})?\n\nEsta acción no se puede deshacer.`);
-    if (!confirmacion) return;
-
-    try {
-        const res = await apiFetch(`/api/reparaciones/${id}`, {
-            method: 'DELETE'
-        });
-
-        if (res.ok) {
-            alert(`Orden #${id} eliminada correctamente.`);
-            await cargarReparaciones();
-        } else {
-            const err = await res.json();
-            alert(err.error || 'No se pudo eliminar la orden.');
-        }
-    } catch (e) {
-        console.error('Error al intentar eliminar:', e);
-        alert('Error de conexión con el servidor.');
-    }
-}

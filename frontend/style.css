@@ -9,7 +9,7 @@
     --border-color: #343a40;      /* Bordes sutiles oscuros */
     --text-main: #f8f9fa;         /* Texto principal de alto contraste (casi blanco) */
     --text-muted: #adb5bd; 
-    --text-secondary: #000000;       /* Texto secundario o descriptivo en gris claro */
+    --text-secondary: #000000;    /* Texto secundario o descriptivo en gris claro */
     
     /* --- COLORES CORPORATIVOS OFICIALES --- */
     --si-blue-vibrant: #009fe3;   /* Azul vibrante de la fachada y logo */
@@ -21,8 +21,6 @@
     --color-danger: #dc3545;      /* Rojo para eliminar, alertas críticas o borrar */
     --color-info: var(--si-blue-vibrant);
     --color-alerta-bg: rgba(255, 198, 0, 0.1); /* Fondo translúcido para stock mínimo */
-
-    
 }
 
 /* 🌟 MODO CLARO AUTOMÁTICO (Se activa si el sistema operativo de la PC está en Claro) */
@@ -55,13 +53,13 @@ body.tema-claro {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif; /* Tipografía moderna y sumamente legible */
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
 }
 
 body {
     background-color: var(--bg-body);
     color: var(--text-main);
-    transition: background-color 0.3s ease, color 0.3s ease; /* Transición suave al cambiar de tema */
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .contenedor-principal {
@@ -83,7 +81,7 @@ header {
 
 .barra-cabecera {
     display: flex;
-    justify-content: space-between; /* Logo a la izquierda, menú a la derecha */
+    justify-content: space-between;
     align-items: center;
     max-width: 1400px;
     margin: 0 auto;
@@ -98,12 +96,12 @@ header {
 
 .logo img {
     height: 60px;
-    width: 60px;                /*  Obligamos a que sea cuadrado perfecto (60x60) */
-    object-fit: cover;          /*  Asegura que la imagen llene el círculo sin deformarse */
-    border-radius: 50%;         /*  Corta las esquinas para hacerlo completamente circular */
-    border: 2px solid #ffffff;  /*  Un borde blanco sutil que lo hace resaltar sobre el azul */
-    background-color: #ffffff;  /*  Fondo blanco para que el logo destaque */
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); /*  Sombra suave para darle volumen */
+    width: 60px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    background-color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 /* --- INDICADOR DE ESTADO DEL SERVIDOR --- */
@@ -197,7 +195,7 @@ header {
 .panel-tabla {
     background-color: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 12px; /* Bordes más redondeados y modernos */
+    border-radius: 12px;
     padding: 25px;
     margin-bottom: 30px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.03);
@@ -209,7 +207,7 @@ header {
     font-size: 1.15rem;
     font-weight: 700;
     margin-bottom: 20px;
-    color: var(--si-blue-vibrant); /* Títulos corporativos */
+    color: var(--si-blue-vibrant);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -225,18 +223,15 @@ header {
     border-radius: 12px;
     padding: 16px 20px;
     display: grid;
-    /* Grid automático que salta de fila si no entran los 220px por elemento */
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 15px;
     align-items: flex-end;
 }
 
-/* El input de búsqueda principal toma 2 columnas cuando hay espacio */
 .contenedor-filtros-grid .filtro-principal {
     grid-column: span 2;
 }
 
-/* En pantallas chicas o con mucho zoom, el buscador vuelve a 1 sola columna */
 @media (max-width: 900px) {
     .contenedor-filtros-grid .filtro-principal {
         grid-column: span 1;
@@ -254,10 +249,11 @@ header {
     font-weight: 700;
     color: var(--text-muted);
     margin-bottom: 6px;
-    white-space: nowrap; /* Evita que los textos se partan o monten */
+    white-space: nowrap;
 }
 
 .grupo-filtro input[type="text"],
+.grupo-filtro input[type="email"],
 .grupo-filtro select {
     width: 100%;
     height: 42px;
@@ -271,6 +267,7 @@ header {
 }
 
 .grupo-filtro input[type="text"]:focus,
+.grupo-filtro input[type="email"]:focus,
 .grupo-filtro select:focus {
     border-color: var(--si-blue-vibrant);
     outline: none;
@@ -278,7 +275,7 @@ header {
 }
 
 /* ==========================================================================
-   5. FORMULARIOS, INPUTS Y SELECTS
+   5. FORMULARIOS, INPUTS Y SELECTS (CORREGIDO PARA TYPE="EMAIL")
    ========================================================================== */
 .fila-formulario {
     display: flex;
@@ -291,7 +288,6 @@ header {
     flex-direction: column;
 }
 
-/* Clases de ancho de columnas */
 .w-50 { flex: 2; }
 .w-25 { flex: 1; }
 .w-33 { flex: 1; }
@@ -306,6 +302,7 @@ label {
 
 input[type="text"],
 input[type="number"],
+input[type="email"],
 select,
 textarea {
     background-color: var(--bg-body);
@@ -319,11 +316,12 @@ textarea {
 
 input[type="text"]:focus,
 input[type="number"]:focus,
+input[type="email"]:focus,
 select:focus,
 textarea:focus {
     border-color: var(--si-blue-vibrant);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.15); /* Enfoque azul de marca */
+    box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.15);
 }
 
 /* ==========================================================================
@@ -360,7 +358,6 @@ tr[style*="background-color: #000"] td {
     color: #000 !important;
 }
 
-/* Código del repuesto tipo etiqueta */
 .cod-repuesto {
     background-color: rgba(108, 117, 125, 0.15);
     color: var(--si-blue-vibrant);
@@ -370,32 +367,32 @@ tr[style*="background-color: #000"] td {
     font-weight: bold;
 }
 
-/* Celda contenedora de botones de acción de fila */
 .celda-acciones {
     display: flex;
     gap: 5px;
 }
+
 .fila-alerta-critica {
-    background-color: #fff3cd !important; /* Fondo amarillo suave clásico */
+    background-color: #fff3cd !important;
 }
 .fila-alerta-critica td {
-    color: #2d3134 !important; /* Texto gris plomo oscuro de tu marca para que contraste perfecto */
+    color: #2d3134 !important;
 }
 .fila-alerta-critica td strong {
-    color: #000000 !important; /* Negritas en negro puro */
+    color: #000000 !important;
 }
 
-/* 🌙 Cuando está en MODO OSCURO (Fondo oscuro por defecto, sin la clase tema-claro) */
 body:not(.tema-claro) .fila-alerta-critica {
-    background-color: rgba(255, 198, 0, 0.15) !important; /* Fondo amarillento oscuro traslúcido muy estético */
-    border-left: 4px solid var(--si-yellow); /* Detalle visual: borde izquierdo amarillo de alerta */
+    background-color: rgba(255, 198, 0, 0.15) !important;
+    border-left: 4px solid var(--si-yellow);
 }
 body:not(.tema-claro) .fila-alerta-critica td {
-    color: var(--si-yellow) !important; /* Texto en tu color amarillo destacado */
+    color: var(--si-yellow) !important;
 }
 body:not(.tema-claro) .fila-alerta-critica td strong {
-    color: #ffffff !important; /* Título del producto en blanco puro para que salte a la vista */
+    color: #ffffff !important;
 }
+
 /* ==========================================================================
    7. BOTONES DEL SISTEMA
    ========================================================================== */
@@ -421,7 +418,6 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     background-color: var(--si-blue-dark); 
 }
 
-/* Botones pequeños para las acciones de la tabla */
 .btn-tabla {
     padding: 6px 12px;
     border: none;
@@ -468,10 +464,9 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.7); /* Fondo traslúcido oscuro */
+    background-color: rgba(0, 0, 0, 0.7);
 }
 
-/* Caja contenedora blanca/gris del modal */
 .modal-contenido {
     background-color: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -519,39 +514,38 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     gap: 10px;
 }
 
-/* --- MODAL DETALLE DE PEDIDOS ("MODAL CHICO") --- */
 .modal-chico {
-    max-width: 36rem;          /* ~576px */
-    height: 85%;              /* Ocupa el 85% del alto de la pantalla */
-    max-height: 42rem;        /* Límite en pantallas grandes */
+    max-width: 36rem;
+    height: 85%;
+    max-height: 42rem;
     margin: 4vh auto;
     display: flex;
-    flex-direction: column;   /* Alinea elementos en columna */
+    flex-direction: column;
 }
 
 #form-editar-producto {
     display: flex;
     flex-direction: column;
     height: 100%;
-    overflow: hidden;         /* Evita scroll descontrolado del modal */
+    overflow: hidden;
 }
 
 .form-scroll-zona {
-    flex: 1;                  /* Toma el espacio central */
-    overflow-y: auto;         /* Activa scroll interno únicamente */
+    flex: 1;
+    overflow-y: auto;
     padding-right: 0.5rem;
     margin-bottom: 1rem;
 }
 
 #form-editar-producto .btn-actualizar {
-    margin-top: auto;         /* Se alinea siempre abajo del formulario */
+    margin-top: auto;
     width: 100%;
     padding: 0.75rem;
     font-size: 1rem;
 }
 
 /* ==========================================================================
-   9. GESTIÓN Y SLOT DE IMÁGENES (CREAR, EDITAR Y DETALLES)
+   9. GESTIÓN Y SLOT DE IMÁGENES
    ========================================================================== */
 .campo-imagenes-seccion,
 .edit-imagenes-seccion {
@@ -571,7 +565,6 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     color: var(--text-main);
 }
 
-/* Grillas de slots de fotos */
 .slots-imagenes-contenedor,
 .slots-imagenes-grid {
     display: grid;
@@ -581,7 +574,6 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     width: 100%;
 }
 
-/* Cajas individuales de carga de fotos */
 .slot-foto-sistema,
 .slot-foto {
     background-color: var(--bg-body);
@@ -603,7 +595,6 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     margin-bottom: 8px;
 }
 
-/* Contenedor protector de imagen rota */
 .preview-wrapper {
     position: relative;
     width: 100%;
@@ -619,25 +610,22 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     transition: background-color 0.3s ease;
 }
 
-/* Ajuste del wrapper para la grilla de edición */
 .slot-foto .preview-wrapper {
     height: 110px;
     margin-bottom: 8px;
     background-color: var(--bg-preview);
 }
 
-/* Imagen cargada dentro del slot */
 .imagen-preview-control,
 .slot-foto img {
     width: 100%;
     height: 100%;
-    object-fit: contain; /* No deforma las fotos de tus repuestos */
+    object-fit: contain;
     background-color: var(--bg-preview) !important;
     transition: background-color 0.3s ease;
     display: block;
 }
 
-/* Botón vacío interactivo de carga */
 .placeholder-vacio {
     display: flex;
     flex-direction: column;
@@ -664,7 +652,6 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     font-weight: bold;
 }
 
-/* Botón de borrar foto del slot */
 .btn-borrar-foto,
 .slot-foto .btn-borrar-foto {
     width: 100%;
@@ -695,7 +682,6 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     flex-direction: column;
 }
 
-/* Grilla contenedora de fotos en la modal Info */
 .imagenes-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -703,12 +689,12 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     margin-top: 15px;
 }
 
-/* Cajas de imágenes estables en la modal Info */
 .info-img-container {
     position: relative;
     width: 100%;
     height: 110px;
-    background-color: var(--bg-preview) !important;    border-radius: 6px;
+    background-color: var(--bg-preview) !important;
+    border-radius: 6px;
     overflow: hidden;
     border: 1.5px solid var(--border-color);
     transition: background-color 0.3s ease;
@@ -723,7 +709,6 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     transition: background-color 0.3s ease;
 }
 
-/* Elementos de stock mínimo en Info */
 .fila-inline {
     display: flex;
     align-items: center;
@@ -760,14 +745,14 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    color: #ffffff; /* El color del icono en la barra azul */
+    color: #ffffff;
     transition: background-color 0.2s ease, transform 0.2s ease;
     width: 38px;
     height: 38px;
 }
 
 .btn-alternar-tema:hover {
-    background-color: rgba(255, 255, 255, 0.15); /* Efecto hover circular sutil */
+    background-color: rgba(255, 255, 255, 0.15);
     transform: scale(1.05);
 }
 
@@ -777,8 +762,6 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     transition: transform 0.3s ease;
 }
 
-/* --- CONTROL DE VISIBILIDAD --- */
-/* Por defecto (Modo Oscuro): mostramos el Sol para poder pasar a Claro */
 .btn-alternar-tema .icono-sol {
     display: block;
 }
@@ -786,7 +769,6 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     display: none;
 }
 
-/* Cuando se activa la clase .tema-claro en el body: mostramos la Luna */
 body.tema-claro .btn-alternar-tema .icono-sol {
     display: none;
 }
@@ -795,9 +777,8 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 }
 
 /* ==========================================================================
-   11. SISTEMA INTERACTIVO DE LUPA (ZOOM LIGHTBOX)
+   11. SISTEMA INTERACTIVO DE LUPA
    ========================================================================== */
-/* Icono de Lupa flotante */
 .btn-lupa-zoom {
     position: absolute;
     top: 8px;
@@ -819,7 +800,7 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 
 .btn-lupa-zoom:hover {
     transform: scale(1.15);
-    background-color: rgba(0, 159, 227, 0.9); /* Cambia al azul de tu marca al hacer hover */
+    background-color: rgba(0, 159, 227, 0.9);
 }
 
 .btn-lupa-zoom svg {
@@ -830,7 +811,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     fill: none;
 }
 
-/* Visor oscuro de pantalla completa */
 .modal-zoom {
     display: none;
     position: fixed;
@@ -844,7 +824,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     justify-content: center;
 }
 
-/* Imagen proyectada en gigante */
 .modal-zoom-contenido {
     max-width: 90%;
     max-height: 85%;
@@ -860,7 +839,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     to { transform: scale(1); opacity: 1; }
 }
 
-/* Botón de cerrar de la lupa gigante */
 .cerrar-zoom {
     position: absolute;
     top: 20px;
@@ -911,7 +889,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     color: var(--text-main);
 }
 
-/* Resultados de búsqueda rápidos */
 .resultados-busqueda-pedido {
     background-color: var(--bg-body);
     border: 1px solid var(--border-color);
@@ -933,7 +910,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 .item-busqueda-sugerido:last-child { border-bottom: none; }
 .item-busqueda-sugerido:hover { background-color: rgba(255, 255, 255, 0.05); }
 
-/* Sugerencias de Stock Crítico */
 .alerta-critica-pedidos {
     border-left: 5px solid var(--si-yellow);
 }
@@ -955,7 +931,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     font-size: 0.85rem;
 }
 
-/* Tabla interna de pedidos */
 .encabezado-lista-pedido {
     display: flex;
     justify-content: space-between;
@@ -971,7 +946,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     margin-bottom: 1rem;
 }
 
-/* Acciones finales e inputs del módulo de pedidos */
 .acciones-pedido-final {
     border-top: 1px solid var(--border-color);
     padding-top: 1rem;
@@ -1002,10 +976,8 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 }
 
 /* ==========================================================================
-   13. DISEÑO ADAPTATIVO Y RESPONSIVO (MÓVILES Y PANTALLAS PEQUEÑAS)
+   13. DISEÑO ADAPTATIVO Y RESPONSIVO
    ========================================================================== */
-
-/* --- AJUSTES EN PANTALLAS DE TABLETS Y CELULARES (Menos de 992px) --- */
 @media (max-width: 992px) {
     .layout-pedidos {
         flex-direction: column;
@@ -1035,9 +1007,7 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     }
 }
 
-/* --- AJUSTES EXCLUSIVOS PARA CELULARES (Menos de 768px) --- */
 @media (max-width: 768px) {
-    /* 1. Header y Navegación */
     header {
         padding: 10px 15px;
     }
@@ -1065,7 +1035,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
         font-size: 13px;
     }
 
-    /* 2. Formularios de Registro y Edición */
     .fila-formulario {
         flex-direction: column;
         gap: 10px;
@@ -1081,15 +1050,13 @@ body.tema-claro .btn-alternar-tema .icono-luna {
         align-items: stretch;
     }
 
-    /* 3. Grillas de Slots de Fotos e Imágenes */
     .slots-imagenes-contenedor,
     .slots-imagenes-grid,
     .imagenes-grid {
-        grid-template-columns: 1fr; /* Pasa de 3 columnas a 1 por fila */
+        grid-template-columns: 1fr;
         gap: 10px;
     }
 
-    /* 4. Tablas con Scroll Horizontal Interno Limpio */
     .tabla-wrapper,
     .tabla-contenedor-pedido {
         width: 100%;
@@ -1097,7 +1064,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
         -webkit-overflow-scrolling: touch;
     }
 
-    /* 5. Modales */
     .modal-contenido,
     .modal-chico {
         width: 95%;
@@ -1115,10 +1081,8 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 }
 
 /* ==========================================================================
-   14. PANTALLA DE LOGIN Y PANEL DE USUARIO EN CABECERA
+   14. PANTALLA DE LOGIN
    ========================================================================== */
-
-/* --- PANEL DE USUARIO EN LA CABECERA --- */
 .info-usuario-header {
     display: flex;
     align-items: center;
@@ -1153,7 +1117,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     border-radius: 16px;
 }
 
-/* --- ESTRUCTURA GENERAL DE LOGIN --- */
 .pantalla-login {
     display: flex;
     justify-content: center;
@@ -1179,7 +1142,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
 }
 
-/* Logo e Identidad de Marca */
 .login-logo {
     width: 90px;
     height: 90px;
@@ -1205,7 +1167,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     font-weight: 500;
 }
 
-/* Formulario e Inputs de Login */
 .login-form .campo {
     margin-bottom: 1.2rem;
     text-align: left;
@@ -1242,7 +1203,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     letter-spacing: 0.3px;
 }
 
-/* Cartel de Error */
 .error-login {
     background-color: rgba(220, 53, 69, 0.15);
     color: #dc3545;
@@ -1256,7 +1216,7 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 }
 
 /* ==========================================================================
-   15. BOTÓN DE VISUALIZACIÓN DE CONTRASEÑA (OJO SVG)
+   15. BOTÓN VER CONTRASEÑA
    ========================================================================== */
 .campo-password-wrapper {
     position: relative;
@@ -1266,7 +1226,7 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 }
 
 .campo-password-wrapper input {
-    padding-right: 42px !important; /* Espacio reservado para que el texto no tape el ojo */
+    padding-right: 42px !important;
 }
 
 .btn-toggle-password {
@@ -1296,14 +1256,13 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 }
 
 /* ==========================================================================
-   16.MENÚ DESPLEGABLE DE USUARIO (HEADER LIMPIO)
+   16. MENÚ DESPLEGABLE DE USUARIO
    ========================================================================== */
 .usuario-dropdown-wrapper {
     position: relative;
     display: inline-block;
 }
 
-/* Botón interactivo de la pastilla de usuario */
 .btn-usuario-perfil {
     display: inline-flex;
     align-items: center;
@@ -1336,7 +1295,6 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     transform: rotate(180deg);
 }
 
-/* Tarjeta flotante del menú */
 .dropdown-menu-usuario {
     display: none;
     position: absolute;
