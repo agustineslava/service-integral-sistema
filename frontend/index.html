@@ -297,6 +297,15 @@
                     <tbody id="tabla-cuerpo"></tbody>
                 </table>
             </div>
+
+            <!-- CONTROLES DE PAGINACIÓN DE ALTO RENDIMIENTO -->
+            <div id="contenedor-paginacion" style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+                <span id="info-paginacion" style="font-size: 13px; color: var(--text-muted); font-weight: 600;">Mostrando página 1</span>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" id="btn-pagina-anterior" class="btn btn-tabla btn-info" style="padding: 6px 14px;" disabled>&laquo; Anterior</button>
+                    <button type="button" id="btn-pagina-siguiente" class="btn btn-tabla btn-info" style="padding: 6px 14px;" disabled>Siguiente &raquo;</button>
+                </div>
+            </div>
         </section>
     </main>
 

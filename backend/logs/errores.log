@@ -570,3 +570,63 @@
 2026-09-22T17:50:12:   code: 'ERR_ERL_UNEXPECTED_X_FORWARDED_FOR',
 2026-09-22T17:50:12:   help: 'https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/'
 2026-09-22T17:50:12: }
+2026-09-22T18:04:21: ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false (default). This could indicate a misconfiguration which would prevent express-rate-limit from accurately identifying users. See https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/ for more information.
+2026-09-22T18:04:21:     at Object.xForwardedForHeader (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:185:13)
+2026-09-22T18:04:21:     at wrappedValidations.<computed> [as xForwardedForHeader] (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:397:22)
+2026-09-22T18:04:21:     at Object.keyGenerator (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:658:20)
+2026-09-22T18:04:21:     at D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:710:32
+2026-09-22T18:04:21:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-09-22T18:04:21:     at async D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:691:5 {
+2026-09-22T18:04:21:   code: 'ERR_ERL_UNEXPECTED_X_FORWARDED_FOR',
+2026-09-22T18:04:21:   help: 'https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/'
+2026-09-22T18:04:21: }
+2026-09-22T20:00:00: ❌ Error al ejecutar el backup: Command failed: "D:\Program Files\MySQL\MySQL Workbench 8.0 CE\mysqldump.exe" -h localhost -u service_integral_app -p"Agus1tin." ServiceIntegralsistema > "D:\SitemaServiceIntegral\backend\backups\backup_ServiceIntegralsistema_2026-09-22_23-00-00.sql"
+2026-09-22T20:00:00: mysqldump: [Warning] Using a password on the command line interface can be insecure.
+2026-09-22T20:00:00: Warning: A partial dump from a server that has GTIDs will by default include the GTIDs of all transactions, even those that changed suppressed parts of the database. If you don't want to restore GTIDs, pass --set-gtid-purged=OFF. To make a complete dump, pass --all-databases --triggers --routines --events. 
+2026-09-22T20:00:00: Warning: A dump from a server that has GTIDs enabled will by default include the GTIDs of all transactions, even those that were executed during its extraction and might not be represented in the dumped data. This might result in an inconsistent data dump. 
+2026-09-22T20:00:00: In order to ensure a consistent backup of the database, pass --single-transaction or --lock-all-tables or --master-data. 
+2026-09-22T20:00:00: mysqldump: Error: 'Access denied; you need (at least one of) the PROCESS privilege(s) for this operation' when trying to dump tablespaces
+2026-09-22T20:00:00: mysqldump: Got error: 1044: Access denied for user 'service_integral_app'@'localhost' to database 'serviceintegralsistema' when using LOCK TABLES
+2026-09-22T20:00:00: 
+2026-09-22T21:11:31: ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false (default). This could indicate a misconfiguration which would prevent express-rate-limit from accurately identifying users. See https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/ for more information.
+2026-09-22T21:11:31:     at Object.xForwardedForHeader (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:185:13)
+2026-09-22T21:11:31:     at wrappedValidations.<computed> [as xForwardedForHeader] (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:397:22)
+2026-09-22T21:11:31:     at Object.keyGenerator (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:658:20)
+2026-09-22T21:11:31:     at D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:710:32
+2026-09-22T21:11:31:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-09-22T21:11:31:     at async D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:691:5 {
+2026-09-22T21:11:31:   code: 'ERR_ERL_UNEXPECTED_X_FORWARDED_FOR',
+2026-09-22T21:11:31:   help: 'https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/'
+2026-09-22T21:11:31: }
+2026-09-23T09:00:28: ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false (default). This could indicate a misconfiguration which would prevent express-rate-limit from accurately identifying users. See https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/ for more information.
+2026-09-23T09:00:28:     at Object.xForwardedForHeader (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:185:13)
+2026-09-23T09:00:28:     at wrappedValidations.<computed> [as xForwardedForHeader] (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:397:22)
+2026-09-23T09:00:28:     at Object.keyGenerator (D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:658:20)
+2026-09-23T09:00:28:     at D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:710:32
+2026-09-23T09:00:28:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-09-23T09:00:28:     at async D:\SitemaServiceIntegral\backend\node_modules\express-rate-limit\dist\index.cjs:691:5 {
+2026-09-23T09:00:28:   code: 'ERR_ERL_UNEXPECTED_X_FORWARDED_FOR',
+2026-09-23T09:00:28:   help: 'https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/'
+2026-09-23T09:00:28: }
+2026-09-23T09:08:05: ReferenceError: capitalizarPalabras is not defined
+2026-09-23T09:08:05:     at validarReparacion (D:\SitemaServiceIntegral\backend\server.js:245:28)
+2026-09-23T09:08:05:     at D:\SitemaServiceIntegral\backend\server.js:957:24
+2026-09-23T09:08:05:     at Layer.handleRequest (D:\SitemaServiceIntegral\backend\node_modules\router\lib\layer.js:152:17)
+2026-09-23T09:08:05:     at next (D:\SitemaServiceIntegral\backend\node_modules\router\lib\route.js:157:13)
+2026-09-23T09:08:05:     at requiereAdmin (D:\SitemaServiceIntegral\backend\server.js:156:5)
+2026-09-23T09:08:05:     at Layer.handleRequest (D:\SitemaServiceIntegral\backend\node_modules\router\lib\layer.js:152:17)
+2026-09-23T09:08:05:     at next (D:\SitemaServiceIntegral\backend\node_modules\router\lib\route.js:157:13)
+2026-09-23T09:08:05:     at D:\SitemaServiceIntegral\backend\server.js:148:9
+2026-09-23T09:08:05:     at D:\SitemaServiceIntegral\backend\node_modules\jsonwebtoken\verify.js:261:12
+2026-09-23T09:08:05:     at getSecret (D:\SitemaServiceIntegral\backend\node_modules\jsonwebtoken\verify.js:97:14)
+2026-09-23T09:08:33: ReferenceError: capitalizarPalabras is not defined
+2026-09-23T09:08:33:     at validarReparacion (D:\SitemaServiceIntegral\backend\server.js:245:28)
+2026-09-23T09:08:33:     at D:\SitemaServiceIntegral\backend\server.js:957:24
+2026-09-23T09:08:33:     at Layer.handleRequest (D:\SitemaServiceIntegral\backend\node_modules\router\lib\layer.js:152:17)
+2026-09-23T09:08:33:     at next (D:\SitemaServiceIntegral\backend\node_modules\router\lib\route.js:157:13)
+2026-09-23T09:08:33:     at requiereAdmin (D:\SitemaServiceIntegral\backend\server.js:156:5)
+2026-09-23T09:08:33:     at Layer.handleRequest (D:\SitemaServiceIntegral\backend\node_modules\router\lib\layer.js:152:17)
+2026-09-23T09:08:33:     at next (D:\SitemaServiceIntegral\backend\node_modules\router\lib\route.js:157:13)
+2026-09-23T09:08:33:     at D:\SitemaServiceIntegral\backend\server.js:148:9
+2026-09-23T09:08:33:     at D:\SitemaServiceIntegral\backend\node_modules\jsonwebtoken\verify.js:261:12
+2026-09-23T09:08:33:     at getSecret (D:\SitemaServiceIntegral\backend\node_modules\jsonwebtoken\verify.js:97:14)

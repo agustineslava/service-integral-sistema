@@ -1,0 +1,236 @@
+. Endpoint público en backend/server.js
+Agregá en tu backend/server.js este endpoint sin verificarToken, para que cualquier celular que lea el QR pueda consultar los datos básicos del repuesto:
+
+// Endpoint público de consulta rápida por QR (no requiere login)
+app.get('/api/consulta-publica/:id', (req, res) => {
+    const { id } = req.params;
+    const sql = `
+        SELECT id, nombre, precio, stock, categoria, distribuidor, 
+               codigoDistribuidor, descripcion, imagen_1 
+        FROM productos 
+        WHERE id = ?
+    `;
+    db.query(sql, [id], (err, rows) => {
+        if (err) {
+            console.error('Error en consulta pública:', err);
+            return res.status(500).json({ error: 'Error en el servidor' });
+        }
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Producto no encontrado' });
+        }
+        res.json(rows[0]);
+    });
+});
+
+
+2. Crear la vista móvil frontend/consulta.html
+Creá este archivo nuevo en la carpeta frontend/:
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta de Repuesto</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background-color: #1a1d20; color: #f8f9fa; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .ficha { background: #24282c; border: 1px solid #343a40; border-radius: 12px; padding: 20px; width: 100%; max-width: 420px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+        .marca { color: #009fe3; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+        .nombre { font-size: 20px; font-weight: 700; margin-bottom: 12px; line-height: 1.2; }
+        .precio-box { background: rgba(0, 159, 227, 0.1); border: 1.5px solid #009fe3; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 15px; }
+        .precio-label { font-size: 12px; color: #adb5bd; text-transform: uppercase; }
+        .precio-valor { font-size: 28px; font-weight: 800; color: #009fe3; }
+        .dato-fila { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #343a40; font-size: 14px; }
+        .dato-fila span { color: #adb5bd; }
+        .dato-fila strong { color: #f8f9fa; text-align: right; }
+        .descripcion { margin-top: 15px; font-size: 13px; color: #ced4da; background: #121416; padding: 10px; border-radius: 6px; line-height: 1.4; }
+        .foto { width: 100%; max-height: 200px; object-fit: contain; margin-top: 15px; border-radius: 8px; background: #121416; border: 1px solid #343a40; }
+        .cargando { text-align: center; color: #adb5bd; padding: 30px; }
+    </style>
+</head>
+<body>
+    <div class="ficha" id="contenedor">
+        <p class="cargando">Cargando datos del repuesto...</p>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+
+        async function cargar() {
+            const cont = document.getElementById('contenedor');
+            if (!id) {
+                cont.innerHTML = '<p style="color:#dc3545; text-align:center;">QR inválido: falta el código del producto.</p>';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/consulta-publica/${id}`);
+                if (!res.ok) throw new Error('No encontrado');
+                const p = await res.json();
+
+                cont.innerHTML = `
+                    <div class="marca">Service Integral</div>
+                    <h1 class="nombre">${p.nombre}</h1>
+                    
+                    <div class="precio-box">
+                        <div class="precio-label">Precio al Público</div>
+                        <div class="precio-valor">$${parseFloat(p.precio).toFixed(2)}</div>
+                    </div>
+
+                    <div class="dato-fila">
+                        <span>Código / Ref:</span>
+                        <strong>${p.codigoDistribuidor || 'S/C'}</strong>
+                    </div>
+                    <div class="dato-fila">
+                        <span>Stock Disponible:</span>
+                        <strong style="color: ${p.stock > 0 ? '#28a745' : '#dc3545'};">${p.stock} unidades</strong>
+                    </div>
+                    <div class="dato-fila">
+                        <span>Categoría:</span>
+                        <strong>${p.categoria || 'Repuestos'}</strong>
+                    </div>
+                    <div class="dato-fila">
+                        <span>Proveedor:</span>
+                        <strong>${p.distribuidor || 'General'}</strong>
+                    </div>
+
+                    ${p.descripcion ? `<div class="descripcion"><strong>Detalle / Falla común:</strong><br>${p.descripcion}</div>` : ''}
+                    ${p.imagen_1 ? `<img src="${p.imagen_1}" class="foto" alt="Foto">` : ''}
+                `;
+            } catch (e) {
+                cont.innerHTML = '<p style="color:#dc3545; text-align:center;">El repuesto no existe o fue dado de baja.</p>';
+            }
+        }
+        cargar();
+    </script>
+</body>
+</html>
+
+
+3. Modificar frontend/app.js (Generar QR y formato 50x25 mm)Para generar el código QR en la etiqueta sin librerías pesadas, usamos la librería ultra liviana qrcode.js.En frontend/index.html, agregá antes del cierre del </head>:   
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+Y en frontend/app.js, reemplazá las dos funciones de impresión (abrirModalEtiqueta e imprimirEtiquetaModal) por estas configuradas con medidas térmicas exactas de 50 mm x 25 mm:   
+
+function abrirModalEtiqueta(id) {
+    const prod = productosLocales.find(p => p.id === id);
+    if (!prod) return;
+
+    document.getElementById('etiqueta-nombre').textContent = prod.nombre;
+    document.getElementById('etiqueta-codigo').textContent = `COD: ${prod.codigoDistribuidor || 'ART-' + prod.id}`;
+    document.getElementById('etiqueta-distribuidor').textContent = `$${parseFloat(prod.precio).toFixed(2)}`;
+
+    // URL que abrirá el celular al escanear
+    const urlConsulta = `${window.location.origin}/consulta.html?id=${prod.id}`;
+
+    // Renderizar código QR en el canvas
+    const canvasQR = document.getElementById('codigo-barras-svg');
+    if (canvasQR) {
+        // Limpiamos y reemplazamos por un canvas QR
+        canvasQR.outerHTML = '<canvas id="codigo-qr-canvas" style="width: 60px; height: 60px;"></canvas>';
+        QRCode.toCanvas(document.getElementById('codigo-qr-canvas'), urlConsulta, {
+            width: 70,
+            margin: 1,
+            color: { dark: "#000000", light: "#ffffff" }
+        }, (err) => {
+            if (err) console.error(err);
+        });
+    }
+
+    document.getElementById('modal-etiqueta').style.display = 'block';
+}
+
+function imprimirEtiquetaModal() {
+    const canvas = document.getElementById('codigo-qr-canvas');
+    const qrDataUrl = canvas ? canvas.toDataURL() : '';
+    const nombre = document.getElementById('etiqueta-nombre').textContent;
+    const codigo = document.getElementById('etiqueta-codigo').textContent;
+    const precio = document.getElementById('etiqueta-distribuidor').textContent;
+
+    const ventanaImpresion = window.open('', '_blank', 'width=350,height=250');
+    ventanaImpresion.document.write(`
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <title>Etiqueta 50x25</title>
+                <style>
+                    @page {
+                        size: 50mm 25mm;
+                        margin: 0;
+                    }
+                    * {
+                        box-sizing: border-box;
+                        margin: 0;
+                        padding: 0;
+                        font-family: Arial, Helvetica, sans-serif;
+                    }
+                    body {
+                        width: 50mm;
+                        height: 25mm;
+                        padding: 1.5mm 2mm;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        overflow: hidden;
+                    }
+                    .info {
+                        width: 32mm;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                    }
+                    .marca {
+                        font-size: 6pt;
+                        font-weight: bold;
+                        text-transform: uppercase;
+                        color: #555;
+                    }
+                    .nombre {
+                        font-size: 7.5pt;
+                        font-weight: 800;
+                        line-height: 1.1;
+                        max-height: 10mm;
+                        overflow: hidden;
+                        margin: 0.5mm 0;
+                    }
+                    .codigo {
+                        font-size: 6.5pt;
+                        font-family: monospace;
+                        font-weight: bold;
+                    }
+                    .precio {
+                        font-size: 9pt;
+                        font-weight: 900;
+                        margin-top: 0.5mm;
+                    }
+                    .qr-container {
+                        width: 14mm;
+                        height: 14mm;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .qr-container img {
+                        width: 100%;
+                        height: 100%;
+                    }
+                </style>
+            </head>
+            <body onload="window.print(); window.close();">
+                <div class="info">
+                    <span class="marca">Service Integral</span>
+                    <div class="nombre">${nombre}</div>
+                    <div class="codigo">${codigo}</div>
+                    <div class="precio">${precio}</div>
+                </div>
+                <div class="qr-container">
+                    <img src="${qrDataUrl}" />
+                </div>
+            </body>
+        </html>
+    `);
+    ventanaImpresion.document.close();
+}

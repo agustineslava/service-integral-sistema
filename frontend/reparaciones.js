@@ -2,7 +2,7 @@
    GESTIÓN INTEGRAL DE REPARACIONES Y TALLER
    ========================================================================== */
 
-let catalogoProductos = [];
+let productosCache = {};
 let reparacionesLocales = [];
 let repuestosAsignadosNuevo = [];
 let repuestosAsignadosEdit = [];
@@ -45,24 +45,51 @@ function capitalizarPrimeraLetra(texto) {
 }
 
 /**
- * Carga inicial: catálogo de repuestos de MySQL y lista de órdenes
+ * Carga inicial: consulta reparaciones y activa búsqueda bajo demanda
  */
 async function inicializarModulo() {
     try {
-        const resStock = await apiFetch('/api/productos');
-        catalogoProductos = await resStock.json();
-
-        const datalist = document.getElementById('lista-repuestos-catalogo');
-        if (datalist) {
-            datalist.innerHTML = catalogoProductos.map(p => 
-                `<option value="${p.nombre} [Cód: ${p.codigoDistribuidor || 'S/C'}]" data-id="${p.id}"></option>`
-            ).join('');
-        }
-
         await cargarReparaciones();
+        configurarBusquedaRepuestos();
     } catch (e) {
         console.error('Error al inicializar reparaciones:', e);
     }
+}
+
+/**
+ * Búsqueda de repuestos en tiempo real (con debounce) sin saturar memoria
+ */
+function configurarBusquedaRepuestos() {
+    const datalist = document.getElementById('lista-repuestos-catalogo');
+    if (!datalist) return;
+
+    let debounceBusquedaRepuesto = null;
+
+    async function buscarYActualizarDatalist(termino) {
+        if (!termino || termino.trim().length < 2) return;
+
+        try {
+            const respuesta = await apiFetch(`/api/productos?buscar=${encodeURIComponent(termino.trim())}&limit=15`);
+            const resultados = respuesta.ok ? await respuesta.json() : [];
+
+            resultados.forEach(p => { productosCache[p.id] = p; });
+
+            datalist.innerHTML = resultados.map(p =>
+                `<option value="${escapeHtml(p.nombre)} [Cód: ${escapeHtml(p.codigoDistribuidor || 'S/C')}]" data-id="${p.id}"></option>`
+            ).join('');
+        } catch (error) {
+            console.error('Error al buscar repuestos:', error);
+        }
+    }
+
+    ['rep-input-selector', 'edit-rep-input-selector'].forEach(idInput => {
+        const input = document.getElementById(idInput);
+        if (!input) return;
+        input.addEventListener('input', () => {
+            clearTimeout(debounceBusquedaRepuesto);
+            debounceBusquedaRepuesto = setTimeout(() => buscarYActualizarDatalist(input.value), 300);
+        });
+    });
 }
 
 /**
@@ -180,7 +207,7 @@ function renderizarTablaReparaciones(lista) {
 }
 
 /**
- * Búsqueda combinada reactiva (Texto + Estado)
+ * Búsqueda combinada reactiva con orden de prioridad por antigüedad y estado
  */
 function filtrarYRenderizarReparaciones() {
     const inputTexto = document.getElementById('input-buscar-reparaciones');
@@ -202,6 +229,41 @@ function filtrarYRenderizarReparaciones() {
             String(r.id).includes(term)
         );
         return coincideEstado && coincideTexto;
+    });
+
+    const ahora = new Date().getTime();
+    const catorceDiasMs = 14 * 24 * 60 * 60 * 1000; // 14 días en milisegundos
+
+    filtrados.sort((a, b) => {
+        const aEsCerrado = (a.estado === 'Entregado' || a.estado === 'Cancelado');
+        const bEsCerrado = (b.estado === 'Entregado' || b.estado === 'Cancelado');
+
+        // Los cerrados van siempre al final
+        if (!aEsCerrado && bEsCerrado) return -1;
+        if (aEsCerrado && !bEsCerrado) return 1;
+
+        // Si ambos están cerrados, ordenar por fecha más reciente
+        if (aEsCerrado && bEsCerrado) {
+            return new Date(b.fecha_inicio) - new Date(a.fecha_inicio);
+        }
+
+        // Si ambos están activos/pendientes:
+        const tiempoA = ahora - new Date(a.fecha_inicio).getTime();
+        const tiempoB = ahora - new Date(b.fecha_inicio).getTime();
+
+        const aTieneMasDe2Semanas = tiempoA >= catorceDiasMs;
+        const bTieneMasDe2Semanas = tiempoB >= catorceDiasMs;
+
+        // Prioridad 1: Activos con 2 semanas o más
+        if (aTieneMasDe2Semanas && !bTieneMasDe2Semanas) return -1;
+        if (!aTieneMasDe2Semanas && bTieneMasDe2Semanas) return 1;
+
+        // Prioridad 2: Específicamente 'Pendiente' antes que otros estados activos
+        if (a.estado === 'Pendiente' && b.estado !== 'Pendiente') return -1;
+        if (a.estado !== 'Pendiente' && b.estado === 'Pendiente') return 1;
+
+        // Si tienen la misma prioridad, el que lleva más tiempo esperando aparece primero
+        return new Date(a.fecha_inicio) - new Date(b.fecha_inicio);
     });
 
     renderizarTablaReparaciones(filtrados);
@@ -229,7 +291,9 @@ function agregarRepuestoAOrden(contexto) {
     if (!texto) return;
 
     const textoLimpio = texto.toLowerCase();
-    const encontrado = catalogoProductos.find(p => {
+
+    // Búsqueda en el caché de productos traídos bajo demanda
+    const encontrado = Object.values(productosCache).find(p => {
         const nombreMatch = p.nombre && textoLimpio.includes(p.nombre.toLowerCase());
         const codigoMatch = p.codigoDistribuidor && textoLimpio.includes(String(p.codigoDistribuidor).toLowerCase());
         return nombreMatch || codigoMatch;

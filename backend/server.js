@@ -19,6 +19,9 @@ const helmet = require('helmet');
 
 const app = express();
 
+// Habilitar proxy de confianza para Cloudflare Tunnel y express-rate-limit
+app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -47,7 +50,7 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 const storage = multer.memoryStorage();
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // máximo 5MB por imagen
+    limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         if (tiposPermitidos.includes(file.mimetype)) {
@@ -157,10 +160,26 @@ function requiereAdmin(req, res, next) {
 }
 
 /* ==========================================================================
-   5.1 VALIDACIÓN DE DATOS DE ENTRADA
+   5.1 VALIDACIÓN DE DATOS DE ENTRADA Y FORMATEO
    ========================================================================== */
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function capitalizarPalabras(texto) {
+    if (!texto || typeof texto !== 'string') return null;
+    return texto
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+        .join(' ');
+}
+
+function capitalizarPrimeraLetra(texto) {
+    if (!texto || typeof texto !== 'string') return null;
+    const limpio = texto.trim();
+    return limpio.charAt(0).toUpperCase() + limpio.slice(1);
+}
 
 function validarProducto(body) {
     const nombre = typeof body.nombre === 'string' ? body.nombre.trim() : '';
@@ -456,17 +475,110 @@ app.post('/api/usuarios/cambiar-password', verificarToken, limitadorCambioPasswo
 });
 
 /* ==========================================================================
-   6. ENDPOINTS DE PRODUCTOS / STOCK (C.R.U.D.)
+   6. ENDPOINTS DE PRODUCTOS / STOCK (C.R.U.D. Y BÚSQUEDA OPTIMIZADA)
    ========================================================================== */
 
 app.get('/api/productos', verificarToken, (req, res) => {
-    const sql = 'SELECT * FROM productos ORDER BY id DESC';
-    db.query(sql, (err, results) => {
-        if (err) {
-            console.error('Error al traer productos:', err);
+    const paginaParam = parseInt(req.query.page, 10);
+    const usarPaginacion = Number.isInteger(paginaParam) && paginaParam > 0;
+
+    const busqueda = typeof req.query.buscar === 'string' ? req.query.buscar.trim() : '';
+    const estado = req.query.estado || 'TODOS';
+    const categoria = req.query.categoria || 'TODAS';
+    const ordenMap = {
+        nombre_asc: 'nombre ASC', nombre_desc: 'nombre DESC',
+        precio_asc: 'precio ASC', precio_desc: 'precio DESC',
+        stock_asc: 'stock ASC', stock_desc: 'stock DESC',
+        id_asc: 'id ASC', id_desc: 'id DESC'
+    };
+    const ordenSql = ordenMap[req.query.orden] || 'id DESC';
+
+    const where = [];
+    const params = [];
+
+    if (busqueda) {
+        where.push('(nombre LIKE ? OR codigoDistribuidor LIKE ? OR distribuidor LIKE ? OR descripcion LIKE ?)');
+        const like = `%${busqueda}%`;
+        params.push(like, like, like, like);
+    }
+    if (estado === 'CRITICO') where.push('(stock <= stockMinimo AND stock > 0)');
+    else if (estado === 'NORMAL') where.push('stock > stockMinimo');
+    else if (estado === 'SIN_STOCK') where.push('stock = 0');
+    else if (estado === 'BAJO_MINIMO') where.push('stock <= stockMinimo');
+
+    if (categoria && categoria !== 'TODAS') {
+        where.push('categoria = ?');
+        params.push(categoria);
+    }
+    if (typeof req.query.distribuidor === 'string' && req.query.distribuidor.trim() !== '') {
+        where.push('distribuidor = ?');
+        params.push(req.query.distribuidor.trim());
+    }
+
+    const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
+
+    // Modo lista simple / autocompletar bajo demanda (para pedidos y reparaciones)
+    if (!usarPaginacion) {
+        const limiteQuery = parseInt(req.query.limit, 10);
+        const pideAlgoAcotado = busqueda || Number.isInteger(limiteQuery);
+        const limite = Number.isInteger(limiteQuery) && limiteQuery > 0 && limiteQuery <= 200 ? limiteQuery : 50;
+
+        let sql = `SELECT * FROM productos${whereSql} ORDER BY ${ordenSql}`;
+        const finalParams = [...params];
+        if (pideAlgoAcotado) {
+            sql += ' LIMIT ?';
+            finalParams.push(limite);
+        }
+
+        db.query(sql, finalParams, (err, results) => {
+            if (err) {
+                console.error('Error al traer productos:', err);
+                return res.status(500).json({ error: 'Error interno del servidor' });
+            }
+            res.json(results);
+        });
+        return;
+    }
+
+    // Modo paginado para la tabla de Stock
+    const limiteParam = parseInt(req.query.limit, 10);
+    const porPagina = Number.isInteger(limiteParam) && limiteParam > 0 && limiteParam <= 200 ? limiteParam : 50;
+    const offset = (paginaParam - 1) * porPagina;
+
+    db.query(`SELECT COUNT(*) AS total FROM productos${whereSql}`, params, (errCount, resultCount) => {
+        if (errCount) {
+            console.error('Error al contar productos:', errCount);
             return res.status(500).json({ error: 'Error interno del servidor' });
         }
-        res.json(results);
+        const total = resultCount[0].total;
+
+        db.query(
+            `SELECT * FROM productos${whereSql} ORDER BY ${ordenSql} LIMIT ? OFFSET ?`,
+            [...params, porPagina, offset],
+            (err, results) => {
+                if (err) {
+                    console.error('Error al traer productos:', err);
+                    return res.status(500).json({ error: 'Error interno del servidor' });
+                }
+                res.json({
+                    productos: results,
+                    total,
+                    pagina: paginaParam,
+                    totalPaginas: Math.max(1, Math.ceil(total / porPagina))
+                });
+            }
+        );
+    });
+});
+
+app.get('/api/productos/proveedores', verificarToken, (req, res) => {
+    const sql = "SELECT DISTINCT distribuidor FROM productos WHERE distribuidor IS NOT NULL AND distribuidor != '' ORDER BY distribuidor ASC";
+    db.query(sql, (err, rows) => {
+        if (err) {
+            console.error('Error al listar proveedores:', err);
+            return res.status(500).json({ error: 'Error interno del servidor' });
+        }
+        res.json(rows.map(r => r.distribuidor));
     });
 });
 
@@ -759,9 +871,11 @@ app.get('/api/movimientos-stock', verificarToken, requiereAdmin, (req, res) => {
    10. MÓDULO: CLIENTES (HISTORIAL Y GESTIÓN)
    ========================================================================== */
 
-// 1. Listar clientes (con búsqueda por nombre, teléfono o dirección)
+// 1. Listar clientes (con búsqueda y límite para no saturar memoria)
 app.get('/api/clientes', verificarToken, (req, res) => {
     const { buscar } = req.query;
+    const limiteQuery = parseInt(req.query.limit, 10);
+    const limite = Number.isInteger(limiteQuery) && limiteQuery > 0 && limiteQuery <= 100 ? limiteQuery : 50;
 
     let sql = `
         SELECT c.*, COUNT(r.id) AS cantidad_reparaciones
@@ -780,7 +894,8 @@ app.get('/api/clientes', verificarToken, (req, res) => {
         params.push(termino, termino, termino);
     }
 
-    sql += ' GROUP BY c.id ORDER BY c.nombre ASC';
+    sql += ' GROUP BY c.id ORDER BY c.nombre ASC LIMIT ?';
+    params.push(limite);
 
     db.query(sql, params, (err, rows) => {
         if (err) {
@@ -791,7 +906,6 @@ app.get('/api/clientes', verificarToken, (req, res) => {
     });
 });
 
-// 2. Detalle de un cliente puntual
 app.get('/api/clientes/:id', verificarToken, (req, res) => {
     db.query('SELECT * FROM clientes WHERE id = ?', [req.params.id], (err, rows) => {
         if (err) {
@@ -803,7 +917,6 @@ app.get('/api/clientes/:id', verificarToken, (req, res) => {
     });
 });
 
-// 3. Historial completo de reparaciones de un cliente
 app.get('/api/clientes/:id/reparaciones', verificarToken, (req, res) => {
     db.query(
         'SELECT * FROM reparaciones WHERE cliente_id = ? ORDER BY fecha_inicio DESC',
@@ -818,7 +931,6 @@ app.get('/api/clientes/:id/reparaciones', verificarToken, (req, res) => {
     );
 });
 
-// 4. Editar los datos de un cliente
 app.put('/api/clientes/:id', verificarToken, requiereAdmin, (req, res) => {
     const validacion = validarCliente(req.body);
     if (!validacion.valido) {
@@ -899,7 +1011,6 @@ async function descontarStockPorReparacion(idOrden, equipo, tecnicoAsignado, lis
     }
 }
 
-// 1. Obtener todas las órdenes de servicio
 app.get('/api/reparaciones', verificarToken, (req, res) => {
     const sql = 'SELECT * FROM reparaciones ORDER BY id DESC';
     db.query(sql, (err, rows) => {
@@ -911,7 +1022,6 @@ app.get('/api/reparaciones', verificarToken, (req, res) => {
     });
 });
 
-// 2. Registrar nueva orden de servicio
 app.post('/api/reparaciones', verificarToken, requiereAdmin, async (req, res) => {
     const validacion = validarReparacion(req.body);
     if (!validacion.valido) {
@@ -950,7 +1060,6 @@ app.post('/api/reparaciones', verificarToken, requiereAdmin, async (req, res) =>
     }
 });
 
-// 3. Editar orden de servicio existente
 app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res) => {
     const { id } = req.params;
 
@@ -1015,7 +1124,6 @@ app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res)
     }
 });
 
-// 4. Cambiar estado con descuento automático de stock al marcar 'Entregado'
 app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (req, res) => {
     const { id } = req.params;
     const ESTADOS_VALIDOS = ['Pendiente', 'En Reparacion', 'Esperando Repuesto', 'Listo', 'Entregado', 'Cancelado'];
@@ -1063,7 +1171,6 @@ app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (re
     }
 });
 
-// 5. Eliminar orden de trabajo (Solo ADMIN)
 app.delete('/api/reparaciones/:id', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
 

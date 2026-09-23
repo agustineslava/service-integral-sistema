@@ -1,5 +1,5 @@
 /* ==========================================================================
-   GESTIÓN DE CLIENTES: listado, búsqueda y ficha con historial completo
+   GESTIÓN DE CLIENTES: listado optimizado, búsqueda y ficha con historial
    ========================================================================== */
 
 /**
@@ -23,9 +23,6 @@ let timeoutBusquedaClientes = null;
 document.addEventListener('DOMContentLoaded', () => {
     cargarClientes();
 
-    // TECNICO puede consultar el historial, pero la edición de datos del
-    // cliente queda para ADMIN (mismo criterio que en Reparaciones; el
-    // backend ya lo exige igual, esto es solo para que la interfaz sea clara).
     const usuario = JSON.parse(localStorage.getItem('usuario_actual') || '{}');
     if (usuario.rol === 'TECNICO') {
         const btnGuardar = document.querySelector('#form-editar-cliente button[type="submit"]');
@@ -36,14 +33,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 inputBuscarClientes.addEventListener('input', () => {
     clearTimeout(timeoutBusquedaClientes);
-    timeoutBusquedaClientes = setTimeout(cargarClientes, 300); // debounce: espera a que dejes de tipear
+    timeoutBusquedaClientes = setTimeout(cargarClientes, 300); // debounce de 300ms
 });
 
 async function cargarClientes() {
     const termino = inputBuscarClientes.value.trim();
     const url = termino
-        ? `/api/clientes?buscar=${encodeURIComponent(termino)}`
-        : '/api/clientes';
+        ? `/api/clientes?buscar=${encodeURIComponent(termino)}&limit=50`
+        : '/api/clientes?limit=50';
 
     try {
         const respuesta = await apiFetch(url);
@@ -58,7 +55,7 @@ async function cargarClientes() {
 
 function renderizarTablaClientes(clientes) {
     if (clientes.length === 0) {
-        tablaClientesCuerpo.innerHTML = '<tr><td colspan="5" style="text-align:center;">No se encontraron clientes.</td></tr>';
+        tablaClientesCuerpo.innerHTML = '<tr><td colspan="5" style="text-align:center;">No se encontraron clientes coincidentes.</td></tr>';
         return;
     }
 
@@ -125,7 +122,6 @@ function renderizarHistorialCliente(historial) {
         else if (r.estado === 'Entregado') claseBadge = 'badge-entregado';
         else if (r.estado === 'Cancelado') claseBadge = 'badge-cancelado';
 
-        // Procesar y obtener repuestos usados de forma segura
         let textoRepuestos = r.repuestos_usados;
         if (!textoRepuestos || textoRepuestos.trim() === '' || textoRepuestos === 'Ninguno') {
             try {
@@ -175,7 +171,7 @@ document.getElementById('form-editar-cliente').addEventListener('submit', async 
 
         if (respuesta.ok) {
             alert('Datos del cliente actualizados.');
-            cargarClientes(); // refresca la tabla por si cambió el nombre/teléfono mostrado
+            cargarClientes();
         } else {
             alert(data.error || 'No se pudo actualizar el cliente.');
         }
@@ -190,7 +186,6 @@ function cerrarModal(idModal) {
     if (modal) modal.style.display = 'none';
 }
 
-// Cerrar el modal si se hace click afuera del contenido
 window.addEventListener('click', (e) => {
     const modal = document.getElementById('modal-ficha-cliente');
     if (e.target === modal) modal.style.display = 'none';
