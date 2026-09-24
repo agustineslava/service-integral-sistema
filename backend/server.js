@@ -1022,6 +1022,7 @@ app.get('/api/reparaciones', verificarToken, (req, res) => {
     });
 });
 
+// 2. Registrar nueva orden de servicio (Solo pasa a clientes si ya nace 'Entregado')
 app.post('/api/reparaciones', verificarToken, requiereAdmin, async (req, res) => {
     const validacion = validarReparacion(req.body);
     if (!validacion.valido) {
@@ -1037,21 +1038,36 @@ app.post('/api/reparaciones', verificarToken, requiereAdmin, async (req, res) =>
     const repuestosResumen = repuestos_detalle.map(r => `${r.nombre} (x${r.cantidad})`).join(', ') || 'Ninguno';
 
     try {
-        const clienteId = await resolverOCrearCliente(cliente_nombre, cliente_telefono, direccion);
+        // Solo guardamos en ficha de clientes si el estado inicial es 'Entregado'
+        let clienteId = null;
+        let debeMarcarDescontado = 0;
+
+        if (estado === 'Entregado') {
+            clienteId = await resolverOCrearCliente(cliente_nombre, cliente_telefono, direccion);
+            if (repuestos_detalle.length > 0) {
+                // Generamos ID temporal para el movimiento
+                debeMarcarDescontado = 1;
+            }
+        }
 
         const sql = `
             INSERT INTO reparaciones 
             (cliente_id, cliente_nombre, cliente_telefono, direccion, tipo_cobertura, equipo, falla_declarada, 
              diagnostico_tecnico, notas_servicio, repuestos_usados, repuestos_detalle, costo_mano_obra, costo_repuestos, 
-             total, estado, tecnico_asignado, fecha_inicio, fecha_modificacion) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+             total, estado, tecnico_asignado, stock_descontado, fecha_inicio, fecha_modificacion, fecha_entrega) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)
         `;
 
         const [result] = await db.promise().query(sql, [
             clienteId, cliente_nombre, cliente_telefono, direccion, tipo_cobertura,
             equipo, falla_declarada, diagnostico_tecnico, notas_servicio, repuestosResumen,
-            JSON.stringify(repuestos_detalle), costo_mano_obra, costo_repuestos, total, estado, tecnico_asignado
+            JSON.stringify(repuestos_detalle), costo_mano_obra, costo_repuestos, total, 
+            estado, tecnico_asignado, debeMarcarDescontado, estado === 'Entregado' ? new Date() : null
         ]);
+
+        if (estado === 'Entregado' && debeMarcarDescontado === 1) {
+            await descontarStockPorReparacion(result.insertId, equipo, tecnico_asignado, repuestos_detalle);
+        }
 
         res.status(201).json({ mensaje: 'Orden creada', id: result.insertId });
     } catch (err) {
@@ -1060,6 +1076,7 @@ app.post('/api/reparaciones', verificarToken, requiereAdmin, async (req, res) =>
     }
 });
 
+// 3. Editar orden de servicio existente
 app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res) => {
     const { id } = req.params;
 
@@ -1099,14 +1116,20 @@ app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res)
             debeMarcarDescontado = true;
         }
 
-        const clienteId = await resolverOCrearCliente(cliente_nombre, cliente_telefono, direccion);
+        // 🌟 CONDICIÓN CLAVE: Solo se vincula o actualiza en la tabla de clientes si está 'Entregado'
+        let clienteId = ordenActual.cliente_id;
+        if (estado === 'Entregado') {
+            clienteId = await resolverOCrearCliente(cliente_nombre, cliente_telefono, direccion);
+        }
 
         const sql = `
             UPDATE reparaciones 
             SET cliente_id = ?, cliente_nombre = ?, cliente_telefono = ?, direccion = ?, tipo_cobertura = ?, 
                 equipo = ?, falla_declarada = ?, diagnostico_tecnico = ?, notas_servicio = ?, repuestos_usados = ?, 
                 repuestos_detalle = ?, costo_mano_obra = ?, costo_repuestos = ?, total = ?, 
-                estado = ?, tecnico_asignado = ?, stock_descontado = ?, fecha_modificacion = NOW()
+                estado = ?, tecnico_asignado = ?, stock_descontado = ?, 
+                fecha_entrega = ${estado === 'Entregado' ? 'COALESCE(fecha_entrega, NOW())' : 'NULL'},
+                fecha_modificacion = NOW()
             WHERE id = ?
         `;
 
@@ -1116,7 +1139,7 @@ app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res)
             total, estado, tecnico_asignado, debeMarcarDescontado ? 1 : 0, id
         ]);
 
-        res.json({ mensaje: 'Orden y stock actualizados correctamente' });
+        res.json({ mensaje: 'Orden actualizada correctamente' });
 
     } catch (err) {
         console.error('Error al modificar reparación:', err);
@@ -1124,6 +1147,7 @@ app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res)
     }
 });
 
+// 4. Cambiar estado rápido (Descuenta stock y asienta cliente al marcar 'Entregado')
 app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (req, res) => {
     const { id } = req.params;
     const ESTADOS_VALIDOS = ['Pendiente', 'En Reparacion', 'Esperando Repuesto', 'Listo', 'Entregado', 'Cancelado'];
@@ -1141,23 +1165,29 @@ app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (re
 
         const orden = ordenes[0];
         let debeDescontar = false;
+        let clienteId = orden.cliente_id;
 
-        if (estado === 'Entregado' && orden.stock_descontado === 0) {
-            debeDescontar = true;
-            let items = [];
-            try {
-                items = typeof orden.repuestos_detalle === 'string'
-                    ? JSON.parse(orden.repuestos_detalle)
-                    : (orden.repuestos_detalle || []);
-            } catch (e) { items = []; }
+        // Si se pasa a 'Entregado', creamos/actualizamos la ficha del cliente con los datos consolidados
+        if (estado === 'Entregado') {
+            clienteId = await resolverOCrearCliente(orden.cliente_nombre, orden.cliente_telefono, orden.direccion);
 
-            await descontarStockPorReparacion(id, orden.equipo, orden.tecnico_asignado, items);
+            if (orden.stock_descontado === 0) {
+                debeDescontar = true;
+                let items = [];
+                try {
+                    items = typeof orden.repuestos_detalle === 'string'
+                        ? JSON.parse(orden.repuestos_detalle)
+                        : (orden.repuestos_detalle || []);
+                } catch (e) { items = []; }
+
+                await descontarStockPorReparacion(id, orden.equipo, orden.tecnico_asignado, items);
+            }
         }
 
-        let updateSql = 'UPDATE reparaciones SET estado = ?, fecha_modificacion = NOW()';
-        const updateParams = [estado];
+        let updateSql = 'UPDATE reparaciones SET estado = ?, cliente_id = ?, fecha_modificacion = NOW()';
+        const updateParams = [estado, clienteId];
 
-        if (estado === 'Entregado') updateSql += ', fecha_entrega = NOW()';
+        if (estado === 'Entregado') updateSql += ', fecha_entrega = COALESCE(fecha_entrega, NOW())';
         if (debeDescontar) updateSql += ', stock_descontado = 1';
         
         updateSql += ' WHERE id = ?';
@@ -1170,6 +1200,8 @@ app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (re
         res.status(500).json({ error: 'Error interno al actualizar estado' });
     }
 });
+        
+        
 
 app.delete('/api/reparaciones/:id', verificarToken, requiereAdmin, (req, res) => {
     const { id } = req.params;
