@@ -1,0 +1,52 @@
+# ===========================================================================
+# Credenciales y configuracion sensible
+# ===========================================================================
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!.env.example
+
+# ===========================================================================
+# Dependencias
+# ===========================================================================
+node_modules/
+backend/node_modules/
+*/node_modules/
+
+# ===========================================================================
+# Backups y dumps (pueden contener datos de clientes)
+# ===========================================================================
+backups/
+backend/backups/
+*.sql
+!backend/schema/*.sql
+!backend/migrations/**/*.sql
+
+# ===========================================================================
+# Logs (contenian la contrasena de MySQL en texto plano)
+# ===========================================================================
+logs/
+backend/logs/
+*.log
+
+# ===========================================================================
+# Binarios locales y artefactos de tunnel
+# ===========================================================================
+cloudflared.exe
+cloudflared.exe.exe
+tunnel_log.txt
+
+# ===========================================================================
+# Sistema operativo y editores
+# ===========================================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+
+# ===========================================================================
+# El esquema SI se versiona: backend/schema/schema-actual.sql es la fuente
+# de verdad del modelo de datos. No lo ignores.
+# ===========================================================================

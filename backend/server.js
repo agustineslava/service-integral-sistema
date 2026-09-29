@@ -9,9 +9,7 @@ const cors = require('cors');
 const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
 const cron = require('node-cron');
-const { exec } = require('child_process');
 const path = require('path');
-const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
@@ -1190,85 +1188,45 @@ app.delete('/api/reparaciones/:id', verificarToken, requiereAdmin, (req, res) =>
 });
 
 /* ==========================================================================
-   12. SISTEMA DE RESPALDOS AUTOMÁTICOS (MYSQLDUMP BACKUPS)
+   12. SISTEMA DE RESPALDOS AUTOMÁTICOS
+   --------------------------------------------------------------------------
+   La lógica vive en src/jobs/backup.js. Antes estaba acá con exec() + shell
+   y fallaba en silencio dejando archivos truncados que parecían válidos.
+
+   Causa del fallo anterior (2026-09-18 a 2026-09-24):
+     mysqldump: Access denied ... to database ... when using LOCK TABLES
+     mysqldump: needs the PROCESS privilege ... for this operation
+   El usuario de la app no tiene esos privilegios. Se resuelve con los flags
+   --single-transaction y --no-tablespaces, sin tocar permisos de MySQL.
    ========================================================================== */
 
-function realizarBackup() {
-    const dbName = process.env.DB_NAME;
-    const dbUser = process.env.DB_USER;
-    const dbPassword = process.env.DB_PASSWORD;
-    const dbHost = process.env.DB_HOST || 'localhost';
+const respaldo = require('./src/jobs/backup');
 
-    const fechaActual = new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
-    const nombreArchivo = `backup_${dbName}_${fechaActual}.sql`;
-    const rutaCarpeta = path.join(__dirname, 'backups');
-    const rutaDestino = path.join(rutaCarpeta, nombreArchivo);
+async function realizarBackup() {
+    const carpeta = path.join(__dirname, 'backups');
+    console.log('💾 Iniciando backup automático de la base de datos...');
 
-    if (!fs.existsSync(rutaCarpeta)) {
-        fs.mkdirSync(rutaCarpeta, { recursive: true });
-    }
+    try {
+        const r = await respaldo.ejecutarDump({ carpetaDestino: carpeta });
 
-    const mysqldumpPath = process.env.MYSQLDUMP_PATH || 'mysqldump';
-    const comando = `"${mysqldumpPath}" -h ${dbHost} -u ${dbUser} -p"${dbPassword}" ${dbName} > "${rutaDestino}"`;
+        console.log(`✅ Backup VERIFICADO: ${r.nombreArchivo}`);
+        console.log(`   ${(r.bytes / 1024).toFixed(2)} KB · ${r.tablas} tablas · ${r.duracionSeg}s`);
 
-    console.log(`💾 Iniciando backup automático de la base de datos...`);
-
-    exec(comando, (error) => {
-        if (error) {
-            console.error(`❌ Error al ejecutar el backup: ${error.message}`);
-            return;
+        const off = respaldo.copiarOffsite(r.ruta, r.nombreArchivo);
+        if (off.ok) {
+            console.log(`☁️  Copia externa: ${off.destino}`);
+        } else if (off.motivo !== 'BACKUP_OFFSITE_DIR no configurado') {
+            console.error(`⚠️  No se pudo copiar la copia externa: ${off.motivo}`);
         }
-        console.log(`✅ ¡Backup creado con éxito! Guardado en: ${rutaDestino}`);
-        limpiarBackupsViejos(rutaCarpeta, 7);
-        copiarBackupAUbicacionExterna(rutaDestino, nombreArchivo);
-    });
-}
 
-function limpiarBackupsViejos(rutaCarpeta, diasRetencion) {
-    fs.readdir(rutaCarpeta, (err, archivos) => {
-        if (err) return;
-        const limiteTiempo = Date.now() - (diasRetencion * 24 * 60 * 60 * 1000);
+        const borrados = respaldo.limpiarBackupsViejos(carpeta, respaldo.RETENCION_DIAS_DEFAULT);
+        if (borrados) console.log(`🧹 ${borrados} backup(s) antiguo(s) eliminado(s)`);
 
-        archivos.forEach(archivo => {
-            const rutaArchivo = path.join(rutaCarpeta, archivo);
-            fs.stat(rutaArchivo, (errStat, stats) => {
-                if (errStat) return;
-                if (stats.mtimeMs < limiteTiempo && archivo.endsWith('.sql')) {
-                    fs.unlink(rutaArchivo, () => {});
-                }
-            });
-        });
-    });
-}
-
-let avisoOffsiteMostrado = false;
-
-function copiarBackupAUbicacionExterna(rutaArchivoOrigen, nombreArchivo) {
-    const carpetaExterna = process.env.BACKUP_OFFSITE_DIR;
-
-    if (!carpetaExterna) {
-        if (!avisoOffsiteMostrado) {
-            console.log('ℹ️  BACKUP_OFFSITE_DIR no está configurado en .env.');
-            avisoOffsiteMostrado = true;
-        }
-        return;
+    } catch (err) {
+        // Este mensaje va a stderr -> logs/errores.log
+        console.error(`❌ BACKUP FALLIDO: ${err.message}`);
+        console.error('   No se publicó ningún archivo. El backup anterior sigue intacto.');
     }
-
-    if (!fs.existsSync(carpetaExterna)) {
-        console.error(`❌ BACKUP_OFFSITE_DIR apunta a una carpeta que no existe: ${carpetaExterna}`);
-        return;
-    }
-
-    const rutaDestinoExterno = path.join(carpetaExterna, nombreArchivo);
-
-    fs.copyFile(rutaArchivoOrigen, rutaDestinoExterno, (err) => {
-        if (err) {
-            console.error(`❌ No se pudo copiar el backup a la carpeta externa: ${err.message}`);
-            return;
-        }
-        console.log(`☁️  Backup copiado también a la carpeta externa: ${rutaDestinoExterno}`);
-        limpiarBackupsViejos(carpetaExterna, 7);
-    });
 }
 
 cron.schedule('0 20 * * *', () => {
