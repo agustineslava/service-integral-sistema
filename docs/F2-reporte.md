@@ -86,6 +86,7 @@ timeout de MySQL).
 | `src/db/central.js` | Bug latente corregido (punto 4.1) + `verificar()` con resumen |
 | `src/db/conexiones.js` | Normaliza el nombre de base a minúscula (punto 4.2) |
 | `tools/f1-setup.js` | Permiso comodín de la app sobre `si_tenant_%` (punto 4.3) |
+| `tools/generate-token.js` | Lee el usuario **real** de la central en vez de inventar un `id: 0`; sirve como camino de emergencia (punto 4.4) |
 | `.env.example` | Se quitó la sección del admin inicial (ya no se usa) |
 | `package.json` | `f2:migrar`, `f2:migrar:simular`, `f2:verificar` |
 
@@ -135,31 +136,53 @@ Se agregó el comodín `si_tenant_%` a `f1-setup.js`. Se da **una sola vez** y
 cubre a todas las empresas, presentes y futuras: dar de alta un cliente ya no
 toca privilegios de MySQL.
 
-### 4.4 `aguseslava11@gmail.com` es dos cosas a la vez ⚠️ (decisión pendiente)
-Ese email quedó como **SuperAdmin** en F1 **y** es uno de los admins del taller.
-Como el email es único en toda la central (a propósito: es lo que permite
-deducir la empresa al entrar), **no puede ser las dos cosas**.
+### 4.4 `aguseslava11@gmail.com` es dos cosas a la vez — **resuelto**
+Ese email quedó como **SuperAdmin** en F1 **y** era uno de los admins del
+taller. Como el email es único en toda la central (a propósito: es lo que
+permite deducir la empresa al entrar), **no puede ser las dos cosas**.
 
-La migración lo detectó, lo reportó y **no lo tocó**. Quedó pendiente:
+La migración lo detectó, lo reportó y **no lo tocó**.
 
-- Al taller se le migraron **3 usuarios** (los otros), y ese email ahora
-  pertenecería a la central como SuperAdmin.
-- `ADMIN_EMAIL_INICIAL` en `.env` también era ese email.
+**Decisión tomada:** `aguseslava11@gmail.com` **queda como SuperAdmin**.
 
-**Consecuencia práctica:** si entrás con `aguseslava11@gmail.com` vas a recibir
-un token de SuperAdmin (sin empresa) y las rutas del taller te van a dar **403**.
-Todavía no existe el panel de SuperAdmin (F5/F6).
+| Para qué | Con qué cuenta |
+|---|---|
+| Panel de administración | `aguseslava11@gmail.com` |
+| El taller | `admin@serviceintegral.com` |
 
-**Hay que decidir:** (a) el SuperAdmin usa otro email y `aguseslava11` vuelve a
-ser admin del taller, o (b) `aguseslava11` queda como SuperAdmin y el taller se
-usa con `admin@serviceintegral.com`.
+Consecuencias:
 
-### 4.5 El problema del plan se resolvió solo
+- El taller quedó con **3 usuarios**, que es exactamente el límite del plan
+  Básico. No hace falta ninguna excepción (ver 4.5).
+- El **`id` de los usuarios no se conservó**: en la central son `#2`, `#3` y
+  `#4` (el `#1` es el SuperAdmin). No rompe nada: `movimientos_stock` guarda el
+  nombre del usuario como texto, no como clave foránea, y el token se vuelve a
+  emitir en el próximo login, así que no quedan sesiones viejas dando vueltas.
+- **No te quedás afuera si olvidás las contraseñas:**
+
+  ```
+  npm run token admin@serviceintegral.com
+  ```
+
+  Lee el usuario real de la base central y emite un token idéntico al que emite
+  el login (mismo id, mismo rol, misma empresa). Ese es el camino de
+  emergencia, y está probado.
+
+  Ojo: firma con el `JWT_SECRET` del `.env`, así que **quien tenga acceso al
+  `.env` puede entrar como quien quiera**. En el taller el `.env` está en la
+  carpeta del sistema, así que alcanza con que esa carpeta no la pueda abrir
+  cualquiera. Cuando haya clientes de verdad se revisa en F6.
+
+### 4.5 El problema del plan se resolvió con la decisión de 4.4
 El taller tenía 4 usuarios y el plan Básico permite 3. Al quedar
 `aguseslava11` como SuperAdmin, al taller le quedan **3 usuarios = justo el
-límite del plan Básico**. No hizo falta ninguna excepción. La columna
-`empresas.max_usuarios` (migración 003) queda disponible por si algún cliente
-necesita una excepción.
+límite del plan Básico**. No hizo falta ninguna excepción.
+
+La columna `empresas.max_usuarios` (migración 003) queda disponible por si algún
+cliente necesita más, y su getter ya está resuelto en
+`src/servicios/registro.js` (`COALESCE(empresas.max_usuarios, planes.max_usuarios)`).
+Lo que falta es **aplicarlo**: hoy crear un usuario no mira el límite. Eso es F3,
+junto con los feature flags por módulo.
 
 ### 4.6 Un agujero de cruce entre empresas, cerrado
 `DELETE /api/usuarios/:id` hacía `DELETE FROM usuarios WHERE id = ?` **sin
