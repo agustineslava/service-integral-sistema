@@ -1,12 +1,15 @@
 /**
  * VERIFICACION DE RESTAURACION - el paso que nunca se hizo.
  *
- * Toma el backup mas reciente, lo restaura en una base temporal,
- * compara el conteo de filas con la base real y destruye la temporal.
- *
  *   node tools/verify-restore.js
  *
- * Si esto no pasa, tus backups no valen nada.
+ * Toma el backup mas reciente, lo restaura en una base temporal, compara el
+ * conteo de filas con la base real y destruye la temporal.
+ *
+ * Si esto no pasa, los backups no valen nada.
+ *
+ * Usa DB_ADMIN_USER / DB_ADMIN_PASSWORD (usuario si_tenant_admin), NO el
+ * usuario de la aplicacion: el de la app no puede crear bases.
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { execFileSync } = require('child_process');
@@ -18,127 +21,194 @@ const DB_REAL = process.env.DB_NAME;
 const DB_TEST = `${DB_REAL}_verificacion`;
 const CARPETA = path.join(__dirname, '..', 'backups');
 
-const cred = () => ({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || '3306',
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD
-});
+// Credenciales de administracion de base (necesarias para crear/borrar bases)
+const ADMIN_USER = process.env.DB_ADMIN_USER;
+const ADMIN_PASS = process.env.DB_ADMIN_PASSWORD;
+const USER = ADMIN_USER || process.env.DB_USER;
+const PASS = ADMIN_USER ? ADMIN_PASS : process.env.DB_PASSWORD;
 
-function ultimoBackupValido() {
-    if (!fs.existsSync(CARPETA)) return null;
-    const archivos = fs.readdirSync(CARPETA)
+/** Ubica el cliente 'mysql' (importador). NO sirve mysqldump para restaurar. */
+function ubicarClienteMysql() {
+    if (process.env.MYSQL_PATH && fs.existsSync(process.env.MYSQL_PATH)) return process.env.MYSQL_PATH;
+
+    // Derivar de MYSQLDUMP_PATH: ...\mysqldump.exe -> ...\mysql.exe
+    if (process.env.MYSQLDUMP_PATH) {
+        const candidato = process.env.MYSQLDUMP_PATH
+            .replace(/mysqldump(\.exe)?$/i, (m) => m.replace('mysqldump', 'mysql'));
+        if (fs.existsSync(candidato)) return candidato;
+    }
+
+    const comunes = [
+        'C:\\Program Files\\MySQL\\MySQL Server 9.5\\bin\\mysql.exe',
+        'C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysql.exe',
+        'C:\\Program Files\\MySQL\\MySQL Workbench 8.0 CE\\mysql.exe'
+    ];
+    for (const c of comunes) if (fs.existsSync(c)) return c;
+
+    return 'mysql'; // confiar en el PATH
+}
+
+function credenciales() {
+    return {
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || '3306',
+        user: USER,
+        password: PASS
+    };
+}
+
+function inventarioBackups() {
+    if (!fs.existsSync(CARPETA)) return { lista: [], integros: [] };
+    const lista = fs.readdirSync(CARPETA)
         .filter(f => f.endsWith('.sql'))
         .map(f => {
             const ruta = path.join(CARPETA, f);
-            let completo = false;
-            try { completo = fs.readFileSync(ruta, 'utf8').includes('Dump completed'); } catch {}
-            return { nombre: f, ruta, bytes: fs.statSync(ruta).size, completo };
+            let integro = false;
+            try { integro = fs.readFileSync(ruta, 'utf8').includes('Dump completed'); } catch {}
+            return { nombre: f, ruta, bytes: fs.statSync(ruta).size, integro };
         })
         .sort((a, b) => b.nombre.localeCompare(a.nombre));
 
     console.log('=== INVENTARIO DE BACKUPS ===');
-    for (const a of archivos) {
-        console.log(`  ${a.completo ? '[OK]     ' : '[INCOMPLETO]'} ${(a.bytes/1024).toFixed(1).padStart(8)} KB  ${a.nombre}`);
+    for (const a of lista) {
+        console.log(`  ${a.integro ? '[OK]        ' : '[INCOMPLETO]'} ${(a.bytes / 1024).toFixed(1).padStart(8)} KB  ${a.nombre}`);
     }
-    const buenos = archivos.filter(a => a.completo);
-    console.log(`  -> ${archivos.length} archivo(s), ${buenos.length} integro(s)\n`);
-    return buenos[0] || null;
+    const integros = lista.filter(a => a.integro);
+    console.log(`  -> ${lista.length} archivo(s), ${integros.length} integro(s)\n`);
+    return { lista, integros };
 }
 
 (async () => {
-    const backup = ultimoBackupValido();
-    if (!backup) {
-        console.error('FALLO: no hay ningun backup integro. Ejecuta primero: node tools/backup.js');
+    if (!USER) {
+        console.error('Falta DB_ADMIN_USER en .env. Corre primero: npm run f0:setup');
         process.exit(1);
     }
 
-    console.log(`=== RESTAURANDO EN BASE TEMPORAL: ${DB_TEST} ===`);
-    console.log(`  Origen: ${backup.nombre}\n`);
-
-    const admin = await mysql.createConnection({ ...cred(), multipleStatements: true });
-    await admin.query(`DROP DATABASE IF EXISTS \`${DB_TEST}\``);
-    await admin.query(`CREATE DATABASE \`${DB_TEST}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`);
-
-    let restaurado = false, errorRestore = null;
-    try {
-        execFileSync(process.env.MYSQLDUMP_PATH || 'mysqldump', [
-            `-h${process.env.DB_HOST || 'localhost'}`,
-            `-P${process.env.DB_PORT || '3306'}`,
-            `-u${process.env.DB_USER}`,
-            '--max-allowed-packet=256M',
-            DB_TEST
-        ], {
-            env: { ...process.env, MYSQL_PWD: process.env.DB_PASSWORD },
-            input: fs.readFileSync(backup.ruta),
-            maxBuffer: 64 * 1024 * 1024,
-            stdio: ['pipe', 'ignore', 'pipe'],
-            windowsHide: true
-        });
-        restaurado = true;
-    } catch (e) {
-        errorRestore = e;
+    const { integros } = inventarioBackups();
+    const backup = integros[0];
+    if (!backup) {
+        console.error('FALLO: no hay ningun backup integro. Corre: npm run backup');
+        process.exit(1);
     }
 
-    if (!restaurado) {
-        console.error('FALLO: no se pudo restaurar el dump');
-        console.error(`  ${errorRestore.message}`);
-        if (errorRestore.stderr) console.error(`  ${errorRestore.stderr.toString().slice(0, 500)}`);
+    const mysqlBin = ubicarClienteMysql();
+    console.log(`=== RESTAURANDO EN BASE TEMPORAL: ${DB_TEST} ===`);
+    console.log(`  Origen:     ${backup.nombre}`);
+    console.log(`  Usuario:    ${USER}`);
+    console.log(`  Cliente:    ${mysqlBin}\n`);
+
+    // --- 1) Crear la base temporal ---
+    let admin;
+    try {
+        admin = await mysql.createConnection(credenciales());
+    } catch (e) {
+        console.error(`FALLO: no se pudo conectar como ${USER}: ${e.message}`);
+        process.exit(1);
+    }
+
+    try {
         await admin.query(`DROP DATABASE IF EXISTS \`${DB_TEST}\``);
+        await admin.query(`CREATE DATABASE \`${DB_TEST}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`);
+        console.log('  [OK] base temporal creada');
+    } catch (e) {
+        console.error(`  [FALLO] no se pudo crear la base temporal: ${e.message}`);
+        console.error('\n  >> El usuario no tiene privilegios de administracion.');
+        console.error('  >> Corre: npm run f0:setup');
         await admin.end();
         process.exit(1);
     }
 
-    console.log('  Restauracion ejecutada. Comparando...\n');
-    console.log('TABLA'.padEnd(26) + 'BD REAL'.padStart(10) + 'BD TEST'.padStart(10) + '   RESULTADO');
-    console.log('-'.repeat(62));
+    // --- 2) Importar el dump con el cliente mysql (mysqldump NO restaura) ---
+    try {
+        execFileSync(mysqlBin, [
+            `-h${process.env.DB_HOST || 'localhost'}`,
+            `-P${process.env.DB_PORT || '3306'}`,
+            `-u${USER}`,
+            '--max-allowed-packet=256M',
+            '--default-character-set=utf8mb4',
+            DB_TEST
+        ], {
+            env: { ...process.env, MYSQL_PWD: PASS },
+            input: fs.readFileSync(backup.ruta),
+            maxBuffer: 64 * 1024 * 1024,
+            stdio: ['pipe', 'pipe', 'pipe'],
+            windowsHide: true
+        });
+        console.log('  [OK] dump importado');
+    } catch (e) {
+        const err = e.stderr ? e.stderr.toString().trim().slice(0, 600) : e.message;
+        console.error(`  [FALLO] la importacion fallo:\n${err}`);
+        await admin.query(`DROP DATABASE IF EXISTS \`${DB_TEST}\``).catch(() => {});
+        await admin.end();
+        process.exit(1);
+    }
 
-    const real = await mysql.createConnection({ ...cred(), database: DB_REAL });
-    const test = await mysql.createConnection({ ...cred(), database: DB_TEST });
+    // --- 3) Comparar contra la base real ---
+    console.log('\n=== COMPARACION DE DATOS ===');
+    const real = await mysql.createConnection({ ...credenciales(), database: DB_REAL });
+    const test = await mysql.createConnection({ ...credenciales(), database: DB_TEST });
 
     const [tablas] = await real.query(
         `SELECT TABLE_NAME AS n FROM information_schema.TABLES
-         WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME`, [DB_REAL]);
+         WHERE TABLE_SCHEMA = ? AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME`, [DB_REAL]);
+
+    console.log('TABLA'.padEnd(24) + 'BD REAL'.padStart(10) + 'BD TEST'.padStart(10) + '   RESULTADO');
+    console.log('-'.repeat(60));
 
     let ok = true, totalReal = 0, totalTest = 0;
     for (const { n } of tablas) {
         const [[a]] = await real.query(`SELECT COUNT(*) AS c FROM \`${n}\``);
-        let b = { c: -1 };
-        try { [b] = [{ c: (await test.query(`SELECT COUNT(*) AS c FROM \`${n}\``))[0].c }]; } catch {}
-        const coincide = a.c === b.c;
+        let cTest = -1;
+        try { const [[b]] = await test.query(`SELECT COUNT(*) AS c FROM \`${n}\``); cTest = b.c; } catch {}
+        const coincide = a.c === cTest;
         if (!coincide) ok = false;
-        totalReal += a.c; totalTest += Math.max(b.c, 0);
-        console.log(n.padEnd(26) + String(a.c).padStart(10) + String(b.c).padStart(10) +
+        totalReal += a.c;
+        totalTest += Math.max(cTest, 0);
+        console.log(n.padEnd(24) + String(a.c).padStart(10) + String(cTest).padStart(10) +
                     '   ' + (coincide ? 'OK' : '*** DIFERENTE ***'));
     }
+    console.log('-'.repeat(60));
+    console.log('TOTAL'.padEnd(24) + String(totalReal).padStart(10) + String(totalTest).padStart(10));
 
-    console.log('-'.repeat(62));
-    console.log(`TOTAL`.padEnd(26) + String(totalReal).padStart(10) + String(totalTest).padStart(10));
-
-    // Verificacion funcional: se pueden LEER los datos, no solo contar filas
+    // --- 4) Prueba funcional: los datos se pueden LEER ---
     console.log('\n=== PRUEBA FUNCIONAL ===');
     try {
-        const [[r]] = await test.query('SELECT nombre, email, rol FROM usuarios ORDER BY id LIMIT 3');
-        console.log(`  usuarios restaurados: ${r.length}`);
-        r.forEach(u => console.log(`    - ${u.nombre} <${u.email}> [${u.rol}]`));
+        const [usuarios] = await test.query('SELECT nombre, email, rol FROM usuarios ORDER BY id LIMIT 3');
+        console.log(`  usuarios legibles:  ${usuarios.length}`);
+        usuarios.forEach(u => console.log(`    - ${u.nombre} <${u.email}> [${u.rol}]`));
+        const [[r]] = await test.query('SELECT COUNT(*) AS c FROM reparaciones');
         const [[p]] = await test.query('SELECT COUNT(*) AS c FROM productos');
-        console.log(`  productos legibles:   ${p.c}`);
+        console.log(`  reparaciones:       ${r.c}`);
+        console.log(`  productos:          ${p.c}`);
+
+        // Los datos restaurados tienen que tener la MISMA forma que los reales
+        const [[a]] = await real.query('SELECT COUNT(*) AS c FROM reparaciones');
+        if (a.c !== r.c) { ok = false; console.log('  *** las reparaciones no coinciden ***'); }
     } catch (e) {
         ok = false;
-        console.log(`  FALLO al leer datos: ${e.message}`);
+        console.log(`  [FALLO] no se pueden leer los datos: ${e.message}`);
     }
 
-    await real.end(); await test.end();
-    await admin.query(`DROP DATABASE IF EXISTS \`${DB_TEST}\``);
-    await admin.end();
-    console.log('\n  Base temporal destruida.');
+    await real.end();
+    await test.end();
 
-    console.log('\n' + '='.repeat(62));
+    // --- 5) Limpieza ---
+    await admin.query(`DROP DATABASE IF EXISTS \`${DB_TEST}\``).catch(() => {});
+    await admin.end();
+    console.log('\n  [OK] base temporal destruida');
+
+    console.log('\n' + '='.repeat(60));
     if (ok) {
-        console.log('RESULTADO: BACKUP VERIFICADO - se restauro y los datos coinciden');
+        console.log('RESULTADO: BACKUP VERIFICADO');
+        console.log('  El backup se restauro y los datos coinciden con la base real.');
+        console.log('='.repeat(60));
         process.exit(0);
     } else {
         console.error('RESULTADO: *** BACKUP NO CONFIABLE ***');
+        console.error('='.repeat(60));
         process.exit(1);
     }
-})().catch(e => { console.error('Error inesperado:', e.message); process.exit(1); });
+})().catch(e => {
+    console.error('\nError inesperado:', e.message);
+    process.exit(1);
+});

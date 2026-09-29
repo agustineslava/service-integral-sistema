@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- Esquema de: ServiceIntegralsistema
 -- Servidor:   MySQL 9.5.0
--- Generado:   29/9/2026, 07:09:28
+-- Generado:   29/9/2026, 07:40:26
 --
 -- FUENTE DE VERDAD del esquema. Reemplaza al esquema que se creaba a mano
 -- en MySQL Workbench sin versionar.

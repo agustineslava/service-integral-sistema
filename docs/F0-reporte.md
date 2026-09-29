@@ -97,47 +97,60 @@ un backup.**
 
 ---
 
-## 3. 🔴 PENDIENTE CRÍTICO — rotación de credenciales
+## 3. ✅ RESUELTO — rotación de credenciales
 
 La contraseña de MySQL quedó en texto plano en `backend/logs/errores.log`,
-que **estaba versionado en Git**, y también dentro del mensaje de commit
-del historial (`-p"Agus1tin."`).
+que **estaba versionado en Git** y **sí había sido subido a GitHub**.
 
-**Debe rotarse.** No alcanza con borrar el archivo: está en el historial.
+### Alcance real del filtrado (verificado)
 
-### Orden correcto para rotar
+| Secreto | ¿Estaba en GitHub? |
+|---|---|
+| Contraseña de MySQL | **SÍ** — en `backend/logs/errores.log` y `salida.log` |
+| `JWT_SECRET` | No — vivía solo en `.env`, nunca versionado |
+| Cloudinary (cloud, key, secret) | No — ídem |
+| `ADMIN_PASSWORD_INICIAL` | No (el match era el *nombre* de la variable en `server.js`) |
 
-1. Entregar privilegios (paso siguiente, requiere root).
-2. Cambiar la contraseña del usuario de MySQL.
-3. Actualizar `backend/.env`.
-4. Verificar backup + arranque.
-5. Recién entonces, evaluar limpiar el historial de Git.
+El repositorio es **privado** (GitHub devuelve 404 a consultas sin
+autenticación), así que la exposición estaba limitada a la cuenta del dueño.
+
+### Mitigación
+
+`npm run f0:setup` rotó la contraseña de `service_integral_app`, lo que
+**invalida la copia que quedó en el historial**. El historial de Git sigue
+conteniendo la contraseña vieja, pero ya no sirve para conectarse.
+
+> Opcional a futuro: reescribir el historial (`git filter-repo`) para purgar
+> los logs. No es urgente porque el repo es privado y la credencial está muerta.
 
 ---
 
-## 4. 🔴 PENDIENTE BLOQUEANTE — privilegios de MySQL
+## 4. ✅ RESUELTO — privilegios de MySQL
+
+Estado anterior:
 
 ```
 GRANT SELECT, INSERT, UPDATE, DELETE ON serviceintegralsistema.*
    TO 'service_integral_app'@'localhost'
 ```
 
-Un usuario con permisos **sobre una sola base**. Esto bloquea:
+Un usuario con permisos **sobre una sola base**. Bloqueaba:
 
-| Bloquea | Por qué |
+| Bloqueaba | Por qué |
 |---|---|
 | Alta automática de empresas (F6) | No puede `CREATE DATABASE` |
 | Verificación de restauración | No puede crear la base temporal |
 | Escalabilidad | Cada empresa nueva necesitaría un `GRANT` manual |
 
-### Solución diseñada
+### Solución aplicada
 
-Un usuario separado, `si_tenant_admin`, con `CREATE`/`DROP` sobre
-`si_tenant_%` (las bases de los clientes). El usuario de la aplicación
-**no recibe `CREATE` ni `DROP`**: si alguna vez una inyección SQL llega a la
-app, no debe poder crear ni borrar bases.
+Usuario separado **`si_tenant_admin`** con `CREATE`/`DROP` sobre
+`si_tenant_%` (las bases de los clientes) y administración de la base central.
 
-**Ejecutar:** `node tools/grant-tenant-privileges.js` (pide la contraseña de root).
+El usuario de la aplicación **no recibió `CREATE` ni `DROP`**, deliberadamente:
+si alguna vez una inyección SQL llega a la app, no debe poder crear ni borrar
+bases. La app nunca los necesita en runtime — solo el mini-instalador (F6) y
+las restauraciones.
 
 ---
 
@@ -155,21 +168,47 @@ app, no debe poder crear ni borrar bases.
 
 ---
 
-## 6. Estado
+## 6. Estado — F0 CERRADO
 
 | Objetivo F0 | Estado |
 |---|---|
 | Backup manual verificado | ✅ 12,22 KB · 7 tablas · 0,2 s |
-| Causa raíz identificada | ✅ privilegios PROCESS / LOCK TABLES |
+| Causa raíz identificada | ✅ privilegios `PROCESS` / `LOCK TABLES` |
 | Job automático arreglado | ✅ módulo nuevo + verificación de integridad |
-| Restore probado | ⏸ bloqueado por privilegios |
+| **Restore probado** | ✅ 7/7 tablas coinciden · 22 filas · datos legibles |
 | Esquema versionado | ✅ 7 tablas, 4 FKs |
-| Secretos fuera del repo | ⚠️ dejados de versionar, **falta rotar** |
+| Secretos fuera del repo | ✅ dejados de versionar + **contraseña rotada** |
 | Tag de rollback | ✅ `v1.0.0-monotenant` |
-| Privilegios multi-tenant | ⏸ **requiere contraseña de root** |
+| **Privilegios multi-tenant** | ✅ `si_tenant_admin` operativo |
 
-**Faltan dos pasos, ambos requieren tu intervención:**
-1. Ejecutar `node tools/grant-tenant-privileges.js` (pide root).
-2. Rotar la contraseña de MySQL.
+Salida de la verificación de restauración:
 
-Con esos dos, F0 queda cerrado y F1 (base central) puede empezar.
+```
+TABLA                      BD REAL   BD TEST   RESULTADO
+clientes                         4         4   OK
+movimientos_stock                1         1   OK
+pedido_items                     3         3   OK
+pedidos                          2         2   OK
+productos                        2         2   OK
+reparaciones                     6         6   OK
+usuarios                         4         4   OK
+TOTAL                           22        22
+RESULTADO: BACKUP VERIFICADO
+```
+
+### Pendiente operativo
+
+El backend **no estaba corriendo** al momento del cierre (PM2 vacío, puerto
+3000 libre). Para levantarlo: `Sistema ServiceIntegral.bat` o
+`pm2 start ecosystem.config.js`.
+
+---
+
+## 7. Próximo paso: F1
+
+Base central con `empresas`, `usuarios_globales`, `empresa_modulos`,
+`empresa_metricas` y `_schema_migrations`, más el runner de migraciones de
+flota con `--dry-run`.
+
+Objetivo de negocio confirmado: **3 usuarios por empresa** en el plan base,
+como `limite` del módulo (no como flag aparte), enforceado en el servidor.
