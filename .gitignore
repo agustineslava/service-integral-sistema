@@ -50,3 +50,6 @@ desktop.ini
 # El esquema SI se versiona: backend/schema/schema-actual.sql es la fuente
 # de verdad del modelo de datos. No lo ignores.
 # ===========================================================================
+
+# Paquetes de despliegue generados
+*.zip
