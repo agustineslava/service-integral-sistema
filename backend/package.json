@@ -8,7 +8,6 @@
     "backup:verify": "node tools/verify-restore.js",
     "db:inspect": "node tools/inspect.js",
     "db:grants": "node tools/check-grants.js",
-    "db:grant-tenant": "node tools/grant-tenant-privileges.js",
     "f0:setup": "node tools/setup-f0-db.js",
     "token": "node tools/generate-token.js",
     "schema:snapshot": "node tools/dump-schema.js"
