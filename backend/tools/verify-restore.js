@@ -24,8 +24,20 @@ const CARPETA = path.join(__dirname, '..', 'backups');
 // Credenciales de administracion de base (necesarias para crear/borrar bases)
 const ADMIN_USER = process.env.DB_ADMIN_USER;
 const ADMIN_PASS = process.env.DB_ADMIN_PASSWORD;
-const USER = ADMIN_USER || process.env.DB_USER;
-const PASS = ADMIN_USER ? ADMIN_PASS : process.env.DB_PASSWORD;
+
+// NO se cae de vuelta al usuario de la aplicacion. Ese usuario no puede crear
+// bases, y el resultado era un "Access denied ... to database '..._verificacion'"
+// que no decia nada sobre la causa real. Mejor fallar aca, con el motivo claro.
+if (!ADMIN_USER || !ADMIN_PASS) {
+    console.error('FALLO: faltan DB_ADMIN_USER / DB_ADMIN_PASSWORD en backend/.env.');
+    console.error('Esta verificacion crea una base temporal: necesita el usuario');
+    console.error('administrador. El usuario de la aplicacion no tiene ese permiso.');
+    console.error('\nCorre:  npm run f0:setup');
+    process.exit(1);
+}
+
+const USER = ADMIN_USER;
+const PASS = ADMIN_PASS;
 
 /** Ubica el cliente 'mysql' (importador). NO sirve mysqldump para restaurar. */
 function ubicarClienteMysql() {
