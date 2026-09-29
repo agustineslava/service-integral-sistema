@@ -92,7 +92,7 @@ function actualizarEnv(cambios) {
     console.log(' F0 - CIERRE: PRIVILEGIOS MULTI-TENANT + ROTACION DE CONTRASENA');
     console.log('='.repeat(70));
     console.log(` Usuario de la aplicacion : ${APP_USER}`);
-    console.log(` Base central             : ${DB_CENTRAL}`);
+    console.log(` Base actual (tenant 1)   : ${DB_CENTRAL}`);
     console.log('='.repeat(70) + '\n');
 
     const rootUser = (await preguntar('Usuario administrador de MySQL [root]: ')) || 'root';
@@ -119,8 +119,14 @@ function actualizarEnv(cambios) {
     const passTenantAdmin = crypto.randomBytes(24).toString('base64url').slice(0, 28);
 
     const pasos = [
-        [`crear usuario ${TENANT_ADMIN}`,
-         `CREATE USER IF NOT EXISTS '${TENANT_ADMIN}'@'localhost' IDENTIFIED BY '${passTenantAdmin}'`],
+        // OJO: con CREATE USER IF NOT EXISTS, si el usuario ya existe MySQL NO
+        // cambia la contrasena. Si despues igual escribieramos passTenantAdmin
+        // en el .env, quedaria una contrasena que no es la real. Por eso se
+        // separa: crear si falta, y ALTER USER para fijar la contrasena.
+        [`crear usuario ${TENANT_ADMIN} (si falta)`,
+         `CREATE USER IF NOT EXISTS '${TENANT_ADMIN}'@'localhost'`],
+        [`fijar la contrasena de ${TENANT_ADMIN}`,
+         `ALTER USER '${TENANT_ADMIN}'@'localhost' IDENTIFIED BY '${passTenantAdmin}'`],
         [`permitir crear/borrar bases de clientes (${PREFIJO_TENANT}*)`,
          `GRANT CREATE, DROP, ALTER, INDEX, REFERENCES, SELECT, INSERT, UPDATE, DELETE, CREATE VIEW, SHOW VIEW, TRIGGER ON \`${PREFIJO_TENANT}%\`.* TO '${TENANT_ADMIN}'@'localhost'`],
         ['permitir administrar la base central',

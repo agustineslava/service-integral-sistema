@@ -1,0 +1,41 @@
+MIGRACIONES DE EMPRESA (tenant)
+===============================
+
+Acá van los cambios de esquema que se aplican a la base de CADA empresa.
+
+Reglas:
+
+  1. Un archivo por cambio, numerado:  001_algo.sql, 002_otra_cosa.sql
+     El número define el orden. Nunca se reutiliza un número.
+
+  2. Un archivo ya aplicado NUNCA se edita. Si algo salió mal, se crea una
+     migración nueva que lo corrija. El motor detecta si un archivo cambió
+     y aborta: eso evita que dos empresas terminen con esquemas distintos.
+
+  3. EXPAND-CONTRACT. Mientras se despliega, el código viejo y el nuevo
+     conviven unos minutos. Entonces:
+        BIEN:  agregar columna NULL o con DEFAULT
+        BIEN:  crear una tabla nueva
+        BIEN:  agregar un índice
+        MAL:   renombrar una columna en un solo paso
+        MAL:   borrar una columna que el código todavía usa
+     Para renombrar o borrar: se agrega lo nuevo en una migración, se
+     despliega, se deja de usar lo viejo, y RECIÉN DESPUÉS una migración
+     posterior lo elimina.
+
+  4. Las migraciones no llevan USE, ni CREATE DATABASE, ni DROP DATABASE.
+     El motor ya está conectado a la base correcta.
+
+Cómo se aplican:
+
+    npm run migrate -- --tenant ServiceIntegralsistema --dry-run
+    npm run migrate -- --tenant ServiceIntegralsistema
+
+  A toda la flota de una vez:
+
+    npm run migrate -- --fleet --dry-run
+    npm run migrate -- --fleet
+
+Este directorio está vacío a propósito: todavía no hay cambios de esquema
+de empresa que aplicar. La carpeta existe para que el motor de migraciones
+esté probado y listo antes de necesitarlo.
