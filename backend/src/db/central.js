@@ -35,8 +35,13 @@ function getPool() {
     if (!pool) {
         pool = mysql.createPool(opciones());
         pool.on('connection', (c) => {
-            // La central maneja user-defined variables y agrupa por fechas.
-            c.query("SET time_zone = '-03:00'").catch(() => {});
+            // OJO: este evento entrega la conexión CRUDA, no la de promesas.
+            // Su query() devuelve un objeto Query al que se le puede leer
+            // .then/.catch, pero LLAMARLOS tira "You have tried to call
+            // .then()...". Por eso acá va el callback, no una promesa.
+            c.query("SET time_zone = '-03:00'", (err) => {
+                if (err) console.error('No se pudo fijar la zona horaria de la central:', err.message);
+            });
         });
     }
     return pool;
@@ -54,10 +59,18 @@ async function uno(sql, params) {
     return filas.length ? filas[0] : null;
 }
 
-/** Comprueba que la base central responde. Se usa en el arranque. */
+/**
+ * Comprueba que la base central responde y trae un resumen del catalogo.
+ * Se usa en el arranque: si esto falla, el servidor arranco sin poder saber a
+ * que empresa pertenece nadie, y conviene enterarse en el log, no en el login.
+ */
 async function verificar() {
-    const fila = await uno('SELECT COUNT(*) AS empresas FROM empresas');
-    return fila;
+    return uno(`
+        SELECT (SELECT COUNT(*) FROM empresas)         AS empresas,
+               (SELECT COUNT(*) FROM modulos)          AS modulos,
+               (SELECT COUNT(*) FROM planes)           AS planes,
+               (SELECT COUNT(*) FROM usuarios_globales) AS usuarios
+    `);
 }
 
 async function cerrar() {

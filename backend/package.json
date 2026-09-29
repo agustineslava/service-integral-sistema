@@ -17,6 +17,9 @@
     "migrate:flota:simular": "node tools/migrate.js --fleet --dry-run",
     "migrate:flota": "node tools/migrate.js --fleet",
     "esquema:test": "node tools/probar-esquema-central.js",
+    "f2:migrar": "node tools/f2-migrar-taller.js",
+    "f2:migrar:simular": "node tools/f2-migrar-taller.js --dry-run",
+    "f2:verificar": "node tools/f2-verificar.js",
     "token": "node tools/generate-token.js",
     "schema:snapshot": "node tools/dump-schema.js"
   },

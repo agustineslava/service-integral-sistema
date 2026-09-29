@@ -213,6 +213,31 @@ function actualizarEnv(cambios) {
         anotar(false, `permisos de ${APP_USER} sobre ${CENTRAL}`, e.message);
     }
 
+    try {
+        // Las bases de las empresas se llaman si_tenant_*. Este permiso comodín
+        // se da UNA sola vez y cubre a todas las empresas, presentes y futuras:
+        // así, dar de alta un cliente nuevo no tiene que tocar privilegios de
+        // MySQL (que requeriría GRANT OPTION y es un paso más donde fallar).
+        //
+        // OJO, esto NO es lo que impide que una empresa vea los datos de otra.
+        // El usuario de la app necesita llegar a TODAS las bases que atiende,
+        // así que un comodín o un permiso por base dan la misma separación:
+        // ninguna. El aislamiento lo garantiza el código, que resuelve la
+        // empresa en cada request y no tiene empresa "por defecto" (ver
+        // src/db/tenant.js y src/servicios/registro.js). Lo que lo prueba es
+        // `npm run f2:verificar`.
+        //
+        // La base del taller actual no se llama si_tenant_* (se dejó con su
+        // nombre original para no renombrarla), así que lleva su permiso aparte.
+        await raiz.query(
+            `GRANT SELECT, INSERT, UPDATE, DELETE ON \`si_tenant_%\`.* TO ?@'localhost'`,
+            [APP_USER]
+        );
+        anotar(true, `${APP_USER} puede leer/escribir las bases de las empresas (si_tenant_*)`);
+    } catch (e) {
+        anotar(false, `permisos de ${APP_USER} sobre las bases de las empresas`, e.message);
+    }
+
     await raiz.end();
 
     // ----------------------------------------------------------------------

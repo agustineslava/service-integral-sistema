@@ -4,7 +4,6 @@
 require('dotenv').config();
 
 const express = require('express');
-const mysql = require('mysql2');
 const cors = require('cors');
 const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
@@ -66,57 +65,42 @@ cloudinary.config({
 });
 
 /* ==========================================================================
-   4. CONEXIÓN A LA BASE DE DATOS (MYSQL CONNECTION POOL)
+   4. CONEXIÓN A LA BASE DE DATOS
+   --------------------------------------------------------------------------
+   Ahora hay DOS clases de base:
+
+     - La CENTRAL: una sola. Tiene las empresas, los logins y los módulos.
+       Se usa a través de src/db/central.js.
+
+     - La de cada EMPRESA: una por cliente. No hay nada que "elegir" acá: el
+       pool correcto lo resuelve el contexto del request (src/db/tenant.js).
+
+   Por eso las 28 rutas siguen escritas igual que antes. No saben que hay más
+   de una empresa, y no hace falta que lo sepan.
    ========================================================================== */
-const db = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+const tenant = require('./src/db/tenant');
+const registro = require('./src/servicios/registro');
+const central = require('./src/db/central');
 
-const ADMIN_EMAIL_INICIAL = process.env.ADMIN_EMAIL_INICIAL;
-const ADMIN_PASSWORD_INICIAL = process.env.ADMIN_PASSWORD_INICIAL;
+// El `db` que usan las rutas: mismos argumentos que el pool anterior
+// (db.query(sql, params, callback)), pero sale por la base de la empresa
+// del request.
+const db = tenant.db;
 
-function crearUsuarioAdminInicial() {
-    if (!ADMIN_EMAIL_INICIAL || !ADMIN_PASSWORD_INICIAL) {
-        console.log('ℹ️  ADMIN_EMAIL_INICIAL / ADMIN_PASSWORD_INICIAL no están definidos en .env.');
-        return;
-    }
+// Se eliminó a propósito el viejo `crearUsuarioAdminInicial()`:
+//   - volvía a crear el admin en CADA arranque si no lo encontraba, y
+//   - con varias empresas, el usuario inicial ya no se define por variables de
+//     entorno: vive en la base central (usuarios_globales).
+// Un usuario que se re-crea solo en cada reinicio es una puerta trasera.
 
-    db.query('SELECT id FROM usuarios WHERE email = ?', [ADMIN_EMAIL_INICIAL], (err, rows) => {
-        if (err) {
-            console.error('❌ Error al verificar usuario Admin inicial:', err.message);
-            return;
-        }
-        if (rows.length > 0) return;
-
-        const passwordHash = bcrypt.hashSync(ADMIN_PASSWORD_INICIAL, 10);
-        db.query(
-            'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, "ADMIN")',
-            ['Administrador', ADMIN_EMAIL_INICIAL, passwordHash],
-            (errInsert) => {
-                if (errInsert) {
-                    console.error('❌ Error al crear usuario Admin inicial:', errInsert.message);
-                } else {
-                    console.log(`✅ Usuario Administrador inicial creado: ${ADMIN_EMAIL_INICIAL}`);
-                }
-            }
-        );
+central.verificar()
+    .then((f) => {
+        console.log(`✅ Base central OK · ${f.empresas} empresa(s), ${f.modulos} módulo(s), ${f.planes} plan(es), ${f.usuarios} usuario(s).`);
+    })
+    .catch((err) => {
+        console.error('❌ No se pudo leer la base central:', err.message);
+        console.error('   Corre:  npm run f1:setup');
     });
-}
-
-db.query('SELECT 1', (err) => {
-    if (err) {
-        console.error('❌ Error al conectar al Pool de MySQL:', err.message);
-        return;
-    }
-    console.log('✅ Pool de conexiones de MySQL establecido con éxito de forma segura.');
-    crearUsuarioAdminInicial();
-});
 
 /* ==========================================================================
    CONFIGURACIÓN PÚBLICA DE MARCA BLANCA
@@ -133,7 +117,17 @@ app.get('/api/config-comercio', (req, res) => {
    5.0 MIDDLEWARES DE AUTENTICACIÓN Y AUTORIZACIÓN
    ========================================================================== */
 
-function verificarToken(req, res, next) {
+/**
+ * Verifica el token y deja listo el contexto de la empresa.
+ *
+ * Antes era síncrono salvo por `jwt.verify` (callback). Ahora además hay que
+ * resolver la empresa contra la base central, así que es async.
+ *
+ * Lo importante es la última línea: `conContexto(...)` mete el pool de la
+ * empresa en el contexto del request. De ahí para adentro, todo `db.query(...)`
+ * —incluidas las 28 rutas, que no se tocaron— sale por la base correcta.
+ */
+async function verificarToken(req, res, next) {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
@@ -141,13 +135,39 @@ function verificarToken(req, res, next) {
         return res.status(401).json({ error: 'No autorizado. Iniciá sesión nuevamente.' });
     }
 
-    jwt.verify(token, JWT_SECRET, (err, decoded) => {
-        if (err) {
-            return res.status(401).json({ error: 'Sesión inválida o expirada. Iniciá sesión nuevamente.' });
+    let payload;
+    try {
+        payload = jwt.verify(token, JWT_SECRET);
+    } catch {
+        return res.status(401).json({ error: 'Sesión inválida o expirada. Iniciá sesión nuevamente.' });
+    }
+
+    // El SuperAdmin no tiene taller: no pertenece a ninguna empresa.
+    // Cuando existan sus rutas propias, van en otro lado.
+    if (payload.rol === 'SUPERADMIN' || !payload.empresa_id) {
+        return res.status(403).json({ error: 'Esta sesión no corresponde a una empresa.' });
+    }
+
+    try {
+        const empresa = await registro.empresaPorId(payload.empresa_id);
+
+        // Se consulta en CADA request, con caché de ~30 s. Sin este chequeo,
+        // una empresa suspendida seguiría trabajando hasta que venciera su
+        // token (8 horas): suspender no serviría para nada.
+        if (!registro.estaOperativa(empresa)) {
+            return res.status(403).json({ error: 'La cuenta de la empresa no está activa. Contactá al administrador del servicio.' });
         }
-        req.usuario = decoded;
-        next();
-    });
+
+        const pool = tenant.obtenerPool(empresa.nombre_db);
+
+        req.usuario = payload;
+        req.empresa = empresa;
+
+        return tenant.conContexto({ pool, empresa, usuario: payload }, next);
+    } catch (err) {
+        console.error('Error al resolver la empresa del token:', err.message);
+        return res.status(503).json({ error: 'Servicio temporalmente no disponible.' });
+    }
 }
 
 function requiereAdmin(req, res, next) {
@@ -313,31 +333,67 @@ const limitadorLogin = rateLimit({
     message: { error: 'Demasiados intentos de inicio de sesión. Probá de nuevo en unos minutos.' }
 });
 
-app.post('/api/login', limitadorLogin, (req, res) => {
+// Hash descartable. Cuando el email no existe se compara igual contra esto,
+// para que el tiempo de respuesta no delate si la cuenta existe o no.
+const HASH_DESCARTABLE = bcrypt.hashSync('usuario-inexistente-' + Math.random(), 10);
+
+app.post('/api/login', limitadorLogin, async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
         return res.status(400).json({ error: 'Por favor ingrese email y contraseña' });
     }
 
-    const sql = 'SELECT * FROM usuarios WHERE email = ?';
-    db.query(sql, [email], (err, results) => {
-        if (err) return res.status(500).json({ error: 'Error en el servidor' });
-        if (results.length === 0) {
-            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+    // El mismo texto para "no existe", "está inactivo" y "contraseña mal".
+    // Si el mensaje cambiara, cualquiera podría averiguar qué emails están
+    // registrados probando uno por uno.
+    const CREDENCIALES_MAL = { error: 'Usuario o contraseña incorrectos' };
+
+    try {
+        // El email es único en TODA la central, no por empresa: es lo que
+        // permite resolver a qué empresa pertenece alguien con solo el email.
+        const usuario = await registro.usuarioPorEmail(email);
+
+        if (!usuario || !usuario.activo) {
+            bcrypt.compareSync(String(password), HASH_DESCARTABLE);
+            return res.status(401).json(CREDENCIALES_MAL);
         }
 
-        const usuario = results[0];
-        const passwordValida = bcrypt.compareSync(password, usuario.password);
-        if (!passwordValida) {
-            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+        if (!bcrypt.compareSync(password, usuario.password_hash)) {
+            return res.status(401).json(CREDENCIALES_MAL);
+        }
+
+        // El SuperAdmin no pertenece a ninguna empresa: no tiene base de taller.
+        let empresa = null;
+        if (usuario.rol !== 'SUPERADMIN') {
+            empresa = await registro.empresaPorId(usuario.empresa_id);
+
+            if (!empresa) {
+                console.error(`Login de ${email}: la empresa ${usuario.empresa_id} no existe.`);
+                return res.status(401).json(CREDENCIALES_MAL);
+            }
+
+            if (!registro.estaOperativa(empresa)) {
+                return res.status(403).json({
+                    error: `La cuenta de ${empresa.nombre} está ${String(empresa.estado).toLowerCase()}. Contactá al administrador del servicio.`
+                });
+            }
         }
 
         const token = jwt.sign(
-            { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol },
+            {
+                id: usuario.id,
+                nombre: usuario.nombre,
+                rol: usuario.rol,
+                empresa_id: usuario.empresa_id
+            },
             JWT_SECRET,
             { expiresIn: '8h' }
         );
+
+        // No se espera: si falla el registro de "último acceso", el login no
+        // tiene por qué fallar.
+        registro.marcarAcceso(usuario.id).catch(() => {});
 
         res.json({
             mensaje: 'Autenticación exitosa',
@@ -347,12 +403,26 @@ app.post('/api/login', limitadorLogin, (req, res) => {
                 nombre: usuario.nombre,
                 email: usuario.email,
                 rol: usuario.rol
-            }
+            },
+            // Marca blanca: la necesita el frontend ya mismo después de entrar.
+            empresa: empresa ? {
+                id: empresa.id,
+                nombre: empresa.nombre,
+                slug: empresa.slug,
+                rubro: empresa.rubro,
+                estado: empresa.estado,
+                color_primario: empresa.color_primario,
+                color_secundario: empresa.color_secundario,
+                logo_url: empresa.logo_url
+            } : null
         });
-    });
+    } catch (err) {
+        console.error('Error en login:', err);
+        return res.status(500).json({ error: 'Error en el servidor' });
+    }
 });
 
-app.post('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
+app.post('/api/usuarios', verificarToken, requiereAdmin, async (req, res) => {
     const validacion = validarUsuario(req.body);
     if (!validacion.valido) {
         return res.status(400).json({ error: validacion.error });
@@ -360,72 +430,85 @@ app.post('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
     const { nombre, email, password, rol } = validacion.datos;
     const passwordHash = bcrypt.hashSync(password, 10);
 
-    const sql = 'INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, ?)';
-    db.query(sql, [nombre, email, passwordHash, rol], (err, result) => {
-        if (err) {
-            if (err.code === 'ER_DUP_ENTRY') {
-                return res.status(400).json({ error: 'El correo electrónico ya está registrado' });
-            }
-            console.error('Error al registrar usuario:', err);
-            return res.status(500).json({ error: 'Error interno al crear usuario' });
+    try {
+        // `empresa_id` sale del token, nunca del body: un admin de una empresa
+        // no puede crear usuarios a nombre de otra.
+        const resultado = await central.query(
+            'INSERT INTO usuarios_globales (empresa_id, nombre, email, password_hash, rol) VALUES (?, ?, ?, ?, ?)',
+            [req.empresa.id, nombre, email, passwordHash, rol]
+        );
+        res.status(201).json({ mensaje: 'Usuario creado con éxito', id: resultado.insertId });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+            // El email es único en toda la central, no solo en esta empresa.
+            return res.status(400).json({ error: 'El correo electrónico ya está registrado' });
         }
-        res.status(201).json({ mensaje: 'Usuario creado con éxito', id: result.insertId });
-    });
+        console.error('Error al registrar usuario:', err);
+        return res.status(500).json({ error: 'Error interno al crear usuario' });
+    }
 });
 
-app.get('/api/usuarios', verificarToken, requiereAdmin, (req, res) => {
-    db.query('SELECT id, nombre, email, rol, creado_en FROM usuarios ORDER BY nombre ASC', (err, rows) => {
-        if (err) {
-            console.error('Error al listar usuarios:', err);
-            return res.status(500).json({ error: 'Error interno del servidor' });
-        }
-        res.json(rows);
-    });
+app.get('/api/usuarios', verificarToken, requiereAdmin, async (req, res) => {
+    try {
+        const filas = await central.query(
+            `SELECT id, nombre, email, rol, activo, creado_en
+               FROM usuarios_globales
+              WHERE empresa_id = ?
+              ORDER BY nombre ASC`,
+            [req.empresa.id]
+        );
+        res.json(filas);
+    } catch (err) {
+        console.error('Error al listar usuarios:', err);
+        return res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
-app.delete('/api/usuarios/:id', verificarToken, requiereAdmin, (req, res) => {
+app.delete('/api/usuarios/:id', verificarToken, requiereAdmin, async (req, res) => {
     const idABorrar = parseInt(req.params.id, 10);
+
+    if (!Number.isInteger(idABorrar)) {
+        return res.status(400).json({ error: 'Usuario inválido' });
+    }
 
     if (idABorrar === req.usuario.id) {
         return res.status(400).json({ error: 'No podés eliminar tu propio usuario mientras estás logueado con él.' });
     }
 
-    db.query('SELECT id, rol FROM usuarios WHERE id = ?', [idABorrar], (err, rows) => {
-        if (err) {
-            console.error('Error al buscar usuario a eliminar:', err);
-            return res.status(500).json({ error: 'Error interno del servidor' });
-        }
-        if (rows.length === 0) {
+    try {
+        // El `AND empresa_id = ?` no es decorativo: sin él, un admin podía
+        // borrar un usuario de OTRA empresa pasando otro id. Y si el usuario es
+        // de otra empresa se responde 404, no 403: un 403 confirmaría que ese
+        // id existe en algún lado.
+        const usuarioABorrar = await central.uno(
+            'SELECT id, rol FROM usuarios_globales WHERE id = ? AND empresa_id = ?',
+            [idABorrar, req.empresa.id]
+        );
+
+        if (!usuarioABorrar) {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
 
-        const usuarioABorrar = rows[0];
-
-        const continuarBorrado = () => {
-            db.query('DELETE FROM usuarios WHERE id = ?', [idABorrar], (errDelete) => {
-                if (errDelete) {
-                    console.error('Error al eliminar usuario:', errDelete);
-                    return res.status(500).json({ error: 'Error al eliminar el usuario' });
-                }
-                res.json({ mensaje: 'Usuario eliminado con éxito' });
-            });
-        };
-
         if (usuarioABorrar.rol === 'ADMIN') {
-            db.query("SELECT COUNT(*) AS total FROM usuarios WHERE rol = 'ADMIN'", (errCount, resultCount) => {
-                if (errCount) {
-                    console.error('Error al contar administradores:', errCount);
-                    return res.status(500).json({ error: 'Error interno del servidor' });
-                }
-                if (resultCount[0].total <= 1) {
-                    return res.status(400).json({ error: 'No podés eliminar el único administrador del sistema.' });
-                }
-                continuarBorrado();
-            });
-        } else {
-            continuarBorrado();
+            const fila = await central.uno(
+                `SELECT COUNT(*) AS total FROM usuarios_globales
+                  WHERE empresa_id = ? AND rol = 'ADMIN' AND activo = 1`,
+                [req.empresa.id]
+            );
+            if (fila.total <= 1) {
+                return res.status(400).json({ error: 'No podés eliminar el único administrador del sistema.' });
+            }
         }
-    });
+
+        await central.query(
+            'DELETE FROM usuarios_globales WHERE id = ? AND empresa_id = ?',
+            [idABorrar, req.empresa.id]
+        );
+        res.json({ mensaje: 'Usuario eliminado con éxito' });
+    } catch (err) {
+        console.error('Error al eliminar usuario:', err);
+        return res.status(500).json({ error: 'Error al eliminar el usuario' });
+    }
 });
 
 const limitadorCambioPassword = rateLimit({
@@ -436,7 +519,7 @@ const limitadorCambioPassword = rateLimit({
     message: { error: 'Demasiados intentos. Probá de nuevo en unos minutos.' }
 });
 
-app.post('/api/usuarios/cambiar-password', verificarToken, limitadorCambioPassword, (req, res) => {
+app.post('/api/usuarios/cambiar-password', verificarToken, limitadorCambioPassword, async (req, res) => {
     const { passwordActual, passwordNueva } = req.body;
 
     if (!passwordActual || !passwordNueva) {
@@ -446,30 +529,24 @@ app.post('/api/usuarios/cambiar-password', verificarToken, limitadorCambioPasswo
         return res.status(400).json({ error: 'La contraseña nueva tiene que tener al menos 6 caracteres.' });
     }
 
-    db.query('SELECT * FROM usuarios WHERE id = ?', [req.usuario.id], (err, rows) => {
-        if (err) {
-            console.error('Error al buscar usuario para cambio de password:', err);
-            return res.status(500).json({ error: 'Error interno del servidor' });
-        }
-        if (rows.length === 0) {
+    try {
+        const usuario = await central.uno('SELECT * FROM usuarios_globales WHERE id = ?', [req.usuario.id]);
+        if (!usuario) {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
 
-        const usuario = rows[0];
-        const coincide = bcrypt.compareSync(passwordActual, usuario.password);
+        const coincide = bcrypt.compareSync(passwordActual, usuario.password_hash);
         if (!coincide) {
             return res.status(401).json({ error: 'La contraseña actual no es correcta.' });
         }
 
         const nuevoHash = bcrypt.hashSync(passwordNueva, 10);
-        db.query('UPDATE usuarios SET password = ? WHERE id = ?', [nuevoHash, req.usuario.id], (errUpdate) => {
-            if (errUpdate) {
-                console.error('Error al actualizar password:', errUpdate);
-                return res.status(500).json({ error: 'No se pudo actualizar la contraseña' });
-            }
-            res.json({ mensaje: 'Contraseña actualizada con éxito' });
-        });
-    });
+        await central.query('UPDATE usuarios_globales SET password_hash = ? WHERE id = ?', [nuevoHash, req.usuario.id]);
+        res.json({ mensaje: 'Contraseña actualizada con éxito' });
+    } catch (err) {
+        console.error('Error al actualizar password:', err);
+        return res.status(500).json({ error: 'No se pudo actualizar la contraseña' });
+    }
 });
 
 /* ==========================================================================
@@ -1237,9 +1314,59 @@ cron.schedule('0 20 * * *', () => {
 });
 
 /* ==========================================================================
+   12.1 DESALOJO DE CONEXIONES OCIOSAS
+   --------------------------------------------------------------------------
+   Cada empresa tiene su propio pool. Si una empresa deja de usar el sistema,
+   su pool queda ocupando conexiones contra un MySQL con tope (151 por
+   defecto). Con 50 empresas activas eso se agota. Este trabajo cierra los
+   pools que no se usaron en los últimos minutos.
+
+   Se corre cada 5 minutos: no hace falta más precisión.
+   ========================================================================== */
+const MINUTOS_OCIOSO = 10;
+
+cron.schedule('*/5 * * * *', () => {
+    tenant.desalojarInactivos(MINUTOS_OCIOSO * 60 * 1000)
+        .then((cerrados) => {
+            if (cerrados.length) {
+                console.log(`🧹 Pools cerrados por inactividad (${MINUTOS_OCIOSO} min): ${cerrados.join(', ')}`);
+            }
+        })
+        .catch((err) => console.error('Error al desalojar pools inactivos:', err.message));
+}, {
+    scheduled: true,
+    timezone: 'America/Argentina/Buenos_Aires'
+});
+
+/* ==========================================================================
    13. INICIALIZACIÓN Y PUESTA EN MARCHA DEL SERVIDOR
    ========================================================================== */
-app.listen(PORT, HOST, () => {
+const servidor = app.listen(PORT, HOST, () => {
     console.log(`🚀 Servidor de Service Integral activo.`);
     console.log(`🔒 Escuchando en el puerto ${PORT}.`);
 });
+
+/**
+ * Cierre ordenado. Sin esto, cada reinicio deja conexiones abiertas contra la
+ * base central y la de cada empresa hasta que MySQL las corte por timeout.
+ */
+async function cerrarOrdenado(senal) {
+    console.log(`\n${senal}: cerrando conexiones...`);
+    servidor.close(async () => {
+        try {
+            await tenant.cerrarTodos();
+            await central.cerrar();
+            console.log('Listo, cerrado.');
+            process.exit(0);
+        } catch (err) {
+            console.error('Error al cerrar:', err.message);
+            process.exit(1);
+        }
+    });
+
+    // Si algo se cuelga, no esperar para siempre.
+    setTimeout(() => process.exit(1), 10000).unref();
+}
+
+process.on('SIGINT', () => cerrarOrdenado('SIGINT'));
+process.on('SIGTERM', () => cerrarOrdenado('SIGTERM'));

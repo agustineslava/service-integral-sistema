@@ -26,9 +26,24 @@ function base(usuario, password) {
     };
 }
 
+/**
+ * MySQL en Windows guarda los nombres de base EN MINÚSCULA
+ * (lower_case_table_names = 1) y no distingue mayúsculas al conectarse.
+ * En Linux, en cambio, SÍ distingue: 'ServiceIntegralsistema' y
+ * 'serviceintegralsistema' serían dos bases distintas y una no existiría.
+ *
+ * Para que la misma configuración funcione igual en Windows y en Linux —y
+ * porque el esquema central obliga a que `nombre_db` sea minúscula— acá se
+ * normaliza el nombre de la base.
+ */
+function normalizarBase(database) {
+    if (database === undefined || database === null) return database;
+    return String(database).toLowerCase();
+}
+
 /** Credenciales de la aplicacion. `database` puede ser undefined. */
 function configApp(database) {
-    return { ...base(process.env.DB_USER, process.env.DB_PASSWORD), database };
+    return { ...base(process.env.DB_USER, process.env.DB_PASSWORD), database: normalizarBase(database) };
 }
 
 /** Credenciales de administracion: DDL y migraciones. */
@@ -41,7 +56,7 @@ function configAdmin(database) {
             'Corre primero:  npm run f0:setup'
         );
     }
-    return { ...base(usuario, password), database, multipleStatements: true };
+    return { ...base(usuario, password), database: normalizarBase(database), multipleStatements: true };
 }
 
 const conectarApp   = (database) => mysql.createConnection(configApp(database));
