@@ -1,7 +1,8 @@
 # F2 · El taller pasa a ser la Empresa #1
 
 **Fecha:** 29/09/2026
-**Estado:** implementado y verificado (12/12). Queda un paso con la clave de root.
+**Estado:** implementado y verificado (20/20), incluida la prueba de aislamiento
+entre dos empresas reales.
 
 ---
 
@@ -206,7 +207,7 @@ producto bien distinto, y desde afuera intenta leer y borrar datos del taller.
 ## 5. Verificación
 
 ```
-npm run f2:verificar      → 12 comprobaciones OK
+npm run f2:verificar      → 20 comprobaciones OK
 ```
 
 | Qué | Resultado |
@@ -218,22 +219,36 @@ npm run f2:verificar      → 12 comprobaciones OK
 | Sin token | 401 |
 | Token sin `empresa_id` | 403 |
 | Token de una empresa inexistente | 403 |
-| Aislamiento entre dos empresas | *pendiente del paso 6* |
+| La app tiene permiso sobre las bases `si_tenant_*` | OK |
 
-### Paso que falta (necesita la clave de root, una vez)
+### La parte que importa: aislamiento entre dos empresas reales
+
+La prueba levanta una **segunda empresa de verdad** — con su propia base, su
+propio esquema y un producto con un nombre imposible de confundir — y desde
+afuera intenta cruzarse:
+
+| Intento | Resultado |
+|---|---|
+| La empresa de prueba lee sus productos | 200, ve el suyo |
+| El taller ve el producto de la empresa de prueba | **NO** |
+| La empresa de prueba ve productos del taller | **NINGUNO** |
+| La empresa de prueba lista usuarios | 0, no los del taller |
+| Borrar un usuario del taller desde la otra empresa | **404** |
+| Ese usuario del taller después del intento | **sigue existiendo** |
+
+Al terminar borra la base y la empresa de prueba. Verificado: no queda
+`si_tenant_*` ninguna ni empresas de más.
+
+Esto es lo que respalda la afirmación del punto 4.7, y no es una opinión: la
+ruta de un request resuelve la empresa, y probarlo desde HTTP es la única forma
+de saber que el aislamiento aguanta.
+
+### Cómo reproducirlo
 
 ```
-npm run f1:setup
-```
-
-Es idempotente: conserva las contraseñas, no reaplica migraciones y solo agrega
-lo que falta (el permiso comodín). Después:
-
-```
+npm run f1:setup          # solo la primera vez: agrega el permiso comodín
 npm run f2:verificar
 ```
-
-y la parte 4 (aislamiento) debería dar verde.
 
 ---
 
