@@ -247,6 +247,24 @@ function aplicarModoSoloConsulta() {
     }
 }
 
+// --- TEMA CLARO / OSCURO ---
+// Esta funcion estaba copiada en app.js, pedidos.js y reparaciones.js, y NO
+// estaba en clientes.js: el boton de tema de la pagina de Clientes llamaba a
+// una funcion que no existia y tiraba ReferenceError en la consola, asi que el
+// boton no hacia nada. Va aca porque auth-check.js lo cargan todas las paginas:
+// si queda en el script de cada pantalla, la proxima pantalla nueva repite el
+// mismo error. La clave de localStorage no se cambia, es la de siempre.
+function cambiarTemaManualmente() {
+    const cuerpo = document.body;
+    if (cuerpo.classList.contains('tema-claro')) {
+        cuerpo.classList.remove('tema-claro');
+        localStorage.setItem('tema-preferido', 'oscuro');
+    } else {
+        cuerpo.classList.add('tema-claro');
+        localStorage.setItem('tema-preferido', 'claro');
+    }
+}
+
 // --- FUNCIONES GLOBALES ---
 
 function abrirModalCrearUsuario() {

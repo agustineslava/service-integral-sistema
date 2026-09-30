@@ -22,8 +22,10 @@
     "f2:verificar": "node tools/f2-verificar.js",
     "f3:verificar": "node tools/f3-verificar.js",
     "f3:restaurar": "node tools/f3-verificar.js --restaurar",
+    "f4:verificar": "node tools/f4-verificar.js",
     "f4:limpiar": "node tools/f4-limpiar-usuarios.js",
     "limites": "node tools/limite-usuarios.js",
+    "modulos": "node tools/modulos.js",
     "token": "node tools/generate-token.js",
     "schema:snapshot": "node tools/dump-schema.js"
   },

@@ -454,16 +454,6 @@ window.addEventListener('click', (e) => {
 /* ==========================================================================
    10. INTERRUPTOR DE MODO DE COLOR
    ========================================================================== */
-function cambiarTemaManualmente() {
-    const cuerpo = document.body;
-    if (cuerpo.classList.contains('tema-claro')) {
-        cuerpo.classList.remove('tema-claro');
-        localStorage.setItem('tema-preferido', 'oscuro');
-    } else {
-        cuerpo.classList.add('tema-claro');
-        localStorage.setItem('tema-preferido', 'claro');
-    }
-}
 
 
 /* ==========================================================================

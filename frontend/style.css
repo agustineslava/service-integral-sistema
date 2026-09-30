@@ -1007,7 +1007,13 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     }
 }
 
-@media (max-width: 768px) {
+/* El corte estaba en 768px y con cuatro items de menu el header entraba en una
+   sola fila hasta bastante menos que eso. Al sumar el quinto (Presupuestos) la
+   fila necesita ~950px: entre 768 y 950 el <ul> del menu, que es nowrap, se
+   salia de la pantalla y la pagina entera cambiaba a scroll horizontal.
+   Por eso el breakpoint sube a 950. A partir de ahi el header se apila, que es
+   lo que ya hacia en movil; en un monitor del taller nada cambia. */
+@media (max-width: 950px) {
     header {
         padding: 10px 15px;
     }

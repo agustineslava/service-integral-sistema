@@ -572,16 +572,6 @@ window.addEventListener('click', (e) => {
     }
 });
 
-function cambiarTemaManualmente() {
-    const cuerpo = document.body;
-    if (cuerpo.classList.contains('tema-claro')) {
-        cuerpo.classList.remove('tema-claro');
-        localStorage.setItem('tema-preferido', 'oscuro');
-    } else {
-        cuerpo.classList.add('tema-claro');
-        localStorage.setItem('tema-preferido', 'claro');
-    }
-}
 
 document.addEventListener('DOMContentLoaded', () => {
     const temaGuardado = localStorage.getItem('tema-preferido');

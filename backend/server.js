@@ -1445,6 +1445,32 @@ async function siguienteNumero(query) {
 }
 
 /**
+ * Dice si un string es una fecha que existe de verdad, en AAAA-MM-DD.
+ *
+ * El regex solo alcanza para el formato. Date.parse('2026-02-31') NO es NaN:
+ * JavaScript lo pasa al 3 de marzo sin avisar, y MySQL despues lo rechaza con
+ * un error de columna. Con solo el regex, una fecha imposible llegaba hasta el
+ * INSERT y el POST terminaba en un 500 sin mensaje útil, cuando lo correcto es
+ * un 400 que le diga al usuario qué escribir.
+ *
+ * Se arman los componentes en UTC con setUTCFullYear y no con Date.UTC porque
+ * Date.UTC interpreta los años de dos dígitos como 19xx, y "0099" tiene que
+ * seguir siendo el año 99.
+ */
+function fechaReal(valor) {
+    if (typeof valor !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+
+    const [anio, mes, dia] = valor.split('-').map(Number);
+    const f = new Date(0);
+    f.setUTCHours(0, 0, 0, 0);
+    f.setUTCFullYear(anio, mes - 1, dia);
+
+    // Si la fecha no existia, el constructor la acomoda al mes siguiente (el
+    // 31 de febrero se vuelve 3 de marzo) y los tres numeros no coinciden.
+    return f.getUTCFullYear() === anio && f.getUTCMonth() === mes - 1 && f.getUTCDate() === dia;
+}
+
+/**
  * Valida y calcula un presupuesto. Devuelve los items ya con subtotal, el
  * subtotal, el descuento y el total. Si algo no cierra, no hay siguiente paso.
  */
@@ -1495,7 +1521,7 @@ function prepararPresupuesto(body) {
 
     const subtotal = a2(items.reduce((acc, it) => acc + it.subtotal, 0));
 
-    // Sin descuento es 0, no NaN. Si sepierte directo a a2(body.descuento) y el
+    // Sin descuento es 0, no NaN. Si se hiciera directo a a2(body.descuento) y el
     // campo no viene, Number(undefined) es NaN, el chequeo de "mayor o igual a
     // 0" lo rechaza, y ningun presupuesto se puede crear sin descuento.
     const descuentoViene = body.descuento;
@@ -1508,14 +1534,13 @@ function prepararPresupuesto(body) {
         errores.push('El descuento no puede ser mayor que el subtotal.');
     }
 
-    // valido_hasta: se acepta solo como AAAA-MM-DD. MySQL es permisivo con las
-    // fechas y aceptaria "ayer"; aca se rechaza para que la oferta no expire
-    // en una fecha que el usuario nunca escribio.
+    // valido_hasta: se acepta solo como AAAA-MM-DD, y tiene que ser una fecha
+    // que exista. MySQL es permisivo con las fechas y aceptaria "ayer"; aca se
+    // rechaza para que la oferta no expire en una fecha que el usuario nunca
+    // escribio, y tampoco en el 31 de febrero.
     let valido_hasta = texto(body.valido_hasta) || null;
-    if (valido_hasta) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(valido_hasta) || Number.isNaN(Date.parse(valido_hasta))) {
-            errores.push('La fecha de validez no tiene el formato correcto.');
-        }
+    if (valido_hasta && !fechaReal(valido_hasta)) {
+        errores.push('La fecha de validez no es una fecha valida (AAAA-MM-DD).');
     }
 
     if (errores.length) return { valido: false, error: errores[0], errores };

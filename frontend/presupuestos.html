@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Integral - Presupuestos</title>
+    <script src="auth-check.js"></script>
+    <script src="marca.js"></script>
+    <link rel="stylesheet" href="style.css?v=1.3">
+    <link rel="stylesheet" href="reparaciones.css?v=1.1">
+    <link rel="stylesheet" href="presupuestos.css?v=1.0">
+</head>
+<body>
+    <header>
+        <section class="barra-cabecera">
+            <div class="logo">
+                <img src="logos/logo.jpg" alt="Logo de Service Integral">
+                <div class="servidor-estado">
+                    Servidor Local: <span class="badge-online">Conectado</span>
+                </div>
+            </div>
+
+            <div id="info-usuario-header" class="info-usuario-header"></div>
+
+            <nav class="menu-navegacion">
+                <ul>
+                    <li data-modulo="stock"><a href="index.html">Stock</a></li>
+                    <li data-modulo="reparaciones"><a href="reparaciones.html">Taller / Reparaciones</a></li>
+                    <li data-modulo="clientes"><a href="clientes.html">Clientes</a></li>
+                    <li data-modulo="pedidos"><a href="pedidos.html">Pedidos</a></li>
+                    <li data-modulo="presupuestos"><a href="presupuestos.html" class="active">Presupuestos</a></li>
+                    <li>
+                        <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema">
+                            <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+                            <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </section>
+    </header>
+
+    <main class="contenedor-principal">
+        <div class="titulo-seccion" style="margin-bottom: 25px;">
+            <h1>Presupuestos</h1>
+            <p>Presupuestos para clientes. Cada uno lleva su número correlativo, se puede imprimir y, una vez aprobado, queda cerrado.</p>
+        </div>
+
+        <!-- Filtros -->
+        <section class="seccion-busqueda">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 18px; flex-wrap: wrap;">
+                <label for="filtro-estado" style="white-space: nowrap; font-weight: bold; color: var(--text-main); margin-bottom: 0;">Estado:</label>
+                <select id="filtro-estado" style="height: 42px; padding: 0 10px;">
+                    <option value="">Todos</option>
+                    <option value="BORRADOR">Borrador</option>
+                    <option value="ENVIADO">Enviado</option>
+                    <option value="APROBADO">Aprobado</option>
+                    <option value="RECHAZADO">Rechazado</option>
+                </select>
+
+                <input type="text" id="input-buscar" placeholder="Buscar por cliente, número o documento..." autocomplete="off" style="flex: 1; min-width: 220px; height: 42px;">
+
+                <button class="btn-primario" id="btn-nuevo" onclick="abrirFormulario()">+ Nuevo presupuesto</button>
+            </div>
+        </section>
+
+        <!-- Listado -->
+        <section class="panel-tabla">
+            <h2>Listado de presupuestos</h2>
+            <div class="tabla-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="text-align: center;">N°</th>
+                            <th>Cliente</th>
+                            <th>Estado</th>
+                            <th style="text-align: right;">Subtotal</th>
+                            <th style="text-align: right;">Descuento</th>
+                            <th style="text-align: right;">Total</th>
+                            <th>Emitido</th>
+                            <th style="text-align: center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-presupuestos">
+                        <tr><td colspan="8" style="text-align:center;">Cargando presupuestos...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <!-- ==================================================================
+         FORMULARIO
+         ================================================================== -->
+    <div id="modal-formulario" class="modal">
+        <div class="modal-contenido modal-presupuesto-contenido">
+            <span class="cerrar-modal" onclick="cerrarFormulario()">&times;</span>
+            <h2 id="titulo-formulario" style="color: var(--si-blue-vibrant); margin-bottom: 1rem; flex-shrink: 0;">Nuevo presupuesto</h2>
+
+            <div class="presupuesto-form-body">
+                <div class="presupuesto-col-izq">
+                    <h3>Cliente</h3>
+                    <label for="p-nombre">Nombre *</label>
+                    <input type="text" id="p-nombre" maxlength="150" placeholder="Nombre del cliente">
+
+                    <!-- Buscador de clientes de la ficha. Opcional: un presupuesto
+                         puede no tener cliente en la ficha (un particular que
+                         solo pasa por el taller). -->
+                    <input type="text" id="p-buscar-cliente" placeholder="Buscar un cliente de la ficha..." autocomplete="off" style="margin-top: 6px;">
+                    <div id="p-resultados-cliente" class="p-resultados"></div>
+
+                    <label for="p-doc">Documento</label>
+                    <input type="text" id="p-doc" maxlength="30" placeholder="DNI / CUIT">
+
+                    <label for="p-telefono">Teléfono</label>
+                    <input type="text" id="p-telefono" maxlength="40">
+
+                    <label for="p-email">Email</label>
+                    <input type="text" id="p-email" maxlength="150">
+
+                    <label for="p-direccion">Dirección</label>
+                    <input type="text" id="p-direccion" maxlength="200">
+                </div>
+
+                <div class="presupuesto-col-der">
+                    <h3>Ítems</h3>
+                    <table class="p-tabla-items">
+                        <thead>
+                            <tr>
+                                <th style="width: 38%;">Descripción *</th>
+                                <th style="width: 15%; text-align: right;">Cant.</th>
+                                <th style="width: 20%; text-align: right;">P. unit.</th>
+                                <th style="width: 19%; text-align: right;">Subtotal</th>
+                                <th style="width: 8%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="p-items"></tbody>
+                    </table>
+                    <!-- El datalist va FUERA de la tabla. Dentro del <tbody> es
+                         HTML invalido: el navegador deja el <datalist> entre los
+                         <tr> y la tabla se renderiza con filas fantasma. -->
+                    <datalist id="lista-productos"></datalist>
+                    <button type="button" class="btn-secundario" onclick="agregarItem()" style="margin-top: 8px;">+ Agregar ítem</button>
+
+                    <div id="p-aviso-catalogo" class="p-aviso" style="display: none;">
+                        Esta empresa no tiene contratado el módulo de stock, así que los ítems se cargan a mano.
+                    </div>
+
+                    <div class="p-totales">
+                        <div class="p-total-fila">
+                            <span>Subtotal</span>
+                            <span id="p-subtotal">$ 0,00</span>
+                        </div>
+                        <div class="p-total-fila">
+                            <label for="p-descuento" style="margin: 0;">Descuento</label>
+                            <input type="number" id="p-descuento" value="0" min="0" step="0.01" style="width: 120px; text-align: right;">
+                        </div>
+                        <div class="p-total-fila p-total-final">
+                            <span>Total</span>
+                            <span id="p-total">$ 0,00</span>
+                        </div>
+                    </div>
+
+                    <label for="p-valido" style="margin-top: 14px;">Válido hasta (opcional)</label>
+                    <input type="date" id="p-valido">
+
+                    <label for="p-notas">Notas</label>
+                    <textarea id="p-notas" rows="3" maxlength="2000" placeholder="Condiciones, plazos, observaciones..."></textarea>
+                </div>
+            </div>
+
+            <div id="p-error" class="p-error" style="display: none;"></div>
+
+            <div class="modal-acciones">
+                <button class="btn-primario" id="btn-guardar" onclick="guardar()">Guardar</button>
+                <button class="btn-secundario" onclick="cerrarFormulario()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================================================================
+         DETALLE / COMPROBANTE
+         ================================================================== -->
+    <div id="modal-detalle" class="modal">
+        <div class="modal-contenido modal-presupuesto-contenido">
+            <span class="cerrar-modal" onclick="cerrarDetalle()">&times;</span>
+
+            <div class="p-detalle-acciones no-imprimir">
+                <div id="p-detalle-botones" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+                <button class="btn-secundario" onclick="cerrarDetalle()">Cerrar</button>
+            </div>
+
+            <!-- Hoja imprimible -->
+            <div id="p-comprobante" class="p-comprobante"></div>
+        </div>
+    </div>
+
+    <script src="presupuestos.js"></script>
+</body>
+</html>

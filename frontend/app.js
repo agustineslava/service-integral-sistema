@@ -553,16 +553,6 @@ window.addEventListener('click', (e) => {
     }
 });
 
-function cambiarTemaManualmente() {
-    const cuerpo = document.body;
-    if (cuerpo.classList.contains('tema-claro')) {
-        cuerpo.classList.remove('tema-claro');
-        localStorage.setItem('tema-preferido', 'oscuro');
-    } else {
-        cuerpo.classList.add('tema-claro');
-        localStorage.setItem('tema-preferido', 'claro');
-    }
-}
 
 /* ==========================================================================
    8. EXPORTACIÓN A EXCEL (CSV)

@@ -1,0 +1,470 @@
+/* ==========================================================================
+   PRESUPUESTOS
+   Lo que no estaba en style.css ni en reparaciones.css: el formulario de dos
+   columnas, el editor de ítems y la hoja imprimible del comprobante.
+   ========================================================================== */
+
+/* --- Apertura de los modales --------------------------------------------- */
+/* `.modal` en style.css arranca con `display: none`, y las paginas viejas lo
+   abren escribiendo `style.display = 'block'` a mano desde el JS. Acá se abre y
+   se cierra con la clase `activo`, que deja el estado en un solo lugar (si el
+   modal se cerrara por una de las dos vias, la otra quedaria desincronizada).
+   Sin esta regla, classList.add('activo') no hacia nada y el modal se quedaba
+   invisible: el contenido estava en el DOM y las pruebas automaticas lo
+   leian, pero un humano no lo veia. */
+.modal.activo { display: block; }
+
+/* --- Formulario ---------------------------------------------------------- */
+.modal-presupuesto-contenido {
+    max-width: 1100px;
+    width: 94%;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.presupuesto-form-body {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 22px;
+    overflow-y: auto;
+    flex: 1;
+    padding-right: 6px;
+}
+
+.presupuesto-col-izq,
+.presupuesto-col-der {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.presupuesto-col-izq h3,
+.presupuesto-col-der h3 {
+    margin: 0 0 10px;
+    color: var(--si-blue-vibrant);
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.presupuesto-col-izq input { margin-bottom: 10px; }
+
+/* --- Buscador de clientes de la ficha ----------------------------------- */
+.p-resultados {
+    max-height: 190px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.p-resultados:empty { display: none; }
+
+.p-resultado {
+    padding: 8px 10px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+    font-size: 0.9rem;
+}
+
+.p-resultado:last-child { border-bottom: none; }
+.p-resultado:hover { background: rgba(0, 123, 255, 0.10); }
+
+.p-resultado small {
+    display: block;
+    color: var(--text-secondary, #777);
+    font-size: 0.78rem;
+}
+
+/* --- Editor de ítems ----------------------------------------------------- */
+.p-tabla-items {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.p-tabla-items th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-secondary, #777);
+    border-bottom: 1px solid var(--border-color, #ddd);
+    padding: 4px 4px;
+}
+
+.p-tabla-items td {
+    padding: 3px 3px;
+    vertical-align: middle;
+}
+
+.p-tabla-items input {
+    width: 100%;
+    height: 34px;
+    padding: 4px 7px;
+    font-size: 0.88rem;
+}
+
+.p-tabla-items input[type="number"] { text-align: right; }
+
+.p-subtotal-calc {
+    display: block;
+    text-align: right;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    padding-right: 6px;
+    font-size: 0.9rem;
+}
+
+.p-quitar-item {
+    background: none;
+    border: none;
+    color: var(--si-red, #c0392b);
+    font-size: 1.25rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 4px;
+}
+
+.p-quitar-item:hover { color: #922; }
+
+.p-aviso {
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(255, 193, 7, 0.14);
+    border: 1px solid rgba(255, 193, 7, 0.4);
+    font-size: 0.84rem;
+    color: var(--text-main);
+}
+
+/* --- Totales ------------------------------------------------------------- */
+.p-totales {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 8px;
+    background: rgba(128, 128, 128, 0.05);
+}
+
+.p-total-fila {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 5px 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.p-total-final {
+    border-top: 1px solid var(--border-color, #ddd);
+    margin-top: 6px;
+    padding-top: 10px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--si-blue-vibrant);
+}
+
+.p-error {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: rgba(192, 57, 43, 0.12);
+    border: 1px solid rgba(192, 57, 43, 0.4);
+    color: #922;
+    font-size: 0.88rem;
+    white-space: pre-line;
+}
+
+/* --- Estados ------------------------------------------------------------- */
+.p-estado {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 0.74rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+}
+
+.p-estado-borrador  { background: rgba(128, 128, 128, 0.18); color: #555; }
+.p-estado-enviado   { background: rgba(52, 152, 219, 0.18); color: #1c6ca8; }
+.p-estado-aprobado  { background: rgba(46, 160, 67, 0.18);  color: #2c7a3f; }
+.p-estado-rechazado { background: rgba(192, 57, 43, 0.16);  color: #922; }
+
+/* --- Detalle: barra de acciones ------------------------------------------ */
+.p-detalle-acciones {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-color, #ddd);
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   HOJA IMPRIMIBLE DEL COMPROBANTE
+   Acá termina de smoking la marca de la empresa: la hoja se arma con los datos
+   que manda /api/presupuestos/:id/comprobante, no con lo que quedó guardado en
+   el navegador. Por eso un comprobante impreso hoy sigue siendo correcto si
+   mañana cambian el logo o el teléfono.
+   ========================================================================== */
+.p-comprobante {
+    background: #fff;
+    color: #111;
+    padding: 26px 30px;
+    border-radius: 6px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.p-comprobante-cabecera {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 3px solid var(--p-color-primario, #1a4d8f);
+    margin-bottom: 20px;
+}
+
+.p-comprobante-logo {
+    max-width: 170px;
+    max-height: 90px;
+    object-fit: contain;
+    display: block;
+}
+
+.p-comprobante-empresa h2 {
+    margin: 0 0 2px;
+    font-size: 1.4rem;
+    color: var(--p-color-primario, #1a4d8f);
+}
+
+.p-comprobante-empresa .p-sub {
+    margin: 0 0 8px;
+    color: #555;
+    font-size: 0.9rem;
+}
+
+.p-comprobante-empresa address {
+    font-style: normal;
+    font-size: 0.8rem;
+    color: #444;
+    line-height: 1.5;
+}
+
+.p-comprobante-numero {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.p-comprobante-numero .p-nro {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--p-color-primario, #1a4d8f);
+    display: block;
+}
+
+.p-comprobante-numero .p-estado {
+    margin-top: 6px;
+}
+
+.p-comprobante-cliente {
+    margin-bottom: 18px;
+}
+
+.p-comprobante-cliente h3 {
+    margin: 0 0 6px;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #777;
+}
+
+.p-comprobante-cliente .p-nombre {
+    font-size: 1.05rem;
+    font-weight: bold;
+}
+
+.p-comprobante-cliente p {
+    margin: 2px 0 0;
+    font-size: 0.86rem;
+    color: #444;
+}
+
+.p-comprobante-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 18px;
+}
+
+.p-comprobante-items th {
+    background: var(--p-color-primario, #1a4d8f);
+    color: #fff;
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.p-comprobante-items th:nth-child(2),
+.p-comprobante-items th:nth-child(3),
+.p-comprobante-items th:nth-child(4) {
+    text-align: right;
+}
+
+.p-comprobante-items td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e2e2e2;
+    font-size: 0.9rem;
+}
+
+.p-comprobante-items td:nth-child(2),
+.p-comprobante-items td:nth-child(3),
+.p-comprobante-items td:nth-child(4) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.p-comprobante-items tr:nth-child(even) td {
+    background: #fafafa;
+}
+
+.p-comprobante-cierre {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.p-comprobante-cierre table {
+    border-collapse: collapse;
+    min-width: 280px;
+}
+
+.p-comprobante-cierre td {
+    padding: 5px 8px;
+    font-size: 0.92rem;
+}
+
+.p-comprobante-cierre td:last-child {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: bold;
+}
+
+.p-comprobante-cierre .p-fila-total td {
+    border-top: 2px solid var(--p-color-primario, #1a4d8f);
+    font-size: 1.15rem;
+    padding-top: 9px;
+    color: var(--p-color-primario, #1a4d8f);
+}
+
+.p-comprobante-notas {
+    margin-top: 20px;
+    padding: 11px 13px;
+    background: #f6f6f6;
+    border-left: 3px solid var(--p-color-primario, #1a4d8f);
+    font-size: 0.86rem;
+    white-space: pre-line;
+}
+
+.p-comprobante-notas strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #666;
+}
+
+.p-comprobante-pie {
+    margin-top: 26px;
+    padding-top: 12px;
+    border-top: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 0.76rem;
+    color: #777;
+    flex-wrap: wrap;
+}
+
+.p-comprobante-firmas {
+    display: flex;
+    justify-content: space-between;
+    gap: 40px;
+    margin-top: 40px;
+}
+
+.p-comprobante-firma {
+    flex: 1;
+    text-align: center;
+    font-size: 0.78rem;
+    color: #666;
+}
+
+.p-comprobante-firma span {
+    display: block;
+    border-top: 1px solid #999;
+    padding-top: 5px;
+}
+
+.p-vacio {
+    text-align: center;
+    padding: 26px 10px;
+    color: var(--text-secondary, #777);
+    font-size: 0.92rem;
+}
+
+/* ==========================================================================
+   IMPRESIÓN
+   En la hoja solo va el comprobante. Los colores de la empresa se fuerzan a
+   "print-color-adjust: exact" porque si no el navegador los saca y la hoja
+   sale toda blanca: que sea la marca del cliente, no la del taller.
+   ========================================================================== */
+@media print {
+    body > *:not(#modal-detalle) { display: none !important; }
+
+    #modal-detalle {
+        position: static !important;
+        display: block !important;
+        background: #fff !important;
+        padding: 0 !important;
+    }
+
+    #modal-detalle .cerrar-modal,
+    #modal-detalle .no-imprimir { display: none !important; }
+
+    #modal-detalle .modal-contenido {
+        max-width: 100% !important;
+        width: 100% !important;
+        max-height: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        background: #fff !important;
+    }
+
+    .p-comprobante {
+        padding: 0 !important;
+        overflow: visible !important;
+        border-radius: 0 !important;
+    }
+
+    .p-comprobante th,
+    .p-comprobante .p-total-final td,
+    .p-comprobante .p-comprobante-cabecera {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+
+    .p-comprobante-items tr { page-break-inside: avoid; }
+    .p-comprobante-cierre,
+    .p-comprobante-firmas { page-break-inside: avoid; }
+
+    @page { margin: 14mm; }
+}
