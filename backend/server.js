@@ -103,14 +103,94 @@ central.verificar()
     });
 
 /* ==========================================================================
-   CONFIGURACIÓN PÚBLICA DE MARCA BLANCA
+   MARCA BLANCA: DE DONDE SALE Y QUE ES PUBLICA
+   ==========================================================================
+   La marca de cada empresa vive en la fila de `empresas` de la base CENTRAL,
+   no en variables de entorno. Antes salia de `COMERCIO_*`: con eso, la empresa
+   numero 2 entra al sistema y ve en el header el nombre y el logo de la
+   numero 1, que es justamente lo que un sistema de varias empresas no puede
+   hacer.
+
+   `/api/config-comercio` es PUBLICA a proposito: la tiene que poder leer la
+   pantalla de login, que todavia no sabe de quien es el usuario. Por eso:
+
+     - Si viene un token, se responde con la marca de ESA empresa.
+     - Si no viene token (pantalla de login, o el logo antes de escribir el
+       mail), se responde con las variables de entorno, que son la marca de la
+       unica empresa que hay instalado.
+
+   La segunda parte es un puente, no la solución final: cuando exista la
+   busqueda "a que empresa pertenece este email" (F5b), la pantalla de login va
+   a preguntar por la empresa y no va a necesitar este camino de aqui.
+
+   Que sea publica no filtra nada: los mismos datos (nombre, logo, telefono,
+   direccion) salen impresos en los comprobantes que el cliente se lleva.
    ========================================================================== */
-app.get('/api/config-comercio', (req, res) => {
-    res.json({
+
+/**
+ * Los datos de marca y de contacto de una empresa, en un solo objeto.
+ *
+ * Antes cada ruta armaba su propia lista y se habian desincronizado: el
+ * comprobante mandaba telefono y direccion, el login mandaba los colores, y
+ * `/api/mi-empresa` mandaba los colores pero no el subtitulo. El que carga la
+ * marca en el navegador recibia un campo distinto en cada endpoint, y por eso
+ * termino usando variables de entorno "para no complicarse".
+ *
+ * Un solo lugar, y el nombre del campo es el de la columna, para que no haya
+ * que traducir `logo_url` a `logo` y viceversa.
+ */
+function datosDeMarca(e) {
+    if (!e) return null;
+    return {
+        nombre: e.nombre,
+        subtitulo: e.subtitulo,
+        logo_url: e.logo_url,
+        color_primario: e.color_primario,
+        color_secundario: e.color_secundario,
+        telefono: e.telefono,
+        email_contacto: e.email_contacto,
+        direccion: e.direccion,
+        cuit: e.cuit
+    };
+}
+
+/** La marca de las variables de entorno: el puente para el que no tiene token. */
+function marcaDeEntorno() {
+    return {
         nombre: process.env.COMERCIO_NOMBRE || 'Sistema de Gestión',
         subtitulo: process.env.COMERCIO_SUBTITULO || 'Gestión de Stock y Taller',
-        logo: process.env.COMERCIO_LOGO || 'logos/logo.jpg'
-    });
+        // Sin barra inicial porque `marca.js` normaliza las rutas relativas.
+        logo_url: process.env.COMERCIO_LOGO || 'logos/logo.jpg',
+        color_primario: null,
+        color_secundario: null,
+        telefono: null,
+        email_contacto: null,
+        direccion: null,
+        cuit: null
+    };
+}
+
+app.get('/api/config-comercio', async (req, res) => {
+    // Con token se responde con la empresa de ese token. Un token viejo,
+    // adulterado o de una empresa que ya no existe NO es un error: se cae al
+    // camino de las variables de entorno. Esta ruta nunca dice "no", porque si
+    // fallara, la pagina quedaria sin logo y sin saber por que.
+    const auth = req.headers['authorization'];
+    const token = auth && auth.startsWith('Bearer ') ? auth.split(' ')[1] : null;
+
+    if (token) {
+        try {
+            const carga = jwt.verify(token, JWT_SECRET);
+            if (carga && carga.empresa_id) {
+                const empresa = await registro.empresaPorId(carga.empresa_id);
+                if (empresa) return res.json(datosDeMarca(empresa));
+            }
+        } catch {
+            // Token inválido o vencido: se sigue con la marca de entorno.
+        }
+    }
+
+    res.json(marcaDeEntorno());
 });
 
 /* ==========================================================================
@@ -445,18 +525,18 @@ app.post('/api/login', limitadorLogin, async (req, res) => {
                 rol: usuario.rol
             },
             // Marca blanca: la necesita el frontend ya mismo después de entrar.
+            // `datosDeMarca` mete nombre, logo, colores y datos de contacto; el
+            // frontend guarda todo esto en `empresa_actual` y con eso pinta la
+            // marca sin tener que volver a preguntar.
             empresa: empresa ? {
                 id: empresa.id,
-                nombre: empresa.nombre,
                 slug: empresa.slug,
                 rubro: empresa.rubro,
                 estado: empresa.estado,
-                color_primario: empresa.color_primario,
-                color_secundario: empresa.color_secundario,
-                logo_url: empresa.logo_url,
                 plan: empresa.plan,
                 limite_usuarios: empresa.limite_usuarios,
-                modulos
+                modulos,
+                ...datosDeMarca(empresa)
             } : null
         });
     } catch (err) {
@@ -483,18 +563,17 @@ app.get('/api/mi-empresa', verificarToken, async (req, res) => {
         const modulos = Array.from(await registro.codigosDeModulos(empresa.id));
         res.json({
             id: empresa.id,
-            nombre: empresa.nombre,
             slug: empresa.slug,
             rubro: empresa.rubro,
             estado: empresa.estado,
-            color_primario: empresa.color_primario,
-            color_secundario: empresa.color_secundario,
-            logo_url: empresa.logo_url,
             plan: empresa.plan,
             plan_nombre: empresa.plan_nombre,
             limite_usuarios: empresa.limite_usuarios,
             usuarios_actuales: await registro.contarUsuarios(empresa.id),
-            modulos
+            modulos,
+            // Nombre, logo, colores y datos de contacto, por el mismo helper que
+            // usan el login y el comprobante.
+            ...datosDeMarca(empresa)
         });
     } catch (err) {
         console.error('Error en /api/mi-empresa:', err);
@@ -1662,17 +1741,7 @@ app.get('/api/presupuestos/:id/comprobante', verificarToken, requiereModulo('pre
         res.json({
             presupuesto: p[0],
             items,
-            empresa: {
-                nombre: e.nombre,
-                subtitulo: e.subtitulo,
-                logo_url: e.logo_url,
-                color_primario: e.color_primario,
-                color_secundario: e.color_secundario,
-                telefono: e.telefono,
-                email_contacto: e.email_contacto,
-                direccion: e.direccion,
-                cuit: e.cuit
-            },
+            empresa: datosDeMarca(e),
             // Para el pie del comprobante, sin exponer datos del usuario.
             emitido_por: p[0].usuario_nombre
         });
