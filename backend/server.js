@@ -1245,6 +1245,304 @@ app.get('/api/movimientos-stock', verificarToken, requiereModulo('stock'), requi
 });
 
 /* ==========================================================================
+   MÓDULO: ETIQUETAS QR (STOCK) — requiere modulo 'etiquetas_qr'
+   ========================================================================== */
+const crypto = require('crypto');
+const QRCode = require('qrcode');
+
+/**
+ * Genera un codigo corto unico para URL publica /e/:codigo
+ * 12 chars alfanumericos (sin vocales para evitar palabras feas).
+ */
+function generarCodigoEtiqueta() {
+    const alfabeto = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
+    let codigo = '';
+    for (let i = 0; i < 12; i++) {
+        codigo += alfabeto[crypto.randomInt(0, alfabeto.length)];
+    }
+    return codigo;
+}
+
+/**
+ * Construye el snapshot JSON inmutable del producto para la etiqueta.
+ */
+function construirSnapshot(producto) {
+    return {
+        producto_id: producto.id,
+        codigo_interno: producto.codigoDistribuidor || `REP-${String(producto.id).padStart(5, '0')}`,
+        nombre: producto.nombre,
+        stock_actual: Number(producto.stock),
+        stock_minimo: Number(producto.stockMinimo || 0),
+        ubicacion: '',
+        codigo_barras: '',
+        distribuidor: producto.distribuidor || '',
+        precio_venta: Number(producto.precio),
+        generado_en: new Date().toISOString()
+    };
+}
+
+/**
+ * URL publica base (se sobreescribe en produccion con dominio real).
+ */
+function urlPublicaBase(req) {
+    return `${req.protocol}://${req.get('host')}`;
+}
+
+// 1. LISTAR etiquetas (con/sin QR) — filtro para saber que productos tienen QR
+app.get('/api/etiquetas', verificarToken, requiereModulo('etiquetas_qr'), (req, res) => {
+    const { con_qr, buscar } = req.query;
+    let sql = `
+        SELECT p.id, p.nombre, p.codigoDistribuidor, p.stock, p.stockMinimo,
+               p.distribuidor, p.precio,
+               e.id AS etiqueta_id, e.codigo, e.activo, e.creado_en
+        FROM productos p
+        LEFT JOIN etiquetas_qr e ON e.producto_id = p.id AND e.activo = 1
+        WHERE 1=1
+    `;
+    const params = [];
+
+    if (con_qr === 'true') sql += ' AND e.id IS NOT NULL';
+    if (con_qr === 'false') sql += ' AND e.id IS NULL';
+
+    if (buscar && buscar.trim()) {
+        const term = `%${buscar.trim().toLowerCase()}%`;
+        sql += ` AND (LOWER(p.nombre) LIKE ? OR LOWER(p.codigoDistribuidor) LIKE ? OR LOWER(p.distribuidor) LIKE ?)`;
+        params.push(term, term, term);
+    }
+
+    sql += ' ORDER BY p.nombre ASC LIMIT 200';
+
+    db.query(sql, params, (err, rows) => {
+        if (err) {
+            console.error('Error al listar etiquetas:', err);
+            return res.status(500).json({ error: 'Error al consultar etiquetas' });
+        }
+        res.json(rows);
+    });
+});
+
+// 2. GENERAR (o regenerar) etiqueta QR para un producto
+app.post('/api/etiquetas/generar', verificarToken, requiereModulo('etiquetas_qr'), requiereAdmin, async (req, res) => {
+    const { producto_id } = req.body;
+    if (!producto_id || !Number.isInteger(Number(producto_id))) {
+        return res.status(400).json({ error: 'producto_id requerido (entero)' });
+    }
+
+    // Verificar que el producto existe
+    db.query('SELECT * FROM productos WHERE id = ?', [producto_id], async (err, rows) => {
+        if (err) {
+            console.error('Error al buscar producto:', err);
+            return res.status(500).json({ error: 'Error interno' });
+        }
+        if (!rows.length) {
+            return res.status(404).json({ error: 'Producto no encontrado' });
+        }
+        const producto = rows[0];
+
+        const codigo = generarCodigoEtiqueta();
+        const snapshot = construirSnapshot(producto);
+        const urlPublica = `${urlPublicaBase(req)}/e/${codigo}`;
+
+        // Generar QR como SVG
+        let qrSvg;
+        try {
+            qrSvg = await QRCode.toString(urlPublica, {
+                type: 'svg',
+                width: 200,
+                margin: 1,
+                color: { dark: '#000000', light: '#ffffff' }
+            });
+        } catch (e) {
+            console.error('Error generando QR:', e);
+            return res.status(500).json({ error: 'Error generando código QR' });
+        }
+
+        // Upsert en etiquetas_qr
+        db.query(
+            `INSERT INTO etiquetas_qr (producto_id, codigo, datos_json, activo)
+             VALUES (?, ?, ?, 1)
+             ON DUPLICATE KEY UPDATE codigo = VALUES(codigo), datos_json = VALUES(datos_json), activo = 1, actualizado_en = NOW()`,
+            [producto_id, codigo, JSON.stringify(snapshot)],
+            (err2) => {
+                if (err2) {
+                    console.error('Error guardando etiqueta:', err2);
+                    return res.status(500).json({ error: 'Error guardando etiqueta' });
+                }
+                res.json({
+                    mensaje: 'Etiqueta QR generada',
+                    codigo,
+                    url_publica: urlPublica,
+                    qr_svg: qrSvg,
+                    snapshot
+                });
+            }
+        );
+    });
+});
+
+// 3. DETALLE de etiqueta (con SVG/PNG listos para imprimir)
+app.get('/api/etiquetas/:id', verificarToken, requiereModulo('etiquetas_qr'), async (req, res) => {
+    const etiquetaId = Number(req.params.id);
+    if (!Number.isInteger(etiquetaId)) {
+        return res.status(400).json({ error: 'ID inválido' });
+    }
+
+    db.query(
+        `SELECT e.*, p.nombre, p.codigoDistribuidor, p.stock, p.stockMinimo, p.distribuidor, p.precio
+           FROM etiquetas_qr e
+           JOIN productos p ON p.id = e.producto_id
+          WHERE e.id = ?`,
+        [etiquetaId],
+        async (err, rows) => {
+            if (err) {
+                console.error('Error buscando etiqueta:', err);
+                return res.status(500).json({ error: 'Error interno' });
+            }
+            if (!rows.length) {
+                return res.status(404).json({ error: 'Etiqueta no encontrada' });
+            }
+            const e = rows[0];
+            const urlPublica = `${urlPublicaBase(req)}/e/${e.codigo}`;
+
+            let qrSvg, qrPng;
+            try {
+                qrSvg = await QRCode.toString(urlPublica, { type: 'svg', width: 200, margin: 1 });
+                qrPng = await QRCode.toDataURL(urlPublica, { width: 400, margin: 1 });
+            } catch (e2) {
+                console.error('Error generando QR:', e2);
+                return res.status(500).json({ error: 'Error generando QR' });
+            }
+
+            res.json({
+                etiqueta: { ...e, url_publica: urlPublica },
+                qr_svg: qrSvg,
+                qr_png_base64: qrPng
+            });
+        }
+    );
+});
+
+// 4. DESACTIVAR etiqueta (soft delete)
+app.delete('/api/etiquetas/:id', verificarToken, requiereModulo('etiquetas_qr'), requiereAdmin, (req, res) => {
+    const etiquetaId = Number(req.params.id);
+    if (!Number.isInteger(etiquetaId)) {
+        return res.status(400).json({ error: 'ID inválido' });
+    }
+    db.query('UPDATE etiquetas_qr SET activo = 0 WHERE id = ?', [etiquetaId], (err, result) => {
+        if (err) {
+            console.error('Error desactivando etiqueta:', err);
+            return res.status(500).json({ error: 'Error interno' });
+        }
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Etiqueta no encontrada' });
+        }
+        res.json({ mensaje: 'Etiqueta desactivada' });
+    });
+});
+
+function escapeHtml(s) {
+    if (!s) return '';
+    return String(s)
+        .replace(/&/g, '&')
+        .replace(/</g, '<')
+        .replace(/>/g, '>')
+        .replace(/"/g, '"');
+}
+
+// 5. RUTA PUBLICA — SVG del QR para <img> en la pagina publica (DEBE IR ANTES que /e/:codigo)
+app.get('/e/:codigo.svg', (req, res) => {
+    const codigo = req.params.codigo;
+    if (!/^[A-Z0-9]{8,16}$/i.test(codigo)) {
+        return res.status(404).send('Código inválido');
+    }
+    const pool = require('./src/db/tenant').obtenerPool('serviceintegralsistema');
+    pool.query('SELECT codigo FROM etiquetas_qr WHERE codigo = ? AND activo = 1', [codigo], async (err, rows) => {
+        if (err || !rows.length) return res.status(404).send('No encontrado');
+        const url = `${req.protocol}://${req.get('host')}/e/${codigo}`;
+        try {
+            const svg = await QRCode.toString(url, { type: 'svg', width: 200, margin: 1 });
+            res.set('Content-Type', 'image/svg+xml');
+            res.set('Cache-Control', 'public, max-age=31536000');
+            res.send(svg);
+        } catch (e) {
+            res.status(500).send('Error generando QR');
+        }
+    });
+});
+
+// 6. RUTA PUBLICA — Página HTML al escanear /e/:codigo
+app.get('/e/:codigo', (req, res) => {
+    const codigo = req.params.codigo;
+    if (!/^[A-Z0-9]{8,16}$/i.test(codigo)) {
+        return res.status(404).send('Código inválido');
+    }
+    // Usamos la conexion del tenant por defecto (la primera empresa activa)
+    // En produccion con multi-tenant real, esto se resolvia por subdominio.
+    // Por ahora: la empresa 1 (taller) es la que tiene etiquetas.
+    const pool = require('./src/db/tenant').obtenerPool('serviceintegralsistema');
+    pool.query(
+        `SELECT e.datos_json, e.creado_en, p.nombre, p.codigoDistribuidor, p.distribuidor, p.precio
+           FROM etiquetas_qr e
+           JOIN productos p ON p.id = e.producto_id
+          WHERE e.codigo = ? AND e.activo = 1`,
+        [codigo],
+        (err, rows) => {
+            if (err || !rows.length) {
+                return res.status(404).send(`
+                    <!DOCTYPE html><html><head><meta charset="utf-8"><title>No encontrado</title>
+                    <style>body{font-family:sans-serif;max-width:400px;margin:3rem auto;text-align:center;color:#666}</style>
+                    </head><body><h1>Etiqueta no encontrada</h1><p>El código <code>${escapeHtml(codigo)}</code> no existe o fue desactivado.</p></body></html>
+                `);
+            }
+            const d = rows[0];
+            const datos = typeof d.datos_json === 'string' ? JSON.parse(d.datos_json) : d.datos_json;
+            const precio = Number(d.precio).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+            const fechaGen = new Date(d.creado_en).toLocaleString('es-AR');
+            const html = `
+                <!DOCTYPE html>
+                <html lang="es">
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <title>${escapeHtml(datos.nombre)}</title>
+                    <style>
+                        body{font-family:system-ui,sans-serif;max-width:100%;margin:0;padding:1rem;background:#f8f9fa}
+                        .card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:1.25rem}
+                        h1{font-size:1.1rem;margin:0 0 .5rem;color:#1a1a2e}
+                        .meta{font-size:.85rem;color:#666;margin-bottom:.75rem}
+                        .row{display:flex;justify-content:space-between;padding:.4rem 0;border-top:1px solid #eee}
+                        .label{color:#888;font-size:.9rem}
+                        .value{font-weight:600;color:#1a1a2e;text-align:right}
+                        .badge{display:inline-block;background:#e8f5e9;color:#2e7d32;padding:.15rem .5rem;border-radius:999px;font-size:.75rem;font-weight:600}
+                        .qr{display:block;margin:1rem auto 0;max-width:180px}
+                        footer{margin-top:1.5rem;font-size:.7rem;color:#999;text-align:center}
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>${escapeHtml(datos.nombre)}</h1>
+                        <div class="meta">
+                            <span class="badge">Repuesto</span>
+                            ${datos.codigo_interno ? `<span class="badge" style="background:#e3f2fd;color:#1565c0;margin-left:.4rem">${escapeHtml(datos.codigo_interno)}</span>` : ''}
+                        </div>
+                        <div class="row"><span class="label">Código interno</span><span class="value">${escapeHtml(datos.codigo_interno || '—')}</span></div>
+                        <div class="row"><span class="label">Stock actual</span><span class="value">${Number(datos.stock_actual).toLocaleString()}</span></div>
+                        <div class="row"><span class="label">Stock mínimo</span><span class="value">${Number(datos.stock_minimo).toLocaleString()}</span></div>
+                        <div class="row"><span class="label">Ubicación</span><span class="value">${escapeHtml(datos.ubicacion || '—')}</span></div>
+                        <div class="row"><span class="label">Distribuidor</span><span class="value">${escapeHtml(datos.distribuidor || '—')}</span></div>
+                        <div class="row"><span class="label">Precio</span><span class="value">${precio}</span></div>
+                        <img class="qr" src="/e/${escapeHtml(codigo)}.svg" alt="QR">
+                        <footer>Generado el ${fechaGen} · Service Integral</footer>
+                    </div>
+                </body>
+                </html>
+            `;
+            res.send(html);
+        }
+    );
+});
+
+/* ==========================================================================
    10. MÓDULO: CLIENTES (HISTORIAL Y GESTIÓN)
    ========================================================================== */
 
