@@ -81,6 +81,8 @@ cloudinary.config({
 const tenant = require('./src/db/tenant');
 const registro = require('./src/servicios/registro');
 const central = require('./src/db/central');
+const altas = require('./src/servicios/altas');
+const soporte = require('./src/servicios/soporte');
 
 // El `db` que usan las rutas: mismos argumentos que el pool anterior
 // (db.query(sql, params, callback)), pero sale por la base de la empresa
@@ -240,6 +242,35 @@ async function verificarToken(req, res, next) {
 
         const pool = tenant.obtenerPool(empresa.nombre_db);
 
+        // --- CLAVE TEMPORAL PENDIENTE ---------------------------------------
+        // Entra con una clave que genero el SuperAdmin y que el usuario todavia
+        // no cambio. Se le deja pasar por UNA sola puerta: la de cambiar la
+        // clave. Ni ver clientes ni facturar ni borrar nada.
+        //
+        // Por que se corta acá y no en cada ruta: ponerlo en `verificarToken`
+        // es un solo lugar y no se puede olvidar. Ponerlo en las rutas es
+        // Protegerlo en cada ruta es dejar la puerta abierta en la proxima
+        // ruta nueva: alguien la escribe sin el middleware y no se nota.
+        // querer, alguien lo escribe sin el middleware y la proteccion no esta.
+        //
+        // La excepcion es `GET /api/mi-empresa` porque el frontend la necesita
+        // para saber QUE tiene que cambiar la clave y a que empresa pertenece.
+        // No devuelve datos del negocio: nombre, plan y logo.
+        if (await registro.claveTemporalPendiente(payload.id)) {
+            const permitidas = [
+                'POST /api/usuarios/cambiar-password',
+                'GET /api/mi-empresa'
+            ];
+            const actual = `${req.method} ${rutaOriginal(req)}`;
+            if (!permitidas.includes(actual)) {
+                return res.status(403).json({
+                    error:
+                        'Tenés que cambiar la clave temporal antes de seguir.',
+                    debe_cambiar_password: true
+                });
+            }
+        }
+
         req.usuario = payload;
         req.empresa = empresa;
 
@@ -255,6 +286,21 @@ function requiereAdmin(req, res, next) {
         return res.status(403).json({ error: 'No tenés permisos para realizar esta acción.' });
     }
     next();
+}
+
+/**
+ * La ruta como la escribio el.route, con los parametros puestos: /api/clientes/7.
+ *
+ * En los middlewares que corren antes de que la ruta resuelva, `req.path` todavia
+ * es la parte de la URL pedida y `req.route` puede no existir, asi que se arma con
+ * `req.originalUrl`, que siempre trae la URL completa sin query string.
+ *
+ * Se usa para la lista blanca de la clave temporal pendiente. Importa que sea
+ * EXACTA: si la comparacion fuera por prefijo, `/api/usuarios/cambiar-password-de-otro`
+ * pasaria el filtro.
+ */
+function rutaOriginal(req) {
+    return (req.originalUrl || req.url || '').split('?')[0];
 }
 
 /* ==========================================================================
@@ -515,6 +561,11 @@ app.post('/api/login', limitadorLogin, async (req, res) => {
             ? Array.from(await registro.codigosDeModulos(empresa.id))
             : [];
 
+        // Entra con una clave temporal que todavia no cambio. Va en la respuesta para
+        // que el frontend lleve derecho a la pantalla de cambiar la clave y no
+        // entre a cruzar la primera pantalla que se parezca a lo suyo.
+        const debeCambiar = await registro.claveTemporalPendiente(usuario.id);
+
         res.json({
             mensaje: 'Autenticación exitosa',
             token,
@@ -522,8 +573,10 @@ app.post('/api/login', limitadorLogin, async (req, res) => {
                 id: usuario.id,
                 nombre: usuario.nombre,
                 email: usuario.email,
-                rol: usuario.rol
+                rol: usuario.rol,
+                debe_cambiar_password: debeCambiar
             },
+            debe_cambiar_password: debeCambiar,
             // Marca blanca: la necesita el frontend ya mismo después de entrar.
             // `datosDeMarca` mete nombre, logo, colores y datos de contacto; el
             // frontend guarda todo esto en `empresa_actual` y con eso pinta la
@@ -571,6 +624,22 @@ app.get('/api/mi-empresa', verificarToken, async (req, res) => {
             limite_usuarios: empresa.limite_usuarios,
             usuarios_actuales: await registro.contarUsuarios(empresa.id),
             modulos,
+            // Claim de sesión de soporte, o null. El frontend lo lee para
+            // mostrar el banner de "estás viendo otra empresa".
+            //
+            // Sale acá y no solo del token porque el banner es lo que evita que
+            // alguien toque datos pensando que son suyos. Si se armara
+            // descifrando el token en el navegador, un usuario con las
+            // herramientas del navegador abiertas podría editarse el claim y
+            // sacarse el aviso de encima sin tocar la base. Que venga de la
+            // API no lo vuelve a prueba de manipulacion -- el token lo firma el
+            // servidor -- pero deja el aviso en un solo lugar en vez de en
+            // cinco paginas.
+            soporte: soporte.claimDeSoporte(req.usuario),
+            // Que tenga que cambiar la clave. Va en la respuesta para que el
+            // frontend lleve derecho a esa pantalla en vez de dejarla entrar y
+            // que cada ruta rebote con 403.
+            debe_cambiar_password: await registro.claveTemporalPendiente(req.usuario.id),
             // Nombre, logo, colores y datos de contacto, por el mismo helper que
             // usan el login y el comprobante.
             ...datosDeMarca(empresa)
@@ -729,8 +798,37 @@ app.post('/api/usuarios/cambiar-password', verificarToken, limitadorCambioPasswo
         }
 
         const nuevoHash = bcrypt.hashSync(passwordNueva, 10);
-        await central.query('UPDATE usuarios_globales SET password_hash = ? WHERE id = ?', [nuevoHash, req.usuario.id]);
-        res.json({ mensaje: 'Contraseña actualizada con éxito' });
+
+        // El flag se limpia EN LA MISMA sentencia que la clave. Si fueran dos,
+        // una podria fallar entre medio y dejaria al usuario con la clave nueva
+        // y el flag puesto: no podria hacer nada, y la clave temporal ya no
+        // serviria para entrar porque el SuperAdmin tendria que generar otra.
+        await central.query(
+            'UPDATE usuarios_globales SET password_hash = ?, debe_cambiar_password = 0 WHERE id = ?',
+            [nuevoHash, req.usuario.id]
+        );
+        registro.invalidarClavePendiente(req.usuario.id);
+
+        // Token nuevo porque el que trae el usuario ya no sirve: hacia la sesion
+        // que entro con la clave temporal, y el servidor la va a rebotar en
+        // cuanto se lea el flag... que recien se limpio. Sin renovarlo, el
+        // usuario tendria que volver a iniciar sesion a mano.
+        const tokenNuevo = jwt.sign(
+            {
+                id: usuario.id,
+                email: usuario.email,
+                nombre: usuario.nombre,
+                rol: usuario.rol,
+                empresa_id: usuario.empresa_id
+            },
+            JWT_SECRET,
+            { expiresIn: '8h' }
+        );
+
+        res.json({
+            mensaje: 'Contraseña actualizada con éxito',
+            token: tokenNuevo
+        });
     } catch (err) {
         console.error('Error al actualizar password:', err);
         return res.status(500).json({ error: 'No se pudo actualizar la contraseña' });
@@ -1906,6 +2004,618 @@ app.delete('/api/presupuestos/:id', verificarToken, requiereModulo('presupuestos
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
+
+/* ==========================================================================
+   14. PANEL DEL SUPERADMIN  (rol SUPERADMIN, sobre la base CENTRAL)
+   --------------------------------------------------------------------------
+   Estas rutas no son de una empresa: son de todas. Por eso van aparte y no
+   usan `verificarToken`.
+
+   Por que no pueden reusarlo: `verificarToken` resuelve la empresa del token,
+   se baja su pool de base de datos y RECHAZA al SUPERADMIN con un 403
+   ("esta sesion no corresponde a una empresa"), que es exactamente lo
+   correcto para el resto del sistema. Reusarlo seria tener que agregar
+   excepciones a un guard que existe justamente para no tenerlas.
+
+   Y por que no usan `conContexto`: el contexto pone en el request el pool de
+   UNA empresa, y aca no hay ninguna. Todo lo de estas rutas va contra la base
+   central, que es donde vive el registro de empresas, usuarios y modulos.
+   Si alguna de estas rutas hiciera un `db.query(...)` a proposito, `db` no
+   tendria pool en el contexto y fallaria con un error de.pool. Eso es lo que
+   tiene que pasar: que ningun `db.query` de aca pueda escribir en la base de
+   un cliente sin querer.
+
+   Lo que un SUPERAdmin PUEDE ver: el registro de empresas, sus usuarios, sus
+   modulos contratados, sus planes y el registro de auditoria. NO puede
+   entrar a la base de datos de un cliente ni ver sus reparaciones, productos o
+   clientes. Esa linea no es un detalle de la implementacion: es la promesa de
+   "cero cruce de datos".
+   ========================================================================== */
+
+/** Un error de estas rutas, con el codigo HTTP que corresponde. */
+function errorAdmin(mensaje, estado = 400, extra = {}) {
+    const e = new Error(mensaje);
+    e.estadoHttp = estado;
+    e.extra = extra;
+    return e;
+}
+
+/**
+ * Verifica que el token sea de un SUPERADMIN.
+ *
+ * Deliberadamente NO devuelve ni busca datos de la empresa del token: si
+ * `empresa_id` viene puesto en un token de SUPERADMIN, se ignora. Un token
+ * con rol equivocado da 403, no 401: la sesion es valida, lo que no vale es
+ * para esto.
+ */
+async function verificarSuperAdmin(req, res, next) {
+    const auth = req.headers['authorization'];
+    const token = auth && auth.startsWith('Bearer ') ? auth.split(' ')[1] : null;
+    if (!token) {
+        return res.status(401).json({ error: 'No autorizado.' });
+    }
+
+    let payload;
+    try {
+        payload = jwt.verify(token, JWT_SECRET);
+    } catch {
+        return res.status(401).json({ error: 'Sesión inválida o expirada.' });
+    }
+
+    if (payload.rol !== 'SUPERADMIN') {
+        return res.status(403).json({
+            error: 'Esta sección es solo para el administrador del servicio.'
+        });
+    }
+
+    // Se busca el usuario en la central en cada request, sin cache. Son pocas
+    // consultas y la alternativa es un SUPERADMIN desactivado que sigue
+    // entrando con el token viejo por 8 horas.
+    //
+    // `superadminActivo` filtra por rol Y por activo en la consulta. Filtrar en
+    // el codigo de al lado ("si existe, dejo pasar") es lo que antes dejaba
+    // entrar a un SuperAdmin dado de baja o degradado a ADMIN.
+    const u = await registro.superadminActivo(payload.id);
+    if (!u) {
+        return res.status(403).json({ error: 'El usuario administrador ya no está activo.' });
+    }
+
+    req.superadmin = { id: u.id, nombre: u.nombre, email: u.email };
+    return next();
+}
+
+/** Envuelve un handler async para que sus errores lleguen como JSON. */
+function rutaAdmin(fn) {
+    return (req, res) => {
+        Promise.resolve(fn(req, res)).catch((err) => {
+            const estado = err.estadoHttp || 500;
+            if (estado >= 500) {
+                console.error(`Error en ${req.method} ${req.originalUrl}:`, err);
+            }
+            res.status(estado).json({ error: err.message, ...(err.extra || {}) });
+        });
+    };
+}
+
+const ipDe = (req) => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || null;
+
+// --- listado ---------------------------------------------------------------
+
+/**
+ * Todas las empresas, con lo que el SuperAdmin necesita para decidir.
+ *
+ * Los conteos de usuarios y de datos operativos salen de la base CENTRAL
+ * (`usuarios_globales`), no de la base de cada empresa. Preguntar "cuantas
+ * reparaciones tiene" obliga a abrir la base de un cliente desde el panel, que
+ * es justo lo que esta seccion no debe hacer.
+ */
+app.get('/api/admin/empresas', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    const empresas = await registro.todasLasEmpresas();
+    const planes = await altas.listarPlanes();
+
+    // Los modulos contratados de todas las empresas, de una sola vez: una
+    // consulta por empresa seria N+1 y con 50 clientes son 50 viajes.
+    const mods = await central.query(
+        `SELECT em.empresa_id, m.codigo, m.nombre, em.activo
+           FROM empresa_modulos em
+           JOIN modulos m ON m.codigo = em.modulo
+          ORDER BY m.orden`
+    );
+    const porEmpresa = new Map();
+    for (const m of mods) {
+        if (!porEmpresa.has(m.empresa_id)) porEmpresa.set(m.empresa_id, []);
+        porEmpresa.get(m.empresa_id).push(m);
+    }
+
+    const porPlan = new Map(planes.map((p) => [p.codigo, p]));
+    const salida = empresas.map((e) => {
+        const contratados = porEmpresa.get(e.id) || [];
+        return {
+            id: e.id,
+            nombre: e.nombre,
+            slug: e.slug,
+            nombre_db: e.nombre_db,
+            rubro: e.rubro,
+            plan: e.plan,
+            plan_nombre: porPlan.get(e.plan)?.nombre || e.plan,
+            max_usuarios: e.max_usuarios ?? porPlan.get(e.plan)?.max_usuarios ?? null,
+            estado: e.estado,
+            fecha_vencimiento: e.fecha_vencimiento,
+            usuarios_activos: e.usuarios_activos,
+            modulos_contratados: contratados.filter((m) => m.activo).map((m) => m.codigo),
+            modulos_no_contratados: contratados.filter((m) => !m.activo).map((m) => m.codigo),
+            // Si tiene mas usuarios de los que su plan permite, se marca acá.
+            excede_usuarios: !!(porPlan.get(e.plan) && e.usuarios_activos > porPlan.get(e.plan).max_usuarios
+                && !e.max_usuarios)
+        };
+    });
+
+    res.json({ empresas: salida, planes });
+}));
+
+// --- detalle ---------------------------------------------------------------
+
+app.get('/api/admin/empresas/:id', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) throw errorAdmin('Id de empresa inválido.');
+
+    const empresa = await central.uno('SELECT * FROM empresas WHERE id = ?', [id]);
+    if (!empresa) return res.status(404).json({ error: 'No existe esa empresa.' });
+
+    const [usuarios, modulos, auditoria] = await Promise.all([
+        central.query(
+            `SELECT id, nombre, email, rol, activo, ultimo_acceso, creado_en
+               FROM usuarios_globales WHERE empresa_id = ? ORDER BY activo DESC, nombre`,
+            [id]
+        ),
+        // El catálogo COMPLETO, no solo lo que esta empresa tiene anotado.
+        //
+        // Con un JOIN normal solo salen los módulos que ya tienen fila en
+        // `empresa_modulos`: los cuatro base y los que alguien contrató
+        // alguna vez. Los que nunca se tocaron no aparecen, y el panel queda
+        // sin forma de contratar lo que falta, que es justo para qué está.
+        //
+        // El LEFT JOIN parte de `modulos` (el catálogo) y no al revés, y
+        // `COALESCE(em.activo, 0)` pone en 0 los que no tienen fila. El PATCH
+        // de abajo ya sabe crearla cuando hace falta, así que no hace falta
+        // sembrar filas para todos los módulos del mundo.
+        central.query(
+            `SELECT m.codigo, m.nombre, m.es_base, COALESCE(em.activo, 0) AS activo,
+                    em.fecha_desde
+               FROM modulos m
+               LEFT JOIN empresa_modulos em
+                 ON em.modulo = m.codigo AND em.empresa_id = ?
+              ORDER BY m.orden`,
+            [id]
+        ),
+        central.query(
+            `SELECT accion, email, detalle, creado_en FROM auditoria
+              WHERE empresa_id = ? ORDER BY id DESC LIMIT 25`,
+            [id]
+        )
+    ]);
+
+    res.json({
+        // La fila es un SELECT *: ya trae nombre, logo, colores y contacto.
+        empresa,
+        usuarios,
+        modulos,
+        auditoria
+    });
+}));
+
+// --- alta ------------------------------------------------------------------
+
+/**
+ * Da de alta una empresa: base, esquema, permisos, registro, modulos base y
+ * primer ADMIN. Todo o nada.
+ *
+ * Tarda: crea una base y le aplica el esquema entero. Se avisa con un 202 y se
+ * devuelve el `slug` al que puede mirar, en vez de tener la pantalla colgada
+ * esperando. Si algo falla, no queda nada: lo dice el error.
+ */
+app.post('/api/admin/empresas', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    const b = req.body || {};
+    const empresa = await altas.crearEmpresa(
+        {
+            nombre: b.nombre,
+            rubro: b.rubro,
+            plan: b.plan,
+            estado: b.estado,
+            slug: b.slug,
+            marca: b.marca,
+            contacto: b.contacto,
+            admin: {
+                email: b.admin_email,
+                nombre: b.admin_nombre,
+                password: b.admin_password
+            }
+        },
+        { autor: req.superadmin, ip: ipDe(req) }
+    );
+
+    console.log(`  Empresa #${empresa.id} "${empresa.nombre}" dada de alta por ${req.superadmin.email}`);
+    res.status(201).json({ empresa, mensaje: `Empresa dada de alta. Base: ${empresa.nombre_db}` });
+}));
+
+// --- cambiar estado, plan, notas -------------------------------------------
+
+/**
+ * Cambia lo que el SuperAdmin puede cambiar de una empresa que ya existe.
+ *
+ * El estado es lo que sirve: `SUSPENDIDO` y `BAJA` cortan el acceso en la
+ * siguiente request, no cuando vence el token (esto lo chequea
+ * `registro.estaOperativa` en cada request).
+ */
+app.patch('/api/admin/empresas/:id', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) throw errorAdmin('Id de empresa inválido.');
+
+    const actual = await central.uno('SELECT * FROM empresas WHERE id = ?', [id]);
+    if (!actual) return res.status(404).json({ error: 'No existe esa empresa.' });
+
+    const b = req.body || {};
+    const cambios = [];
+    const sets = [];
+    const vals = [];
+
+    if (b.estado !== undefined) {
+        const estados = ['DEMO', 'ACTIVO', 'SUSPENDIDO', 'BAJA'];
+        if (!estados.includes(b.estado)) {
+            throw errorAdmin(`Estado inválido. Los que hay: ${estados.join(', ')}.`);
+        }
+        if (b.estado !== actual.estado) {
+            sets.push('estado = ?'); vals.push(b.estado);
+            cambios.push(`estado: ${actual.estado} -> ${b.estado}`);
+        }
+    }
+
+    if (b.plan !== undefined && b.plan !== actual.plan) {
+        const existe = await central.uno('SELECT codigo FROM planes WHERE codigo = ?', [b.plan]);
+        if (!existe) throw errorAdmin(`No existe el plan "${b.plan}".`);
+        sets.push('plan = ?'); vals.push(b.plan);
+        cambios.push(`plan: ${actual.plan} -> ${b.plan}`);
+    }
+
+    if (b.max_usuarios !== undefined) {
+        const v = b.max_usuarios === null ? null : Number(b.max_usuarios);
+        if (v !== null && (!Number.isInteger(v) || v < 0)) {
+            throw errorAdmin('El límite de usuarios tiene que ser un número entero, o vacío para usar el del plan.');
+        }
+        sets.push('max_usuarios = ?'); vals.push(v);
+        cambios.push(`límite de usuarios: ${actual.max_usuarios ?? '(del plan)'} -> ${v ?? '(del plan)'}`);
+    }
+
+    if (b.fecha_vencimiento !== undefined) {
+        sets.push('fecha_vencimiento = ?'); vals.push(b.fecha_vencimiento || null);
+        cambios.push(`vencimiento: ${b.fecha_vencimiento || 'sin fecha'}`);
+    }
+
+    if (b.notas !== undefined) {
+        sets.push('notas = ?'); vals.push(String(b.notas).slice(0, 2000));
+        cambios.push('notas actualizadas');
+    }
+
+    if (!sets.length) {
+        return res.json({ mensaje: 'No había nada que cambiar.', empresa: actual });
+    }
+
+    vals.push(id);
+    await central.query(`UPDATE empresas SET ${sets.join(', ')} WHERE id = ?`, vals);
+    await altas.auditar({
+        usuario: req.superadmin,
+        accion: 'empresa.actualizar',
+        empresaId: id,
+        detalle: { cambios, nombre: actual.nombre },
+        ip: ipDe(req)
+    });
+    // La fila cacheada 30 s tiene el estado viejo: sin esto, el cambio de
+    // estado no se nota hasta dentro de medio minuto.
+    registro.invalidarEmpresa(id);
+
+    console.log(`  Empresa #${id} (${actual.nombre}): ${cambios.join(' · ')} por ${req.superadmin.email}`);
+    res.json({
+        mensaje: 'Cambios guardados.',
+        cambios,
+        empresa: await central.uno('SELECT * FROM empresas WHERE id = ?', [id])
+    });
+}));
+
+// --- modulos contratados ---------------------------------------------------
+
+app.patch('/api/admin/empresas/:id/modulos/:codigo', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    const id = Number(req.params.id);
+    const codigo = String(req.params.codigo || '');
+    if (!Number.isInteger(id)) throw errorAdmin('Id de empresa inválido.');
+
+    const empresa = await central.uno('SELECT id, nombre FROM empresas WHERE id = ?', [id]);
+    if (!empresa) return res.status(404).json({ error: 'No existe esa empresa.' });
+
+    const modulo = await central.uno('SELECT codigo, nombre, es_base FROM modulos WHERE codigo = ?', [codigo]);
+    if (!modulo) return res.status(404).json({ error: `No existe el módulo "${codigo}".` });
+
+    // Los modulos base no se apagan. No es una politica: sin `clientes` no
+    // anda la pantalla de clientes, y una empresa a la que se le apagó uno de
+    // base tiene links al menu que no abren y no hay forma de arreglarlo desde
+    // el panel.
+    if (modulo.es_base) {
+        throw errorAdmin(
+            `"${modulo.nombre}" es un módulo base y no se puede desactivar.\n` +
+            `   Todas las empresas lo tienen y hace falta para que el sistema ande.`
+        );
+    }
+
+    const activo = req.body && req.body.activo ? 1 : 0;
+    const previo = await central.uno(
+        'SELECT activo FROM empresa_modulos WHERE empresa_id = ? AND modulo = ?', [id, codigo]
+    );
+    if (previo && Number(previo.activo) === activo) {
+        return res.json({ mensaje: 'No había nada que cambiar.' });
+    }
+
+    if (previo) {
+        await central.query(
+            `UPDATE empresa_modulos SET activo = ?, fecha_desde = ${activo ? 'CURDATE()' : 'fecha_desde'}
+              WHERE empresa_id = ? AND modulo = ?`,
+            [activo, id, codigo]
+        );
+    } else {
+        await central.query(
+            `INSERT INTO empresa_modulos (empresa_id, modulo, activo, fecha_desde) VALUES (?, ?, ?, CURDATE())`,
+            [id, codigo, activo]
+        );
+    }
+
+    await altas.auditar({
+        usuario: req.superadmin,
+        accion: activo ? 'modulo.activar' : 'modulo.desactivar',
+        empresaId: id,
+        detalle: { modulo: codigo, nombre: modulo.nombre, empresa: empresa.nombre },
+        ip: ipDe(req)
+    });
+    registro.invalidarEmpresa(id);
+
+    res.json({
+        mensaje: `${modulo.nombre}: ${activo ? 'contratado' : 'dado de baja'}.`,
+        empresa_id: id,
+        codigo,
+        activo: !!activo
+    });
+}));
+
+// --- baja ------------------------------------------------------------------
+
+/**
+ * Da de baja una empresa. Por defecto es BAJA SUAVE: el estado pasa a BAJA y
+ * deja de poder entrar, pero la base y los datos quedan, que es lo que hace
+ * falta para devolvérselos a alguien.
+ *
+ * `?borrarBase=si` borra todo. Eso no se puede deshacer, asi que el panel
+ * lo pide con una confirmacion aparte.
+ */
+app.delete('/api/admin/empresas/:id', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) throw errorAdmin('Id de empresa inválido.');
+
+    const borrarBase = req.query.borrarBase === 'si';
+    const r = await altas.darDeBaja(id, {
+        borrarBase,
+        autor: req.superadmin,
+        ip: ipDe(req),
+        motivo: req.body?.motivo
+    });
+    registro.invalidarEmpresa(id);
+
+    res.json({
+        mensaje: borrarBase
+            ? 'Empresa y base de datos borradas. No se puede deshacer.'
+            : 'Empresa dada de baja. Los datos quedan y se pueden restaurar.',
+        ...r
+    });
+}));
+
+// --- soporte: entrar como y recuperar clave ---------------------------------
+//
+// Estas dos rutas rompen la regla que hasta ahora era fija ("el SuperAdmin no
+// ve datos de ninguna empresa") y por eso no son "un detalle mas del panel".
+// Lo que las hace aceptables esta en `src/servicios/soporte.js`: sesion corta,
+// auditada, con banner, y sin vuelta al panel desde adentro.
+
+/**
+ * Abre una sesion de 30 minutos dentro de una empresa.
+ *
+ * El token que sale NO puede volver al panel: `verificarSuperAdmin` exige que
+ * el rol del token sea SUPERADMIN, y este es el de un ADMIN (o TECNICO) de la
+ * empresa elegida. Por eso el panel y el sistema de clientes quedan separados en
+ * las dos direcciones y no hay un camino de ida y vuelta.
+ */
+app.post('/api/admin/empresas/:id/sesion', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) throw errorAdmin('Id de empresa inválido.');
+
+    const empresa = await central.uno('SELECT * FROM empresas WHERE id = ?', [id]);
+    if (!empresa) {
+        const e = new Error(`No existe la empresa ${id}.`);
+        e.estadoHttp = 404;
+        throw e;
+    }
+
+    // No tiene sentido abrir una sesion de soporte de una empresa dada de baja
+    // o suspendida: `verificarToken` la va a rebotar con 403 igual, y el
+    // SuperAdmin se queda con una pestania rota sin entender por que.
+    if (!registro.estaOperativa(empresa)) {
+        const e = new Error(
+            `${empresa.nombre} está ${empresa.estado.toLowerCase()}. ` +
+            `Una sesión de soporte necesita una empresa operativa: al entrar, el ` +
+            `sistema la rechaza por estado. Reactivala primero.`
+        );
+        e.estadoHttp = 400;
+        throw e;
+    }
+
+    // Se entra como un usuario REAL de esa empresa, no con un token inventado:
+    // el resto del sistema ya sabe qué hacer con un usuario de verdad (roles,
+    // módulos, auditoría de la base del cliente).
+    let usuario = null;
+    const pedido = Number(req.body?.usuario_id);
+    if (Number.isInteger(pedido) && pedido > 0) {
+        usuario = await central.uno(
+            `SELECT id, nombre, email, rol, empresa_id
+               FROM usuarios_globales WHERE id = ? AND empresa_id = ?`,
+            [pedido, empresa.id]
+        );
+        if (!usuario) {
+            const e = new Error(`Ese usuario no pertenece a ${empresa.nombre}.`);
+            e.estadoHttp = 404;
+            throw e;
+        }
+    } else {
+        // Sin indicar cuál, se usa su primer ADMIN activo: para probar el sistema conviene ver
+        // lo que ve el que lo maneja, no lo que ve un técnico.
+        usuario = await central.uno(
+            `SELECT id, nombre, email, rol, empresa_id
+               FROM usuarios_globales
+              WHERE empresa_id = ? AND rol = 'ADMIN' AND activo = 1
+              ORDER BY id LIMIT 1`,
+            [empresa.id]
+        );
+        if (!usuario) {
+            const e = new Error(`${empresa.nombre} no tiene ningún ADMIN activo para abrir una sesión.`);
+            e.estadoHttp = 400;
+            throw e;
+        }
+    }
+
+    // Nunca se entra como algo que no sea de esa empresa. Este filtro no es
+    // decorativo: sin él, un id de usuario de OTRA empresa abriría una sesión
+    // con `empresa_id` de esta y las dos bases se mezclarían en un mismo token.
+    if (usuario.empresa_id !== empresa.id) {
+        const e = new Error('Ese usuario no pertenece a la empresa elegida.');
+        e.estadoHttp = 400;
+        throw e;
+    }
+
+    const token = soporte.tokenDeSoporte({
+        empresa,
+        usuario,
+        superadmin: req.superadmin
+    });
+
+    await altas.auditar({
+        usuario: req.superadmin,
+        accion: 'empresa.sesion_soporte',
+        empresaId: empresa.id,
+        detalle: {
+            nombre: empresa.nombre,
+            usuario_id: usuario.id,
+            usuario_email: usuario.email,
+            usuario_rol: usuario.rol,
+            minutos: soporte.MINUTOS_SESION_SOPORTE
+        },
+        ip: ipDe(req)
+    });
+
+    const decoded = jwt.decode(token);
+    res.json({
+        token,
+        usuario: {
+            id: usuario.id,
+            nombre: usuario.nombre,
+            email: usuario.email,
+            rol: usuario.rol
+        },
+        empresa: { id: empresa.id, nombre: empresa.nombre, slug: empresa.slug },
+        expira_en: new Date(decoded.exp * 1000).toISOString(),
+        minutos: soporte.MINUTOS_SESION_SOPORTE,
+        aviso:
+            `Vas a ver los datos de ${empresa.nombre}. La sesión dura ` +
+            `${soporte.MINUTOS_SESION_SOPORTE} minutos, queda registrada con tu ` +
+            `nombre y lo que hagas queda en nombre de ${usuario.email}.`
+    });
+}));
+
+/**
+ * Le genera una clave temporal a un usuario de la empresa.
+ *
+ * El SuperAdmin no elige la clave: la genera el sistema y se muestra una sola
+ * vez. Eso es a propósito -- si la escribiera él, se quedaría sabiendo la
+ * contraseña de un cliente, y ese dato no se devuelve.
+ */
+app.post(
+    '/api/admin/empresas/:id/usuarios/:usuarioId/clave-temporal',
+    verificarSuperAdmin,
+    rutaAdmin(async (req, res) => {
+        const id = Number(req.params.id);
+        const usuarioId = Number(req.params.usuarioId);
+        if (!Number.isInteger(id) || !Number.isInteger(usuarioId)) {
+            throw errorAdmin('Id de empresa o de usuario inválido.');
+        }
+
+        const empresa = await central.uno('SELECT * FROM empresas WHERE id = ?', [id]);
+        if (!empresa) {
+            const e = new Error(`No existe la empresa ${id}.`);
+            e.estadoHttp = 404;
+            throw e;
+        }
+
+        // El usuario TIENE que ser de esta empresa. Sin esto, con el id de un
+        // ADMIN de otro cliente se le cambia la clave desde acá y ese cliente
+        // se queda sin poder entrar. El 404 es el mismo criterio que en el
+        // resto del panel: no se confirma que el recurso existe en otra parte.
+        const usuario = await central.uno(
+            `SELECT id FROM usuarios_globales WHERE id = ? AND empresa_id = ?`,
+            [usuarioId, id]
+        );
+        if (!usuario) {
+            const e = new Error(`Ese usuario no pertenece a ${empresa.nombre}.`);
+            e.estadoHttp = 404;
+            throw e;
+        }
+
+        const r = await soporte.claveTemporalPara(usuarioId, {
+            autor: req.superadmin,
+            ip: ipDe(req)
+        });
+        registro.invalidarEmpresa(id);
+        res.json(r);
+    })
+);
+
+// --- catalogos y auditoria -------------------------------------------------
+app.get('/api/admin/catalogos', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    res.json({
+        modulos: await altas.listarModulos(),
+        planes: await altas.listarPlanes()
+    });
+}));
+
+app.get('/api/admin/auditoria', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    // El limite va en el texto y no como placeholder: el numero sale de aca,
+    // ya acotado, y no hay forma de que sea otra cosa.
+    const limite = Math.max(1, Math.min(Number(req.query.limite) || 50, 200));
+    const filas = await central.query(
+        `SELECT a.id, a.accion, a.email, a.empresa_id, e.nombre AS empresa, a.detalle, a.creado_en
+           FROM auditoria a
+           LEFT JOIN empresas e ON e.id = a.empresa_id
+          ORDER BY a.id DESC LIMIT ${limite}`
+    );
+    res.json({ auditoria: filas });
+}));
+
+/** Quien soy. Lo usa el panel para decidir si mostrar el menu de administracion. */
+app.get('/api/admin/yo', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    const empresas = await central.uno('SELECT COUNT(*) AS n FROM empresas');
+    const usuarios = await central.uno('SELECT COUNT(*) AS n FROM usuarios_globales');
+    const metricas = await central.uno('SELECT COUNT(*) AS n FROM empresa_metricas');
+    res.json({
+        superadmin: req.superadmin,
+        totales: {
+            empresas: empresas.n,
+            usuarios: usuarios.n,
+            metricas: metricas.n
+        }
+    });
+}));
 
 /* ==========================================================================
    12. SISTEMA DE RESPALDOS AUTOMÁTICOS

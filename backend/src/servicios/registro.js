@@ -24,6 +24,8 @@ const cacheEmpresas = new Map();
 const cacheModulos = new Map();
 /** id de empresa -> { valor: Set de codigos, expira } */
 const cacheModulosCodigos = new Map();
+/** id de usuario -> { valor: boolean, expira } */
+const cacheClavePendiente = new Map();
 
 const vigente = (entrada) => Boolean(entrada) && entrada.expira > Date.now();
 
@@ -74,8 +76,64 @@ async function usuarioPorEmail(email) {
     return central.uno('SELECT * FROM usuarios_globales WHERE email = ?', [String(email).trim().toLowerCase()]);
 }
 
-async function usuarioPorId(id) {
-    return central.uno('SELECT * FROM usuarios_globales WHERE id = ?', [id]);
+/**
+ * El SuperAdmin que hay DETRAS de un token, en este instante.
+ *
+ * Los dos filtros (`rol` y `activo`) van en la consulta y no en el codigo de
+ * quien llama, a proposito. La version anterior traia el usuario por id y que
+ * el guard decidiera:
+ *
+ *     const u = await registro.usuarioPorId(payload.id);
+ *     if (!u) return res.status(403)...
+ *
+ * Eso contestaba "existe alguien con este id", no "este token lo tiene ahora un
+ * SUPERADMIN activo". Son preguntas distintas, y con la segunda implementacion
+ * un SuperAdmin desactivado -- o degradado a ADMIN -- seguia entrando al panel
+ * con el token viejo por 8 horas. El comentario de al lado explicaba justamente
+ * que la re-consulta existia para que eso no pasara.
+ *
+ * Con los filtros en el WHERE, un guard escrito mal da 403 en vez de dejar
+ * entrar: el requisito esta en la consulta, no en la memoria de quien la usa.
+ */
+async function superadminActivo(id) {
+    if (!id) return null;
+    return central.uno(
+        `SELECT * FROM usuarios_globales
+          WHERE id = ? AND rol = 'SUPERADMIN' AND activo = 1`,
+        [id]
+    );
+}
+
+/**
+ * Si este usuario entro con una clave temporal que todavia no cambio.
+ *
+ * Va a la base y no se saca del token a proposito, por el mismo motivo que
+ * `superadminActivo`: si el dato viene del token, alcanza con que el token se
+ * haya emitido antes de que el SuperAdmin generara la clave, y el usuario
+ * seguiria usando su sesion vieja sin cambiar nada. Leyendolo de la base, la
+ * clave temporal corta la sesion en el momento en que se genera.
+ *
+ * La cache de 30 s es aceptable acá y mucho mas que en el otro caso: el
+ * SuperAdmin genera la clave mientras el cliente todavia no esta conectado, asi
+ * que el unico efecto del retraso es de milisegundos.
+ */
+async function claveTemporalPendiente(usuarioId) {
+    if (!usuarioId) return false;
+
+    const cacheado = cacheClavePendiente.get(usuarioId);
+    if (vigente(cacheado)) return cacheado.valor;
+
+    const fila = await central.uno(
+        'SELECT debe_cambiar_password FROM usuarios_globales WHERE id = ?',
+        [usuarioId]
+    );
+
+    return guardar(cacheClavePendiente, usuarioId, Boolean(fila && fila.debe_cambiar_password));
+}
+
+/** Se limpia al cambiar la clave, para no esperar 30 s con el flag viejo. */
+function invalidarClavePendiente(usuarioId) {
+    cacheClavePendiente.delete(usuarioId);
 }
 
 /** Se llama al iniciar sesion. No es critico: si falla, no se cae el login. */
@@ -132,7 +190,7 @@ async function codigosDeModulos(empresaId) {
 async function todasLasEmpresas() {
     return central.query(
         `SELECT e.id, e.nombre, e.slug, e.nombre_db, e.rubro, e.plan, e.estado,
-                e.fecha_vencimiento,
+                e.fecha_vencimiento, e.max_usuarios,
                 (SELECT COUNT(*) FROM usuarios_globales u
                   WHERE u.empresa_id = e.id AND u.activo = 1) AS usuarios_activos
            FROM empresas e
@@ -158,7 +216,9 @@ module.exports = {
     estaOperativa,
     empresaPorId,
     usuarioPorEmail,
-    usuarioPorId,
+    superadminActivo,
+    claveTemporalPendiente,
+    invalidarClavePendiente,
     marcarAcceso,
     contarUsuarios,
     modulosDe,

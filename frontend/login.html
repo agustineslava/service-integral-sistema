@@ -61,6 +61,20 @@
                 if (respuesta.ok) {
                     localStorage.setItem('jwt_token', data.token);
                     localStorage.setItem('usuario_actual', JSON.stringify(data.usuario));
+
+                    // El SUPERADMIN no pertenece a ninguna empresa: es el que
+                    // administra el servicio entero. Si lo mandáramos a
+                    // index.html, esa página pediría /api/mi-empresa, que le
+                    // contesta 403 (no es una empresa), y auth-check lo
+                    // devolvería al login. Un loop sin fin.
+                    if (data.usuario && data.usuario.rol === 'SUPERADMIN') {
+                        // Sin empresa no hay marca que aplicar: se saca la que
+                        // quedó de un login anterior, si hubo.
+                        localStorage.removeItem('empresa_actual');
+                        window.location.href = 'admin.html';
+                        return;
+                    }
+
                     // La empresa (marca, plan, límite y módulos contratados)
                     // se guarda acá para no tener que ir a buscarla en cada
                     // página. Se puede refrescar con GET /api/mi-empresa.

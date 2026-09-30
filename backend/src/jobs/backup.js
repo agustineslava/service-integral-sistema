@@ -102,6 +102,39 @@ function ejecutarDump(opciones = {}) {
 
             if (error) {
                 if (fs.existsSync(rutaTmp)) { try { fs.unlinkSync(rutaTmp); } catch {} }
+
+                // ENOENT es un caso aparte y MUY comun: no es que el backup
+                // falle, es que el programa ni esta. En un equipo donde MySQL
+                // se instalo sin agregar la carpeta `bin` al PATH (que es lo
+                // que hace el instalador de MySQL salvo que uno lo marque),
+                // mysqldump.exe esta en el disco y Windows no lo encuentra.
+                //
+                // Sin este mensaje, el backup falla con "spawn mysqldump
+                // ENOENT" y no dice nada de como arreglarlo, que es lo mismo
+                // que no saber. Y es el fallo mas peligroso de todos: el
+                // cron de las 20:00 avisa en el log y nadie lo lee, y el
+                // cliente descubre que no hay copia el dia que la necesita.
+                if (error.code === 'ENOENT') {
+                    return reject(Object.assign(
+                        new Error(
+                            `No se encontro "mysqldump".\n` +
+                            `  Se busco en: ${mysqldumpPath}\n` +
+                            `  El servidor MySQL puede estar andando bien y el dump igual no\n` +
+                            `  generarse: son dos programas distintos (el servidor es mysqld,\n` +
+                            `  el que copia las bases es mysqldump).\n\n` +
+                            `  Como arreglarlo, en Windows:\n` +
+                            `    1. Buscarlo (en cmd, pegá esto y presioná Enter):\n` +
+                            `         dir /s /b "C:\\Program Files\\MySQL\\mysqldump.exe"\n` +
+                            `         dir /s /b "C:\\xampp\\mysql\\bin\\mysqldump.exe"\n` +
+                            `    2. Poner la ruta completa en el archivo .env del backend:\n` +
+                            `         MYSQLDUMP_PATH=C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump.exe\n` +
+                            `       (con comillas si el caminho tiene espacios)\n` +
+                            `    3. Volver a correr:  npm run backup`
+                        ),
+                        { stderr, duracionSeg: Number(duracion), codigo: 'ENOENT' }
+                    ));
+                }
+
                 return reject(Object.assign(
                     new Error(`mysqldump fallo (${duracion}s): ${error.message}` +
                               (stderr ? ` | ${stderr.trim().slice(0, 400)}` : '')),

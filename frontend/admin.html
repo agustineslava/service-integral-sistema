@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administración del servicio</title>
+
+    <!--
+        Esta pantalla la ve el SUPERADMIN, que NO pertenece a ninguna empresa.
+        Por eso es distinta a las del sistema:
+
+        - No carga `marca.js`. La marca (logo, colores, nombre) es de cada
+          empresa cliente; acá no hay ninguna y tiene que verse neutra.
+
+        - Carga `auth-check.js` por `escapeHtml` y `apiFetch`, y por el menú de
+          usuario y el botón de tema, que son iguales en todo el sistema. Como
+          no hay `empresa_actual` guardada, `aplicarModulosContratados` no
+          esconde nada: no hay módulos que contrate el servicio.
+
+        - La sesión la valida el SERVIDOR en cada pedido (`verificarSuperAdmin`).
+          Esconder links acá no sería seguridad; el 403 del servidor sí.
+    -->
+    <script src="auth-check.js"></script>
+    <link rel="stylesheet" href="style.css?v=1.3">
+    <link rel="stylesheet" href="admin.css?v=1.0">
+</head>
+<body>
+
+<header>
+    <section class="barra-cabecera">
+        <div class="logo">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                 style="color: var(--si-blue-vibrant);">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <path d="m9 12 2 2 4-4"></path>
+            </svg>
+            <div>
+                <strong>Administración del servicio</strong>
+                <div class="admin-subtitulo">Empresas, planes y módulos</div>
+            </div>
+        </div>
+
+        <div id="info-usuario-header" class="info-usuario-header"></div>
+
+        <nav class="menu-navegacion">
+            <ul>
+                <li>
+                    <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema">
+                        <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+                        <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                    </button>
+                </li>
+            </ul>
+        </nav>
+    </section>
+</header>
+
+<main class="contenedor-principal">
+
+    <div class="titulo-seccion" style="margin-bottom: 20px;">
+        <h1>Empresas</h1>
+        <p>
+            Alta, estado, plan y módulos contratados.
+            <strong>Desde acá no se ven los datos de los clientes</strong> (reparaciones,
+            productos, clientes): solo el registro de la empresa y sus usuarios.
+        </p>
+    </div>
+
+    <div id="resumen" class="admin-resumen"></div>
+
+    <section class="admin-barra">
+        <input type="text" id="input-buscar" placeholder="Buscar por nombre, slug o base de datos..."
+               autocomplete="off">
+        <select id="filtro-estado">
+            <option value="">Todos los estados</option>
+            <option value="ACTIVO">Activos</option>
+            <option value="DEMO">Demo</option>
+            <option value="SUSPENDIDO">Suspendidos</option>
+            <option value="BAJA">De baja</option>
+        </select>
+        <button class="btn btn-crear" onclick="abrirModalAlta()">+ Nueva empresa</button>
+    </section>
+
+    <section class="panel-tabla">
+        <div class="tabla-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Empresa</th>
+                        <th>Base de datos</th>
+                        <th>Plan</th>
+                        <th>Usuarios</th>
+                        <th>Estado</th>
+                        <th style="text-align:right;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-empresas">
+                    <tr><td colspan="6" class="texto-vacio">Cargando empresas...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <div class="titulo-seccion" style="margin: 40px 0 15px;">
+        <h1>Auditoría</h1>
+        <p>Quién hizo qué, cuándo y desde dónde. Solo acciones del servicio, no de las empresas.</p>
+    </div>
+
+    <section class="panel-tabla">
+        <div class="tabla-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Cuándo</th>
+                        <th>Acción</th>
+                        <th>Quién</th>
+                        <th>Empresa</th>
+                        <th>Detalle</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-auditoria">
+                    <tr><td colspan="5" class="texto-vacio">Cargando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+</main>
+
+<!-- ========================================================================
+     ALTA DE EMPRESA
+     El alta crea una base MySQL entera y le aplica el esquema, por eso tarda
+     unos segundos. Durante ese tiempo no se puede hacer otra cosa en esta
+     pantalla: el botón queda deshabilitado y abajo se muestra el avance.
+     ======================================================================== -->
+<div class="modal" id="modal-alta">
+    <div class="modal-contenido admin-modal-ancho">
+        <span class="cerrar-modal" onclick="cerrarModal('modal-alta')">&times;</span>
+        <h2>Nueva empresa</h2>
+
+        <div id="alta-avance" class="admin-avance" style="display:none;">
+            <div class="admin-avance-spinner"></div>
+            <div id="alta-avance-texto">Creando la base de datos y aplicando el esquema...</div>
+            <div class="admin-avance-nota">Puede tardar. No cierres esta ventana.</div>
+        </div>
+
+        <div id="alta-error" class="admin-error" style="display:none;"></div>
+
+        <form id="form-alta">
+            <div class="admin-grilla">
+                <div class="campo">
+                    <label for="alta-nombre">Nombre de la empresa *</label>
+                    <input type="text" id="alta-nombre" required maxlength="150" placeholder="Taller Don Carlos">
+                </div>
+                <div class="campo">
+                    <label for="alta-rubro">Rubro</label>
+                    <select id="alta-rubro">
+                        <option value="taller">Taller / Mecánico</option>
+                        <option value="cerrajeria">Cerrajería</option>
+                        <option value="electricidad">Electricidad</option>
+                        <option value="plomeria">Plomería</option>
+                        <option value="refrigeracion">Refrigeración</option>
+                        <option value="automotor">Automotores</option>
+                        <option value="general">General</option>
+                    </select>
+                </div>
+                <div class="campo">
+                    <label for="alta-plan">Plan *</label>
+                    <select id="alta-plan" required></select>
+                </div>
+                <div class="campo">
+                    <label for="alta-estado">Estado inicial *</label>
+                    <select id="alta-estado">
+                        <option value="DEMO">DEMO (prueba, se puede suspender)</option>
+                        <option value="ACTIVO">ACTIVO (paga)</option>
+                    </select>
+                </div>
+                <div class="campo" style="grid-column: 1 / -1;">
+                    <label for="alta-slug">Identificador (subdominio) <span class="admin-pista">opcional</span></label>
+                    <input type="text" id="alta-slug" maxlength="60" placeholder="taller-don-carlos">
+                    <small class="admin-pista">Si lo dejás vacío se arma con el nombre. Sirve para la dirección web.</small>
+                </div>
+            </div>
+
+            <h3 class="admin-subtitulo-seccion">Primer usuario (ADMIN)</h3>
+            <div class="admin-grilla">
+                <div class="campo">
+                    <label for="alta-admin-email">Email *</label>
+                    <input type="email" id="alta-admin-email" required placeholder="admin@empresa.com">
+                </div>
+                <div class="campo">
+                    <label for="alta-admin-nombre">Nombre</label>
+                    <input type="text" id="alta-admin-nombre" placeholder="Administrador">
+                </div>
+                <div class="campo">
+                    <label for="alta-admin-password">Contraseña * <span class="admin-pista">mínimo 8</span></label>
+                    <input type="text" id="alta-admin-password" required minlength="8" autocomplete="new-password">
+                </div>
+            </div>
+            <small class="admin-pista">
+                El email es único en todo el sistema, no por empresa: es lo que permite
+                saber a qué empresa pertenece alguien al iniciar sesión.
+            </small>
+
+            <h3 class="admin-subtitulo-seccion">Marca <span class="admin-pista">opcional, se puede cambiar después</span></h3>
+            <div class="admin-grilla">
+                <div class="campo">
+                    <label for="alta-subtitulo">Subtítulo</label>
+                    <input type="text" id="alta-subtitulo" maxlength="120" placeholder="Gestión de Stock y Taller">
+                </div>
+                <div class="campo">
+                    <label for="alta-color-primario">Color primario</label>
+                    <input type="text" id="alta-color-primario" maxlength="7" placeholder="#009fe3" class="admin-color">
+                </div>
+                <div class="campo">
+                    <label for="alta-color-secundario">Color secundario</label>
+                    <input type="text" id="alta-color-secundario" maxlength="7" placeholder="#0077b5" class="admin-color">
+                </div>
+                <div class="campo" style="grid-column: 1 / -1;">
+                    <label for="alta-logo">Dirección del logo</label>
+                    <input type="text" id="alta-logo" maxlength="500" placeholder="https://... / logos/mi-logo.png">
+                </div>
+            </div>
+
+            <h3 class="admin-subtitulo-seccion">Datos para comprobantes <span class="admin-pista">opcional</span></h3>
+            <div class="admin-grilla">
+                <div class="campo">
+                    <label for="alta-telefono">Teléfono</label>
+                    <input type="text" id="alta-telefono" maxlength="50" placeholder="011 15 5555 1234">
+                </div>
+                <div class="campo">
+                    <label for="alta-email-contacto">Email de contacto</label>
+                    <input type="text" id="alta-email-contacto" maxlength="150" placeholder="info@empresa.com">
+                </div>
+                <div class="campo" style="grid-column: 1 / -1;">
+                    <label for="alta-direccion">Dirección</label>
+                    <input type="text" id="alta-direccion" maxlength="255" placeholder="Av. Corrientes 1234, CABA">
+                </div>
+                <div class="campo">
+                    <label for="alta-cuit">CUIT</label>
+                    <input type="text" id="alta-cuit" maxlength="20" placeholder="30-12345678-9">
+                </div>
+            </div>
+
+            <div class="admin-botones">
+                <button type="button" class="btn" onclick="cerrarModal('modal-alta')">Cancelar</button>
+                <button type="submit" class="btn btn-crear" id="btn-alta-enviar">Crear empresa</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ========================================================================
+     DETALLE DE UNA EMPRESA
+     ======================================================================== -->
+<div class="modal" id="modal-detalle">
+    <div class="modal-contenido admin-modal-ancho">
+        <span class="cerrar-modal" onclick="cerrarModal('modal-detalle')">&times;</span>
+        <h2 id="detalle-titulo">Empresa</h2>
+        <div id="detalle-cuerpo" class="form-scroll-zona"></div>
+    </div>
+</div>
+
+<div id="aviso" class="admin-aviso" style="display:none;"></div>
+
+<script src="admin.js"></script>
+</body>
+</html>

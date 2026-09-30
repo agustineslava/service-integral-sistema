@@ -44,6 +44,62 @@ async function apiFetch(url, opciones = {}) {
 }
 
 /* ==========================================================================
+   BANNER DE SESIÓN DE SOPORTE
+   --------------------------------------------------------------------------
+   Se muestra cuando el token trae el claim `soporte`: el SuperAdmin entró a
+   esta empresa para probarla. No se puede cerrar.
+
+   Sale del claim y no de un fetch a propósito. Es una advertencia, no un
+   control de seguridad: tiene que aparecer al primer painted pixel, sin
+   esperar la red, y si el servidor está lento la advertencia no puede ser lo
+   primero que no llegó.
+   ========================================================================== */
+function mostrarBannerSoporte(usuario) {
+    if (!usuario || !usuario.soporte) return;
+
+    if (document.getElementById('banner-soporte')) return;
+
+    const s = usuario.soporte;
+    const mins = Number.isFinite(s.minutos_restantes)
+        ? s.minutos_restantes
+        : Math.max(0, Math.floor(((s.expira * 1000) - Date.now()) / 60000));
+
+    // Todo lo que viene del token se escapa igual: el claim lo firma el
+    // servidor, pero el contenido lo pone un nombre y una razón social.
+    const banner = document.createElement('div');
+    banner.id = 'banner-soporte';
+    banner.setAttribute('role', 'alert');
+    banner.innerHTML = `
+        <div class="soporte-texto">
+            <strong>Sesión de soporte.</strong>
+            Estás viendo <b>${escapeHtml(s.empresa_nombre || 'otra empresa')}</b> como
+            <b>${escapeHtml(s.usuario_email || 'un usuario')}</b>, con datos que no son tuyos.
+            Todo lo que hagas acá queda registrado con tu nombre.
+            ${mins > 0 ? `<span class="soporte-cuenta">(quedan ${mins} min)</span>` : ''}
+        </div>
+        <button type="button" class="soporte-salir" onclick="salirDeSoporte()">Salir de la sesión de soporte</button>
+    `;
+
+    // Arriba de todo, empujando el contenido para que nada quede tapado.
+    document.body.insertBefore(banner, document.body.firstChild);
+    document.documentElement.classList.add('con-banner-soporte');
+}
+
+/**
+ * Cierra la sesión de soporte y vuelve al login.
+ *
+ * Hace logout completo y borra también la empresa cacheada: si se dejara, al
+ * entrar como el mismo SuperAdmin otra vez el panel se quedaría mostrando la
+ * empresa del cliente anterior.
+ */
+function salirDeSoporte() {
+    localStorage.removeItem('jwt_token');
+    localStorage.removeItem('usuario_actual');
+    localStorage.removeItem('empresa_actual');
+    window.location.href = 'login.html';
+}
+
+/* ==========================================================================
    VERIFICACIÓN DE SESIÓN Y CONTROL DE PERMISOS / ROLES (ADMIN vs TECNICO)
    ========================================================================== */
 (function verificarSesion() {
@@ -59,6 +115,21 @@ async function apiFetch(url, opciones = {}) {
     const usuario = JSON.parse(usuarioGuardado);
 
     document.addEventListener('DOMContentLoaded', () => {
+        // A0-bis. Banner de sesión de soporte.
+        //
+        // Va PRIMERO, antes de todo lo demás, y no se puede sacar con la X.
+        // Cuando el SuperAdmin entra a una empresa para probarla, está mirando
+        // datos de un cliente que no son suyos, y puede estar tocando cosas.
+        // Todo lo que haga en esos 30 minutos queda en nombre de un usuario de
+        // esa empresa. Si el banner no está, quien esté mirando no sabe si
+        // está trabajando en su sistema o en el de otro, y el error más caro
+        // que puede cometer es justo el de "arreglar" datos que andaban bien.
+        //
+        // El dato viene del claim `soporte` del token, que va firmado: no
+        // viene de la base, es parte de lo que el servidor firmó al emitir
+        // la sesion. Si el token no lo trae, no hay banner y no hay soporte.
+        mostrarBannerSoporte(usuario);
+
         // A0. Sacar del menú las secciones que esta empresa no contrató.
         aplicarModulosContratados();
 

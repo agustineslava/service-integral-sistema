@@ -69,6 +69,94 @@ body {
 }
 
 /* ==========================================================================
+   2-bis. BANNER DE SESIÓN DE SOPORTE
+   --------------------------------------------------------------------------
+   Va fijo arriba de todo, por encima de la cabecera, y no se cierra.
+
+   Se distinguished de un aviso normal a propósito: no es informativo, es una
+   advertencia de que los datos de la pantalla no son de quien la está
+   mirando. Por eso usa un color que no se usa en ningun otro lado del sistema
+   y por eso el boton de cerrar sesion esta en el, y no escondido en un menu.
+
+   Con el banner presente, el `header` baja: si se superpusieran, el aviso
+   quedaria debajo de la barra azul y con una fraccion de su alto tapado, que
+   es justo lo que hace que una advertencia deje de avisar.
+   ========================================================================== */
+#banner-soporte {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px 18px;
+    padding: 10px 16px;
+    background: #7a1f0b;
+    background: linear-gradient(180deg, #8f2a10 0%, #6d1a08 100%);
+    color: #fff4ec;
+    border-bottom: 3px solid #ffc9a8;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    font-size: 14px;
+    line-height: 1.45;
+    text-align: center;
+}
+
+/* El banner es `fixed`, así que flota sobre el contenido. Lo que hay que
+   empujar es el body, no el header: el header puede ser estatico o sticky
+   segun la pagina, y una regla que depende de eso se rompe en la primera
+   pantalla que lo tenga distinto. */
+.con-banner-soporte body {
+    padding-top: 62px;
+}
+
+/* Los modales tambien son `fixed` y arrancan en top: 0, asi que el aviso les
+   quedaria encima de la X de cerrar. Se los baja lo mismo. */
+.con-banner-soporte .modal {
+    top: 62px;
+}
+
+/* En pantalla angosta el banner puede ocupar dos lineas y el offset fijo
+   quedaría corto. */
+@media (max-width: 700px) {
+    .con-banner-soporte body {
+        padding-top: 108px;
+    }
+    .con-banner-soporte .modal {
+        top: 108px;
+    }
+}
+
+#banner-soporte .soporte-texto strong {
+    letter-spacing: 0.3px;
+}
+
+#banner-soporte .soporte-cuenta {
+    opacity: 0.85;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+#banner-soporte .soporte-salir {
+    flex: 0 0 auto;
+    background: #fff;
+    color: #6d1a08;
+    border: 1px solid #ffd9c2;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+#banner-soporte .soporte-salir:hover {
+    background: #ffe9dd;
+}
+
+/* ==========================================================================
    3. CABECERA (HEADER) Y NAVEGACIÓN
    ========================================================================== */
 header {
@@ -465,6 +553,15 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.7);
+    /* El overlay es `fixed` y esta saca del flujo, asi que la pagina no crece
+       cuando el contenido es mas alto que la pantalla: lo que sobra queda
+       afuera y no hay forma de llegar. Sin esto, una ventana con un formulario
+       largo se tinha que ver achicando el zoom del navegador.
+       Con `auto`, el modal entero scrollea. */
+    overflow-y: auto;
+    /* El padding da aire al final del contenido, que si no queda pegado al
+       borde de abajo de la pantalla. */
+    padding-bottom: 4vh;
 }
 
 .modal-contenido {
