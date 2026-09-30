@@ -120,13 +120,50 @@ async function main() {
     // === 2. Los hashes son identicos byte a byte ============================
     titulo('2. Las contrasenas siguen sirviendo');
 
+    // Desde F4 la tabla `usuarios` de la base del taller ya no existe: los
+    // usuarios viven solo en la central y no hay con qué comparar. Entonces
+    // esta comprobacion, que solo tenía sentido mientras convivían las dos,
+    // se salta con una explicación en vez de dar un fallo falso.
     const conTaller = await mysql.createConnection(configApp(DB_TALLER));
     let usuariosTaller = [];
+    let tablaUsuarios = true;
     try {
-        const [filas] = await conTaller.query('SELECT id, nombre, email, password, rol FROM usuarios ORDER BY id');
-        usuariosTaller = filas;
+        const [existe] = await conTaller.query(
+            `SELECT COUNT(*) AS n FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'usuarios'`,
+            [DB_TALLER]
+        );
+        if (existe[0].n) {
+            const [filas] = await conTaller.query('SELECT id, nombre, email, password, rol FROM usuarios ORDER BY id');
+            usuariosTaller = filas;
+        } else {
+            tablaUsuarios = false;
+        }
     } finally {
         await conTaller.end();
+    }
+
+    if (!tablaUsuarios) {
+        console.log('  [ -- ]   la tabla `usuarios` del taller ya no existe (limpieza de F4).');
+        console.log('          No hay tabla vieja contra la cual comparar los hashes, pero');
+        console.log('          se comprueba que las cuentas de la central esten sanas:');
+        const cuentas = await central.query(
+            'SELECT email, rol, activo, password_hash FROM usuarios_globales WHERE empresa_id = ? ORDER BY id',
+            [empresa.id]
+        );
+        for (const c of cuentas) {
+            // Un hash de bcrypt empieza con $2 y tiene 60 caracteres. No se
+            // puede comprobar la contrasena (no se la sabemos, y no deberiamos),
+            // pero si que la cuenta sea utilizable: activa, con hash bien formado
+            // y con un rol valido.
+            const hashOk = typeof c.password_hash === 'string'
+                && /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(c.password_hash);
+            comprobar(hashOk && c.activo === 1 && ['ADMIN', 'TECNICO'].includes(c.rol),
+                `${c.email}: cuenta utilizable (${c.rol}, hash bcrypt de 60 caracteres, activa)`, {
+                    activo: c.activo, rol: c.rol, largoHash: (c.password_hash || '').length
+                });
+        }
+        console.log('');
     }
 
     // Se comparan solo los que se migraron. Un email que ya existia en la
@@ -169,13 +206,28 @@ async function main() {
         return;
     }
 
-    const adminTaller = migrados.find((m) => m.central.rol === 'ADMIN') || migrados[0];
-    if (!adminTaller) {
-        console.error('\nNo hay ningun usuario migrado: no se puede probar el enrutado.\n');
+    // El token sale de un ADMIN de esa empresa. Antes se sacaba de la lista de
+    // migrados; desde F4 esa lista puede estar vacia (la tabla vieja ya no
+    // esta), asi que se busca directamente en la central, que es donde viven
+    // los usuarios de verdad.
+    let enCentralAdmin = null;
+    const deLaLista = migrados.find((m) => m.central.rol === 'ADMIN') || migrados[0];
+    if (deLaLista) {
+        enCentralAdmin = deLaLista.central;
+    } else {
+        enCentralAdmin = await central.uno(
+            `SELECT id, nombre, email, rol FROM usuarios_globales
+              WHERE empresa_id = ? AND activo = 1
+              ORDER BY rol = 'ADMIN' DESC, id LIMIT 1`,
+            [empresa.id]
+        );
+    }
+
+    if (!enCentralAdmin) {
+        console.error('\nNo hay ningun usuario activo en la empresa: no se puede probar el enrutado.\n');
         await cerrarYResumir();
         return;
     }
-    const enCentralAdmin = adminTaller.central;
     const tokenTaller = firmar(enCentralAdmin, empresa.id);
 
     titulo('3. El servidor enruta cada request a su empresa');
@@ -185,9 +237,17 @@ async function main() {
 
     const usuariosRoute = await pedir('/api/usuarios', tokenTaller);
     comprobar(usuariosRoute.estado === 200, `GET /api/usuarios -> 200 (dio ${usuariosRoute.estado})`, usuariosRoute.cuerpo);
+
+    // Cuantos tiene que haber: los que diga la CENTRAL, que es donde viven los
+    // usuarios. Antes se contaba desde la tabla vieja del taller, que ya no
+    // existe (limpieza de F4), y por eso salia 0.
+    const esperados = await central.uno(
+        'SELECT COUNT(*) AS n FROM usuarios_globales WHERE empresa_id = ?',
+        [empresa.id]
+    );
     comprobar(
-        Array.isArray(usuariosRoute.cuerpo) && usuariosRoute.cuerpo.length === migrados.length,
-        `los usuarios salen de la central (${migrados.length} esperados)`,
+        Array.isArray(usuariosRoute.cuerpo) && usuariosRoute.cuerpo.length === esperados.n,
+        `los usuarios salen de la central (${esperados.n} esperados)`,
         Array.isArray(usuariosRoute.cuerpo) ? usuariosRoute.cuerpo.length : usuariosRoute.cuerpo
     );
 

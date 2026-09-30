@@ -185,9 +185,21 @@ function inventarioBackups() {
     // --- 4) Prueba funcional: los datos se pueden LEER ---
     console.log('\n=== PRUEBA FUNCIONAL ===');
     try {
-        const [usuarios] = await test.query('SELECT nombre, email, rol FROM usuarios ORDER BY id LIMIT 3');
-        console.log(`  usuarios legibles:  ${usuarios.length}`);
-        usuarios.forEach(u => console.log(`    - ${u.nombre} <${u.email}> [${u.rol}]`));
+        // La tabla `usuarios` ya no esta en las bases (limpieza de F4): los
+        // usuarios viven en la central, y un respaldo de la base del taller
+        // correctamente no los tiene. Su ausencia NO es un fallo, asi que se
+        // informa en vez de romper la restauracion.
+        const [[hayUsuarios]] = await test.query(
+            `SELECT COUNT(*) AS n FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usuarios'`
+        );
+        if (hayUsuarios.n) {
+            const [usuarios] = await test.query('SELECT nombre, email, rol FROM usuarios ORDER BY id LIMIT 3');
+            console.log(`  usuarios legibles:  ${usuarios.length}`);
+            usuarios.forEach(u => console.log(`    - ${u.nombre} <${u.email}> [${u.rol}]`));
+        } else {
+            console.log('  usuarios:           (no estan en esta base, viven en la central)');
+        }
         const [[r]] = await test.query('SELECT COUNT(*) AS c FROM reparaciones');
         const [[p]] = await test.query('SELECT COUNT(*) AS c FROM productos');
         console.log(`  reparaciones:       ${r.c}`);

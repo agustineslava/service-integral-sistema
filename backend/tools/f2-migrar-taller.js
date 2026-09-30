@@ -61,6 +61,16 @@ async function conectarTaller() {
 async function leerUsuariosDelTaller() {
     const con = await conectarTaller();
     try {
+        // Desde F4 esta tabla ya no existe: los usuarios viven solo en la
+        // central. Que no esté es el estado NORMAL, no un error, así que la
+        // herramienta tiene que seguir sirviendo para lo que falta.
+        const [existe] = await con.query(
+            `SELECT COUNT(*) AS n FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'usuarios'`,
+            [NOMBRE_DB]
+        );
+        if (!existe[0].n) return [];
+
         const [filas] = await con.query(
             'SELECT id, nombre, email, password, rol, creado_en FROM usuarios ORDER BY id'
         );
@@ -100,7 +110,8 @@ async function main() {
     titulo('1. Usuarios que hay hoy en la base del taller');
     const usuarios = await leerUsuariosDelTaller();
     if (!usuarios.length) {
-        aviso('la base del taller no tiene usuarios. Nada que migrar.');
+        aviso('la base del taller ya no tiene tabla `usuarios` (limpieza de F4, o nunca hubo).');
+        aviso('Los usuarios estan en la central: nada que migrar.');
     } else {
         for (const u of usuarios) {
             info(`${u.email}  (${u.rol})`);

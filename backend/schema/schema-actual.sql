@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- Esquema de: ServiceIntegralsistema
 -- Servidor:   MySQL 9.5.0
--- Generado:   29/9/2026, 07:40:26
+-- Generado:   30/9/2026, 12:39:05
 --
 -- FUENTE DE VERDAD del esquema. Reemplaza al esquema que se creaba a mano
 -- en MySQL Workbench sin versionar.
@@ -122,19 +122,5 @@ CREATE TABLE `reparaciones` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 ALTER TABLE `reparaciones` ADD CONSTRAINT `fk_reparaciones_cliente` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON UPDATE NO ACTION ON DELETE SET NULL;
-
--- ---------------------------------------------------------------------------
--- Tabla: usuarios   (6 columnas, 2 indices)
--- ---------------------------------------------------------------------------
-CREATE TABLE `usuarios` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `nombre` varchar(100) NOT NULL,
-  `email` varchar(100) NOT NULL,
-  `password` varchar(255) NOT NULL,
-  `rol` enum('ADMIN','TECNICO') NULL DEFAULT 'TECNICO',
-  `creado_en` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `email` (`email`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 SET FOREIGN_KEY_CHECKS=1;
