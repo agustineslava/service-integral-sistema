@@ -173,12 +173,13 @@ function marcaDeEntorno() {
 }
 
 app.get('/api/config-comercio', async (req, res) => {
-    // Con token se responde con la empresa de ese token. Un token viejo,
-    // adulterado o de una empresa que ya no existe NO es un error: se cae al
-    // camino de las variables de entorno. Esta ruta nunca dice "no", porque si
-    // fallara, la pagina quedaria sin logo y sin saber por que.
+    // Con token se responde con la empresa de ese token.
+    // Sin token pero CON slug (pre-login F5c), busca por slug.
+    // Sin token y sin slug: marca de entorno (fallback).
+    // Esta ruta NUNCA falla con error: siempre devuelve algo (200).
     const auth = req.headers['authorization'];
     const token = auth && auth.startsWith('Bearer ') ? auth.split(' ')[1] : null;
+    const slug = req.query.slug; // opcional: pre-login lookup por slug
 
     if (token) {
         try {
@@ -188,11 +189,65 @@ app.get('/api/config-comercio', async (req, res) => {
                 if (empresa) return res.json(datosDeMarca(empresa));
             }
         } catch {
-            // Token inválido o vencido: se sigue con la marca de entorno.
+            // Token inválido: se sigue con slug o entorno.
         }
     }
 
+    if (slug) {
+        const empresa = await central.uno('SELECT * FROM empresas WHERE slug = ?', [slug]);
+        if (empresa) return res.json(datosDeMarca(empresa));
+    }
+
     res.json(marcaDeEntorno());
+});
+
+// F5c — Lookup empresa por email (sin auth, rate-limited)
+//
+// El frontend llama al hacer blur en el campo email. Sirve para:
+//   1. Detectar a qué empresa pertenece el email
+//   2. Mostrar logo/colores de esa empresa ANTES de logearse
+//   3. No revela si el email existe: siempre 200 con {encontrado: false}
+//
+// Rate limit: 10 req/min por IP (evita enumeración de emails)
+const limitadorLookupEmail = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Demasiadas consultas. Espera un minuto.' },
+    keyGenerator: (req) => req.ip
+});
+
+app.get('/api/central/empresa-por-email', limitadorLookupEmail, async (req, res) => {
+    const email = (req.query.email || '').trim().toLowerCase();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        return res.json({ encontrado: false });
+    }
+
+    try {
+        // Solo busca usuarios ACTIVOS. Un usuario inactivo no debe ser "encontrable".
+        const usuario = await registro.usuarioPorEmail(email);
+        if (!usuario || !usuario.activo || !usuario.empresa_id) {
+            return res.json({ encontrado: false });
+        }
+
+        const empresa = await registro.empresaPorId(usuario.empresa_id);
+        if (!empresa || !['ACTIVO', 'DEMO'].includes(empresa.estado)) {
+            return res.json({ encontrado: false });
+        }
+
+        res.json({
+            encontrado: true,
+            empresa_id: empresa.id,
+            slug: empresa.slug,
+            nombre: empresa.nombre,
+            modulos_contratados: Array.from(await registro.codigosDeModulos(empresa.id))
+        });
+    } catch (err) {
+        console.error('Error en empresa-por-email:', err);
+        // Nunca revelamos si falló: mismo comportamiento que "no encontrado"
+        return res.json({ encontrado: false });
+    }
 });
 
 /* ==========================================================================

@@ -41,13 +41,96 @@
     </main>
 
     <script>
-        document.getElementById('form-login').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const errorDiv = document.getElementById('mensaje-error');
+        // --- F5c: Lookup empresa por email al hacer blur ---
+        let lookupTimer = null;
+        const emailInput = document.getElementById('email');
+        const form = document.getElementById('form-login');
+        const errorDiv = document.getElementById('mensaje-error');
 
+        function mostrarError(msg, esInfo = false) {
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
+            errorDiv.className = esInfo ? 'error-login info' : 'error-login';
+        }
+
+        function limpiarError() {
             errorDiv.style.display = 'none';
+        }
+
+        function aplicarMarcaDesdeConfig(conf) {
+            if (!conf || !conf.nombre) return;
+            const nombre = String(conf.nombre);
+            document.querySelectorAll('title').forEach(t => t.textContent = t.textContent.replace('Service Integral', nombre));
+            const logoSrc = conf.logo_url ? (conf.logo_url.startsWith('http') || conf.logo_url.startsWith('/') ? conf.logo_url : '/' + conf.logo_url) : '/logos/logo.jpg';
+            document.querySelectorAll('.login-logo').forEach(img => { img.src = logoSrc; img.alt = `Logo ${nombre}`; });
+            document.querySelectorAll('.login-titulo').forEach(el => el.textContent = nombre);
+            if (conf.subtitulo) document.querySelectorAll('.login-subtitulo').forEach(el => el.textContent = conf.subtitulo);
+            if (conf.color_primario && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(conf.color_primario.trim())) {
+                const c = conf.color_primario.trim();
+                document.documentElement.style.setProperty('--si-blue-vibrant', c);
+                // hover oscuro
+                let c2 = c;
+                if (c2.length === 4) c2 = '#' + c2[1]+c2[1]+c2[2]+c2[2]+c2[3]+c2[3];
+                if (/^#[0-9a-f]{6}$/i.test(c2)) {
+                    const num = parseInt(c2.slice(1),16);
+                    const r = Math.max(0, Math.round(((num>>16)&0xff)*0.82));
+                    const g = Math.max(0, Math.round(((num>>8)&0xff)*0.82));
+                    const b = Math.max(0, Math.round((num&0xff)*0.82));
+                    document.documentElement.style.setProperty('--si-blue-dark', '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''));
+                }
+            }
+        }
+
+        emailInput.addEventListener('blur', async () => {
+            const email = emailInput.value.trim().toLowerCase();
+            if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+
+            limpiarError();
+            emailInput.style.background = '#fff url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 width=%2716%27 height=%2716%27 fill=%27%23666%27%3E%3Ccircle cx=%2712%27 cy=%2712%27 r=%2710%27 stroke=%27currentColor%27 stroke-width=%273%27 fill=%27none%27/%3E%3Cpath d=%27M12 6v6l4 2%27/%3E%3C/svg%3E") no-repeat right 10px center';
+
+            try {
+                const r = await fetch(`${window.location.origin}/api/central/empresa-por-email?email=${encodeURIComponent(email)}`);
+                const data = await r.json();
+
+                emailInput.style.background = '#fff';
+
+                if (data.encontrado && data.slug) {
+                    // Empresa encontrada: traer marca y aplicarla
+                    const r2 = await fetch(`${window.location.origin}/api/config-comercio?slug=${encodeURIComponent(data.slug)}`);
+                    const conf = await r2.json();
+                    if (conf && conf.nombre) {
+                        aplicarMarcaDesdeConfig(conf);
+                        mostrarError(`Empresa detectada: ${conf.nombre}`, true);
+                    }
+                } else {
+                    // No encontrado: volver a marca por defecto (env)
+                    try {
+                        const r2 = await fetch(`${window.location.origin}/api/config-comercio`);
+                        const conf = await r2.json();
+                        aplicarMarcaDesdeConfig(conf);
+                    } catch {}
+                    mostrarError('Email no registrado en ninguna empresa activa', true);
+                }
+            } catch (err) {
+                emailInput.style.background = '#fff';
+                console.warn('Error en lookup email:', err);
+            }
+        });
+
+        // Debounce mientras escribe (opcional, 300ms)
+        emailInput.addEventListener('input', () => {
+            clearTimeout(lookupTimer);
+            limpiarError();
+            lookupTimer = setTimeout(() => emailInput.blur(), 300);
+        });
+
+        // --- Login submit (sin cambios, usa el flujo existente) ---
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            limpiarError();
+
+            const email = emailInput.value.trim();
+            const password = document.getElementById('password').value;
 
             try {
                 const respuesta = await fetch(`${window.location.origin}/api/login`, {
@@ -62,58 +145,43 @@
                     localStorage.setItem('jwt_token', data.token);
                     localStorage.setItem('usuario_actual', JSON.stringify(data.usuario));
 
-                    // El SUPERADMIN no pertenece a ninguna empresa: es el que
-                    // administra el servicio entero. Si lo mandáramos a
-                    // index.html, esa página pediría /api/mi-empresa, que le
-                    // contesta 403 (no es una empresa), y auth-check lo
-                    // devolvería al login. Un loop sin fin.
                     if (data.usuario && data.usuario.rol === 'SUPERADMIN') {
-                        // Sin empresa no hay marca que aplicar: se saca la que
-                        // quedó de un login anterior, si hubo.
                         localStorage.removeItem('empresa_actual');
                         window.location.href = 'admin.html';
                         return;
                     }
 
-                    // La empresa (marca, plan, límite y módulos contratados)
-                    // se guarda acá para no tener que ir a buscarla en cada
-                    // página. Se puede refrescar con GET /api/mi-empresa.
                     if (data.empresa) {
                         localStorage.setItem('empresa_actual', JSON.stringify(data.empresa));
                     }
                     window.location.href = 'index.html';
                 } else {
-                    errorDiv.textContent = data.error || 'Usuario o contraseña incorrectos';
-                    errorDiv.style.display = 'block';
+                    mostrarError(data.error || 'Usuario o contraseña incorrectos');
                 }
             } catch (err) {
-                errorDiv.textContent = 'No se pudo conectar con el servidor';
-                errorDiv.style.display = 'block';
+                mostrarError('No se pudo conectar con el servidor');
             }
         });
 
         function toggleVisibilidadPassword(idInput, boton) {
-        const input = document.getElementById(idInput);
-        const svg = boton.querySelector('svg');
+            const input = document.getElementById(idInput);
+            const svg = boton.querySelector('svg');
 
-        if (input.type === 'password') {
-            input.type = 'text';
-            // SVG Ojo Tachado / Activo
-            svg.innerHTML = `
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                <line x1="1" y1="1" x2="23" y2="23"></line>
-            `;
-        } else {
-            input.type = 'password';
-            // SVG Ojo Normal
-            svg.innerHTML = `
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-            `;
+            if (input.type === 'password') {
+                input.type = 'text';
+                svg.innerHTML = `
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8 11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                `;
+            } else {
+                input.type = 'password';
+                svg.innerHTML = `
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                `;
+            }
         }
-    }
     </script>
-
     
 </body>
 </html>
