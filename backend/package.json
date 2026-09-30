@@ -20,6 +20,9 @@
     "f2:migrar": "node tools/f2-migrar-taller.js",
     "f2:migrar:simular": "node tools/f2-migrar-taller.js --dry-run",
     "f2:verificar": "node tools/f2-verificar.js",
+    "f3:verificar": "node tools/f3-verificar.js",
+    "f3:restaurar": "node tools/f3-verificar.js --restaurar",
+    "limites": "node tools/limite-usuarios.js",
     "token": "node tools/generate-token.js",
     "schema:snapshot": "node tools/dump-schema.js"
   },

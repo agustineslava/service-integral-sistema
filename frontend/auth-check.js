@@ -59,6 +59,9 @@ async function apiFetch(url, opciones = {}) {
     const usuario = JSON.parse(usuarioGuardado);
 
     document.addEventListener('DOMContentLoaded', () => {
+        // A0. Sacar del menú las secciones que esta empresa no contrató.
+        aplicarModulosContratados();
+
         // A. Renderizar información del usuario en el Header (Menú Desplegable Compacto)
         const contenedorUsuario = document.getElementById('info-usuario-header');
         if (contenedorUsuario) {
@@ -132,6 +135,15 @@ async function apiFetch(url, opciones = {}) {
                         alert('¡Usuario registrado con éxito!');
                         formCrearUsuario.reset();
                         cerrarModal('modal-crear-usuario');
+                        // El límite se acaba de tocar: recargar la lista
+                        // desactiva el formulario si ya no queda lugar.
+                        cargarListaUsuarios();
+                    } else if (data.codigo === 'LIMITE_USUARIOS') {
+                        // No es un error de permisos: es que el plan no da más
+                        // usuarios. El mensaje que mande el servidor ya lo dice.
+                        alert(data.error);
+                        formCrearUsuario.reset();
+                        cargarListaUsuarios();
                     } else {
                         alert(data.error || 'Error al registrar usuario.');
                     }
@@ -144,9 +156,59 @@ async function apiFetch(url, opciones = {}) {
     });
 })();
 
-/**
- * Aplica ocultamiento y deshabilitación de elementos de creación/edición para el rol TÉCNICO
- */
+/* ==========================================================================
+   MÓDULOS CONTRATADOS
+   --------------------------------------------------------------------------
+   Cada sección del menú declara de qué módulo depende con data-modulo. Si la
+   empresa no lo contrató, el ítem desaparece del menú.
+
+   OJO CON EL ALCANCE DE ESTO: es CÓMODO, NO SEGURIDAD. Esconder un link no
+   impide nada; cualquiera que escriba la URL a mano igual llega a la página.
+   Lo que de verdad impide entrar es que el servidor conteste 404 a las rutas
+   del módulo. Esto solo evita el susto de mostrar algo que no se puede usar.
+
+   Si no hay datos de empresa guardados (sesión vieja, antes de este cambio),
+   no se oculta nada: es preferible mostrar de más que dejar al usuario sin
+   menú por un problema de caché.
+   ========================================================================== */
+
+/** ¿La empresa compró este módulo? */
+function tieneModulo(codigo) {
+    const empresa = JSON.parse(localStorage.getItem('empresa_actual') || 'null');
+    if (!empresa || !Array.isArray(empresa.modulos)) return true;
+    return empresa.modulos.includes(codigo);
+}
+
+function aplicarModulosContratados() {
+    const ocultados = [];
+
+    document.querySelectorAll('[data-modulo]').forEach((el) => {
+        const codigo = el.getAttribute('data-modulo');
+        if (tieneModulo(codigo)) return;
+        el.style.display = 'none';
+        ocultados.push(codigo);
+    });
+
+    if (ocultados.length) {
+        console.info(`Secciones ocultadas por no estar contratadas: ${ocultados.join(', ')}`);
+    }
+
+    // Si la página actual ES una de las secciones que se ocultaron, no dejamos
+    // al usuario mirando una pantalla que el servidor le va a contestar 404.
+    // La guarda evita un bucle si la portada también estuviera oculta.
+    const archivoActual = window.location.pathname.split('/').pop() || 'index.html';
+    const enlaceActual = document.querySelector(`[data-modulo] a[href="${archivoActual}"]`);
+
+    if (enlaceActual && enlaceActual.parentElement.style.display === 'none'
+        && archivoActual !== 'index.html') {
+        window.location.href = 'index.html';
+        return;
+    }
+}
+
+/* ==========================================================================
+   Aplica ocultamiento y deshabilitación de elementos de creación/edición para el rol TÉCNICO
+   ========================================================================== */
 function aplicarModoSoloConsulta() {
     // 1. Ocultar el formulario para registrar un "Nuevo Producto" en index.html
     const panelFormulario = document.querySelector('.panel-formulario');
@@ -229,6 +291,8 @@ async function cargarListaUsuarios() {
         if (!respuesta.ok) throw new Error('No se pudo obtener la lista de usuarios');
         const usuarios = await respuesta.json();
 
+        actualizarContadorUsuarios(usuarios.length);
+
         if (usuarios.length === 0) {
             contenedor.innerHTML = '<p class="texto-vacio">No hay usuarios registrados.</p>';
             return;
@@ -252,6 +316,55 @@ async function cargarListaUsuarios() {
     } catch (error) {
         console.error('Error al cargar usuarios:', error);
         contenedor.innerHTML = '<p style="color: var(--color-danger, #dc3545);">No se pudo cargar la lista de usuarios.</p>';
+    }
+}
+
+/**
+ * Muestra "N de M usuarios" y desactiva el alta si el plan ya está completo.
+ *
+ * Esto es solo para que se entienda antes de intentarlo: el bloqueo real lo
+ * hace el servidor, que no confía en que el botón esté deshabilitado.
+ */
+function actualizarContadorUsuarios(usados) {
+    const empresa = JSON.parse(localStorage.getItem('empresa_actual') || 'null');
+    const limite = Number(empresa?.limite_usuarios);
+    if (!Number.isFinite(limite) || limite <= 0) return;
+
+    const form = document.getElementById('form-crear-usuario');
+    if (!form) return;
+
+    const completo = usados >= limite;
+
+    // Mostrar el contador junto al botón de agregar, si la página lo tiene.
+    let contador = document.getElementById('contador-usuarios-plan');
+    if (!contador) {
+        contador = document.createElement('p');
+        contador.id = 'contador-usuarios-plan';
+        contador.style.cssText = 'font-size:12px;color:var(--text-muted);margin:0 0 10px 0;';
+        form.parentElement.insertBefore(contador, form);
+    }
+    contador.textContent = `Usuarios: ${usados} de ${limite} incluidos en tu plan.`;
+
+    // Desactivar el alta y explicar por qué, en vez de dejar que falle al enviar.
+    const campos = document.querySelectorAll('#form-crear-usuario input, #form-crear-usuario select');
+    const boton = document.querySelector('#form-crear-usuario button[type="submit"], #form-crear-usuario input[type="submit"]');
+    campos.forEach((c) => { c.disabled = completo; });
+    if (boton) {
+        boton.disabled = completo;
+        boton.title = completo
+            ? `Tu plan incluye ${limite} usuarios. Contactanos para ampliarlo.`
+            : '';
+    }
+    if (completo) {
+        contador.style.color = 'var(--color-warning, #b8860b)';
+        let aviso = document.getElementById('aviso-limite-usuarios');
+        if (!aviso) {
+            aviso = document.createElement('p');
+            aviso.id = 'aviso-limite-usuarios';
+            aviso.style.cssText = 'font-size:12px;margin:0 0 10px 0;';
+            form.parentElement.insertBefore(aviso, form);
+        }
+        aviso.textContent = `Llegaste al máximo de ${limite} ${limite === 1 ? 'usuario' : 'usuarios'} de tu plan. Para agregar más, contactanos.`;
     }
 }
 

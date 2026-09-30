@@ -178,6 +178,39 @@ function requiereAdmin(req, res, next) {
 }
 
 /* ==========================================================================
+   5.0.1 MÓDULOS CONTRATADOS
+   --------------------------------------------------------------------------
+   Que el sistema tenga una funcionalidad y que esta empresa la haya
+   contratado son dos cosas distintas. El catálogo dice que EXISTE;
+   `empresa_modulos` dice que se CONTRATÓ.
+
+   A qué módulo pertenece cada parte:
+
+     stock        /api/productos/*        /api/movimientos-stock
+     reparaciones /api/reparaciones/*
+     clientes     /api/clientes/*
+     pedidos      /api/pedidos/*
+     etiquetas_qr, presupuestos, reportes, facturacion   (todavia sin rutas)
+
+   Quedan SIN módulo a propósito, porque no son funcionalidad vendible sino
+   infraestructura: /api/usuarios, /api/upload, /api/delete-image.
+
+   POR QUÉ 404 Y NO 403
+   Un 403 confirmaría que la sección existe pero no la podés usar, lo cual le
+   dice al cliente que hay algo que no tiene. Un 404 no dice nada. Es el mismo
+   criterio que se usa cuando un recurso es de otra empresa.
+   ========================================================================== */
+function requiereModulo(codigo) {
+    return async (req, res, next) => {
+        const contratados = await registro.codigosDeModulos(req.empresa.id);
+        if (!contratados.has(codigo)) {
+            return res.status(404).json({ error: 'No encontrado' });
+        }
+        next();
+    };
+}
+
+/* ==========================================================================
    5.1 VALIDACIÓN DE DATOS DE ENTRADA Y FORMATEO
    ========================================================================== */
 
@@ -395,6 +428,13 @@ app.post('/api/login', limitadorLogin, async (req, res) => {
         // tiene por qué fallar.
         registro.marcarAcceso(usuario.id).catch(() => {});
 
+        // Módulos contratados: el frontend los necesita para no mostrar secciones
+        // que esta empresa no compró. Ojo: esto es CÓMODO, no seguridad. La
+        // seguridad real es que `requiereModulo` rechaza la ruta en el servidor.
+        const modulos = empresa
+            ? Array.from(await registro.codigosDeModulos(empresa.id))
+            : [];
+
         res.json({
             mensaje: 'Autenticación exitosa',
             token,
@@ -413,11 +453,51 @@ app.post('/api/login', limitadorLogin, async (req, res) => {
                 estado: empresa.estado,
                 color_primario: empresa.color_primario,
                 color_secundario: empresa.color_secundario,
-                logo_url: empresa.logo_url
+                logo_url: empresa.logo_url,
+                plan: empresa.plan,
+                limite_usuarios: empresa.limite_usuarios,
+                modulos
             } : null
         });
     } catch (err) {
         console.error('Error en login:', err);
+        return res.status(500).json({ error: 'Error en el servidor' });
+    }
+});
+
+/* ==========================================================================
+   5.0.2 MI EMPRESA
+   --------------------------------------------------------------------------
+   Lo mismo que devuelve el login, pero consultable después. El login te da
+   estos datos una vez y quedan viejos: si leAmpliaron el plan o le
+   agregaron un módulo, el frontend se entera con esto sin obligar a que
+   nadie vuelva a iniciar sesión.
+
+   Es de solo lectura y no expone la contraseña de la base ni el secreto de
+   los tokens: es el mismo objeto `empresa` que ya vive en memoria en cada
+   request, con tres campos más.
+   ========================================================================== */
+app.get('/api/mi-empresa', verificarToken, async (req, res) => {
+    try {
+        const empresa = req.empresa;
+        const modulos = Array.from(await registro.codigosDeModulos(empresa.id));
+        res.json({
+            id: empresa.id,
+            nombre: empresa.nombre,
+            slug: empresa.slug,
+            rubro: empresa.rubro,
+            estado: empresa.estado,
+            color_primario: empresa.color_primario,
+            color_secundario: empresa.color_secundario,
+            logo_url: empresa.logo_url,
+            plan: empresa.plan,
+            plan_nombre: empresa.plan_nombre,
+            limite_usuarios: empresa.limite_usuarios,
+            usuarios_actuales: await registro.contarUsuarios(empresa.id),
+            modulos
+        });
+    } catch (err) {
+        console.error('Error en /api/mi-empresa:', err);
         return res.status(500).json({ error: 'Error en el servidor' });
     }
 });
@@ -428,6 +508,35 @@ app.post('/api/usuarios', verificarToken, requiereAdmin, async (req, res) => {
         return res.status(400).json({ error: validacion.error });
     }
     const { nombre, email, password, rol } = validacion.datos;
+
+    /* ----------------------------------------------------------------------
+       LIMITE DE USUARIOS DEL PLAN  (F3)
+       ----------------------------------------------------------------------
+       El plan base trae N usuarios. Pasarse cuesta mas plata, asi que el
+       limite se aplica ACA, en el servidor. No alcanza con esconder el
+       boton en la pantalla: cualquiera que sepa la URL podria saltarselo.
+
+       `limite_usuarios` ya viene resuelto en `empresaPorId` como
+       COALESCE(empresas.max_usuarios, planes.max_usuarios): primero una
+       excepcion de esta empresa, y si no, lo que trae el plan.
+
+       403 y no 402: el pedido se entiende y esta autenticado, lo que falta
+       es el derecho a tenerlo. El `codigo` existe para que el frontend
+       distinga esto de un 403 de permisos.
+    ---------------------------------------------------------------------- */
+    const limite = Number(req.empresa.limite_usuarios);
+    if (Number.isFinite(limite) && limite > 0) {
+        const usados = await registro.contarUsuarios(req.empresa.id);
+        if (usados >= limite) {
+            return res.status(403).json({
+                error: `Tu plan permite ${limite} ${limite === 1 ? 'usuario' : 'usuarios'}. Para agregar más, contactanos para ampliarlo.`,
+                codigo: 'LIMITE_USUARIOS',
+                limite,
+                usuarios_actuales: usados
+            });
+        }
+    }
+
     const passwordHash = bcrypt.hashSync(password, 10);
 
     try {
@@ -553,7 +662,7 @@ app.post('/api/usuarios/cambiar-password', verificarToken, limitadorCambioPasswo
    6. ENDPOINTS DE PRODUCTOS / STOCK (C.R.U.D. Y BÚSQUEDA OPTIMIZADA)
    ========================================================================== */
 
-app.get('/api/productos', verificarToken, (req, res) => {
+app.get('/api/productos', verificarToken, requiereModulo('stock'), (req, res) => {
     const paginaParam = parseInt(req.query.page, 10);
     const usarPaginacion = Number.isInteger(paginaParam) && paginaParam > 0;
 
@@ -646,7 +755,7 @@ app.get('/api/productos', verificarToken, (req, res) => {
     });
 });
 
-app.get('/api/productos/proveedores', verificarToken, (req, res) => {
+app.get('/api/productos/proveedores', verificarToken, requiereModulo('stock'), (req, res) => {
     const sql = "SELECT DISTINCT distribuidor FROM productos WHERE distribuidor IS NOT NULL AND distribuidor != '' ORDER BY distribuidor ASC";
     db.query(sql, (err, rows) => {
         if (err) {
@@ -657,7 +766,7 @@ app.get('/api/productos/proveedores', verificarToken, (req, res) => {
     });
 });
 
-app.post('/api/productos', verificarToken, requiereAdmin, (req, res) => {
+app.post('/api/productos', verificarToken, requiereModulo('stock'), requiereAdmin, (req, res) => {
     const validacion = validarProducto(req.body);
     if (!validacion.valido) {
         return res.status(400).json({ error: validacion.error });
@@ -683,7 +792,7 @@ app.post('/api/productos', verificarToken, requiereAdmin, (req, res) => {
     });
 });
 
-app.delete('/api/productos/:id', verificarToken, requiereAdmin, (req, res) => {
+app.delete('/api/productos/:id', verificarToken, requiereModulo('stock'), requiereAdmin, (req, res) => {
     const { id } = req.params;
 
     db.query('SELECT imagen_1, imagen_2, imagen_3 FROM productos WHERE id = ?', [id], async (errSelect, rows) => {
@@ -708,7 +817,7 @@ app.delete('/api/productos/:id', verificarToken, requiereAdmin, (req, res) => {
     });
 });
 
-app.put('/api/productos/:id', verificarToken, requiereAdmin, (req, res) => {
+app.put('/api/productos/:id', verificarToken, requiereModulo('stock'), requiereAdmin, (req, res) => {
     const { id } = req.params;
 
     const validacion = validarProducto(req.body);
@@ -736,7 +845,7 @@ app.put('/api/productos/:id', verificarToken, requiereAdmin, (req, res) => {
     });
 });
 
-app.post('/api/productos/:id/stock-minimo', verificarToken, requiereAdmin, (req, res) => {
+app.post('/api/productos/:id/stock-minimo', verificarToken, requiereModulo('stock'), requiereAdmin, (req, res) => {
     const { id } = req.params;
 
     const validacion = validarStockMinimo(req.body);
@@ -759,7 +868,7 @@ app.post('/api/productos/:id/stock-minimo', verificarToken, requiereAdmin, (req,
    7. ENDPOINTS DE PEDIDOS (CON TRANSACCIÓN Y AUTO-LIMPIEZA)
    ========================================================================== */
 
-app.post('/api/pedidos', verificarToken, requiereAdmin, (req, res) => {
+app.post('/api/pedidos', verificarToken, requiereModulo('pedidos'), requiereAdmin, (req, res) => {
     const { notas, items } = req.body;
 
     db.getConnection((err, connection) => {
@@ -827,7 +936,7 @@ app.post('/api/pedidos', verificarToken, requiereAdmin, (req, res) => {
     });
 });
 
-app.get('/api/pedidos', verificarToken, (req, res) => {
+app.get('/api/pedidos', verificarToken, requiereModulo('pedidos'), (req, res) => {
     const sql = 'SELECT * FROM pedidos ORDER BY fecha DESC';
     db.query(sql, (err, results) => {
         if (err) {
@@ -838,7 +947,7 @@ app.get('/api/pedidos', verificarToken, (req, res) => {
     });
 });
 
-app.get('/api/pedidos/:id/items', verificarToken, (req, res) => {
+app.get('/api/pedidos/:id/items', verificarToken, requiereModulo('pedidos'), (req, res) => {
     const { id } = req.params;
     
     const sql = `
@@ -931,7 +1040,7 @@ app.post('/api/delete-image', verificarToken, requiereAdmin, (req, res) => {
 /* ==========================================================================
     9. MÓDULO: HISTORIAL DE MOVIMIENTOS Y AUDITORÍA DE STOCK
    ========================================================================== */
-app.get('/api/movimientos-stock', verificarToken, requiereAdmin, (req, res) => {
+app.get('/api/movimientos-stock', verificarToken, requiereModulo('stock'), requiereAdmin, (req, res) => {
     const sql = 'SELECT * FROM movimientos_stock ORDER BY fecha DESC LIMIT 150';
     db.query(sql, (err, rows) => {
         if (err) {
@@ -947,7 +1056,7 @@ app.get('/api/movimientos-stock', verificarToken, requiereAdmin, (req, res) => {
    ========================================================================== */
 
 // 1. Listar clientes (con búsqueda y límite para no saturar memoria)
-app.get('/api/clientes', verificarToken, (req, res) => {
+app.get('/api/clientes', verificarToken, requiereModulo('clientes'), (req, res) => {
     const { buscar } = req.query;
     const limiteQuery = parseInt(req.query.limit, 10);
     const limite = Number.isInteger(limiteQuery) && limiteQuery > 0 && limiteQuery <= 100 ? limiteQuery : 50;
@@ -981,7 +1090,7 @@ app.get('/api/clientes', verificarToken, (req, res) => {
     });
 });
 
-app.get('/api/clientes/:id', verificarToken, (req, res) => {
+app.get('/api/clientes/:id', verificarToken, requiereModulo('clientes'), (req, res) => {
     db.query('SELECT * FROM clientes WHERE id = ?', [req.params.id], (err, rows) => {
         if (err) {
             console.error('Error al obtener cliente:', err);
@@ -992,7 +1101,7 @@ app.get('/api/clientes/:id', verificarToken, (req, res) => {
     });
 });
 
-app.get('/api/clientes/:id/reparaciones', verificarToken, (req, res) => {
+app.get('/api/clientes/:id/reparaciones', verificarToken, requiereModulo('clientes'), (req, res) => {
     db.query(
         'SELECT * FROM reparaciones WHERE cliente_id = ? ORDER BY fecha_inicio DESC',
         [req.params.id],
@@ -1006,7 +1115,7 @@ app.get('/api/clientes/:id/reparaciones', verificarToken, (req, res) => {
     );
 });
 
-app.put('/api/clientes/:id', verificarToken, requiereAdmin, (req, res) => {
+app.put('/api/clientes/:id', verificarToken, requiereModulo('clientes'), requiereAdmin, (req, res) => {
     const validacion = validarCliente(req.body);
     if (!validacion.valido) {
         return res.status(400).json({ error: validacion.error });
@@ -1086,7 +1195,7 @@ async function descontarStockPorReparacion(idOrden, equipo, tecnicoAsignado, lis
     }
 }
 
-app.get('/api/reparaciones', verificarToken, (req, res) => {
+app.get('/api/reparaciones', verificarToken, requiereModulo('reparaciones'), (req, res) => {
     const sql = 'SELECT * FROM reparaciones ORDER BY id DESC';
     db.query(sql, (err, rows) => {
         if (err) {
@@ -1097,7 +1206,7 @@ app.get('/api/reparaciones', verificarToken, (req, res) => {
     });
 });
 
-app.post('/api/reparaciones', verificarToken, requiereAdmin, async (req, res) => {
+app.post('/api/reparaciones', verificarToken, requiereModulo('reparaciones'), requiereAdmin, async (req, res) => {
     const validacion = validarReparacion(req.body);
     if (!validacion.valido) {
         return res.status(400).json({ error: validacion.error });
@@ -1135,7 +1244,7 @@ app.post('/api/reparaciones', verificarToken, requiereAdmin, async (req, res) =>
     }
 });
 
-app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res) => {
+app.put('/api/reparaciones/:id', verificarToken, requiereModulo('reparaciones'), requiereAdmin, async (req, res) => {
     const { id } = req.params;
 
     const validacion = validarReparacion(req.body);
@@ -1199,7 +1308,7 @@ app.put('/api/reparaciones/:id', verificarToken, requiereAdmin, async (req, res)
     }
 });
 
-app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (req, res) => {
+app.put('/api/reparaciones/:id/estado', verificarToken, requiereModulo('reparaciones'), requiereAdmin, async (req, res) => {
     const { id } = req.params;
     const ESTADOS_VALIDOS = ['Pendiente', 'En Reparacion', 'Esperando Repuesto', 'Listo', 'Entregado', 'Cancelado'];
     const { estado } = req.body;
@@ -1246,7 +1355,7 @@ app.put('/api/reparaciones/:id/estado', verificarToken, requiereAdmin, async (re
     }
 });
 
-app.delete('/api/reparaciones/:id', verificarToken, requiereAdmin, (req, res) => {
+app.delete('/api/reparaciones/:id', verificarToken, requiereModulo('reparaciones'), requiereAdmin, (req, res) => {
     const { id } = req.params;
 
     const sql = 'DELETE FROM reparaciones WHERE id = ?';

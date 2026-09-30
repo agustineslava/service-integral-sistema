@@ -30,13 +30,17 @@
             <!-- Bloque de perfil y usuario logueado -->
             <div id="info-usuario-header" class="info-usuario-header"></div>
 
-            <!-- Menú de navegación interactivo -->
+            <!-- Menú de navegación interactivo
+                 Cada sección declara el módulo del que depende con
+                 data-modulo. Si la empresa no lo contrató, auth-check.js
+                 saca el ítem del menú. El servidor igual lo rechaza con
+                 404 aunque alguien entre por URL. -->
             <nav class="menu-navegacion">
                 <ul>
-                    <li><a href="index.html" class="active" id="nav-stock">Stock</a></li>
-                    <li><a href="reparaciones.html" id="nav-reparaciones">Taller / Reparaciones</a></li>
-                    <li><a href="clientes.html" id="nav-clientes">Clientes</a></li>
-                    <li><a href="pedidos.html" id="nav-pedidos">Pedidos</a></li>
+                    <li data-modulo="stock"><a href="index.html" class="active" id="nav-stock">Stock</a></li>
+                    <li data-modulo="reparaciones"><a href="reparaciones.html" id="nav-reparaciones">Taller / Reparaciones</a></li>
+                    <li data-modulo="clientes"><a href="clientes.html" id="nav-clientes">Clientes</a></li>
+                    <li data-modulo="pedidos"><a href="pedidos.html" id="nav-pedidos">Pedidos</a></li>
                     <!-- Botón de cambio rápido para Modo Claro / Oscuro -->
                     <li>
                         <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema de color">

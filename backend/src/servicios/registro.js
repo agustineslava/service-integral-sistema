@@ -22,6 +22,8 @@ const TTL_MS = 30 * 1000;
 const cacheEmpresas = new Map();
 /** id de empresa -> { valor, expira } */
 const cacheModulos = new Map();
+/** id de empresa -> { valor: Set de codigos, expira } */
+const cacheModulosCodigos = new Map();
 
 const vigente = (entrada) => Boolean(entrada) && entrada.expira > Date.now();
 
@@ -112,6 +114,20 @@ async function modulosDe(empresaId) {
     return guardar(cacheModulos, empresaId, filas);
 }
 
+/**
+ * Solo los codigos de los modulos contratados, como Set.
+ *
+ * Es lo que consulta `requiereModulo` en cada request protegido, asi que
+ * devuelve lo mas chico posible en vez de las filas completas.
+ */
+async function codigosDeModulos(empresaId) {
+    const cacheado = cacheModulosCodigos.get(empresaId);
+    if (vigente(cacheado)) return cacheado.valor;
+
+    const filas = await modulosDe(empresaId);
+    return guardar(cacheModulosCodigos, empresaId, new Set(filas.map((m) => m.codigo)));
+}
+
 /** Lista de empresas, para la flota y el panel del SuperAdmin. */
 async function todasLasEmpresas() {
     return central.query(
@@ -127,11 +143,13 @@ async function todasLasEmpresas() {
 function invalidarEmpresa(id) {
     cacheEmpresas.delete(id);
     cacheModulos.delete(id);
+    cacheModulosCodigos.delete(id);
 }
 
 function invalidarTodo() {
     cacheEmpresas.clear();
     cacheModulos.clear();
+    cacheModulosCodigos.clear();
 }
 
 module.exports = {
@@ -144,6 +162,7 @@ module.exports = {
     marcarAcceso,
     contarUsuarios,
     modulosDe,
+    codigosDeModulos,
     todasLasEmpresas,
     invalidarEmpresa,
     invalidarTodo

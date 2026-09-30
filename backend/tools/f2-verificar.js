@@ -247,6 +247,20 @@ async function main() {
         empresaPruebaId = r.insertId;
         console.log(`  [ ]     empresa de prueba #${empresaPruebaId} creada`);
 
+        /* Una empresa real nace con los módulos base contratados, y la prueba
+           tiene que parecerse a una real. Sin esto, F3 le contesta 404 a todo
+           y la parte 4 dejaría de probar lo que dice probar: pasaría porque
+           la empresa de prueba no ve NADA, y no porque estén separadas. */
+        const modulosBase = await central.query('SELECT codigo FROM modulos WHERE es_base = 1 ORDER BY orden');
+        for (const m of modulosBase) {
+            await central.query(
+                `INSERT INTO empresa_modulos (empresa_id, modulo, activo, fecha_desde)
+                 VALUES (?, ?, 1, CURDATE())`,
+                [empresaPruebaId, m.codigo]
+            );
+        }
+        console.log(`  [ ]     con los ${modulosBase.length} módulo(s) base contratado(s): ${modulosBase.map((m) => m.codigo).join(', ')}`);
+
         const tokenPrueba = firmar({ id: 900001, nombre: 'Prueba', rol: 'ADMIN' }, empresaPruebaId);
 
         // --- Lo que la empresa de prueba VE ---
