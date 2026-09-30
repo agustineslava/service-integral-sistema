@@ -64,9 +64,13 @@ function firmar(usuario, empresaId) {
     );
 }
 
-async function pedir(ruta, token) {
+async function pedir(ruta, token, opciones = {}) {
     const res = await fetch(BASE_URL + ruta, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+        ...opciones,
+        headers: {
+            ...(opciones.headers || {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
     });
     let cuerpo = null;
     try { cuerpo = await res.json(); } catch { /* puede no ser JSON */ }
@@ -261,6 +265,102 @@ async function main() {
     const tokenInexistente = jwt.sign({ id: 1, rol: 'ADMIN', empresa_id: 999999 }, process.env.JWT_SECRET, { expiresIn: '1h' });
     const empresaMala = await pedir('/api/productos', tokenInexistente);
     comprobar(empresaMala.estado === 403, `token de una empresa inexistente -> 403 (dio ${empresaMala.estado})`);
+
+    // === 3 bis. Las rutas que ESCRIBEN ====================================
+    //
+    // POR QUÉ ESTA SECCIÓN EXISTE
+    //
+    // F2 cambió `db` por el proxy de empresa y no rompió ni una de las 28
+    // rutas, que era justo el objetivo. Pero el proxy exponía solamente
+    // `query` y `execute`, y las rutas usan el pool de tres formas distintas:
+    //
+    //     db.query(sql, params, callback)      <- la mayoría
+    //     db.getConnection(callback)           <- POST /api/pedidos
+    //     await db.promise().query(sql, p)     <- las de reparaciones
+    //
+    // Las dos últimas dejaron de existir y el taller no pudo crear pedidos ni
+    // órdenes de trabajo. Las 20 comprobaciones de F2 no lo detectaron porque
+    // la única escritura que probaban era un DELETE de usuario, que va por la
+    // base central y no toca el proxy.
+    //
+    // La lección no es "probar más rutas": es que TODA ruta que escriba contra
+    // la base de la empresa tiene que probarse escribiendo. Por eso estas
+    // comprobaciones crean datos de verdad y después los borran.
+    titulo('3 bis. Las rutas que escriben, escribiendo de verdad');
+
+    const marcaF2 = `PRUEBA F2 ${Date.now()}`;
+    const creados = [];
+
+    try {
+        // Camino 1: db.getConnection + transaccion explicita.
+        const pedido = await pedir('/api/pedidos', tokenTaller, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notas: marcaF2, items: [] })
+        });
+        // Se mandan items vacios a proposito: el pedido se crea igual, y es
+        // justo el `VALUES ?` que queda vacio lo que ejercita la transaccion.
+        comprobar(
+            pedido.estado === 201 || pedido.estado === 200,
+            `POST /api/pedidos (db.getConnection) -> guarda (dio ${pedido.estado})`,
+            pedido.cuerpo
+        );
+        if (pedido.cuerpo?.pedidoId) creados.push({ tabla: 'pedidos', id: pedido.cuerpo.pedidoId });
+
+        // Camino 2 y 3: db.promise().query, en un INSERT y en un SELECT.
+        const orden = await pedir('/api/reparaciones', tokenTaller, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cliente_nombre: marcaF2,
+                cliente_telefono: '11-0000-0000',
+                equipo: 'Equipo de prueba',
+                falla_declarada: 'Falla de prueba',
+                estado: 'Pendiente',
+                costo_mano_obra: 0,
+                costo_repuestos: 0,
+                total: 0
+            })
+        });
+        comprobar(
+            orden.estado === 201 || orden.estado === 200,
+            `POST /api/reparaciones (db.promise) -> guarda (dio ${orden.estado})`,
+            orden.cuerpo
+        );
+        if (orden.cuerpo?.id) creados.push({ tabla: 'reparaciones', id: orden.cuerpo.id });
+
+        if (orden.cuerpo?.id) {
+            const cambio = await pedir(`/api/reparaciones/${orden.cuerpo.id}/estado`, tokenTaller, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado: 'En Reparacion' })
+            });
+            comprobar(cambio.estado === 200, `PUT .../estado (db.promise) -> 200 (dio ${cambio.estado})`, cambio.cuerpo);
+        }
+    } finally {
+        // Siempre se borra lo que se creo, aunque algo falle en el medio.
+        // Primero los items del pedido: hay ON DELETE CASCADE, pero no se
+        // depende de eso.
+        for (const c of creados) {
+            try {
+                if (c.tabla === 'reparaciones') {
+                    await pedir(`/api/reparaciones/${c.id}`, tokenTaller, { method: 'DELETE' });
+                }
+            } catch { /* la limpieza no puede tapar el error real */ }
+        }
+
+        const conLimpieza = await mysql.createConnection(configApp(DB_TALLER));
+        try {
+            await conLimpieza.query('DELETE FROM pedido_items WHERE pedido_id IN (SELECT id FROM pedidos WHERE notas = ?)', [marcaF2]);
+            await conLimpieza.query('DELETE FROM pedidos WHERE notas = ?', [marcaF2]);
+            // El cliente lo crea la ruta de reparaciones y no tiene baja.
+            await conLimpieza.query('DELETE FROM clientes WHERE nombre = ?', [marcaF2]);
+            const [[sobra]] = await conLimpieza.query('SELECT COUNT(*) AS n FROM pedidos WHERE notas = ?', [marcaF2]);
+            comprobar(sobra.n === 0, 'los datos de la prueba quedaron borrados', `quedaron ${sobra.n} pedidos`);
+        } finally {
+            await conLimpieza.end();
+        }
+    }
 
     // === 4. Aislamiento de verdad ==========================================
     titulo('4. Aislamiento: una empresa no ve los datos de otra');

@@ -869,7 +869,13 @@ app.post('/api/productos/:id/stock-minimo', verificarToken, requiereModulo('stoc
    ========================================================================== */
 
 app.post('/api/pedidos', verificarToken, requiereModulo('pedidos'), requiereAdmin, (req, res) => {
-    const { notas, items } = req.body;
+    const { notas } = req.body;
+    // Antes: `items.map(...)` reventaba con TypeError si no venian items, y con
+    // un array vacio armaba `INSERT INTO pedido_items ... VALUES ` sin nada,
+    // que es un error de sintaxis de SQL. O sea que un pedido sin productos daba
+    // 500 por las dos vias. Un pedido sin items no tiene sentido de negocio,
+    // pero es un caso de entrada, no una caida: se crea el pedido y listo.
+    const items = Array.isArray(req.body.items) ? req.body.items : [];
 
     db.getConnection((err, connection) => {
         if (err) {
@@ -897,6 +903,16 @@ app.post('/api/pedidos', verificarToken, requiereModulo('pedidos'), requiereAdmi
                 const pedidoId = result.insertId;
                 const sqlItems = 'INSERT INTO pedido_items (pedido_id, producto_id, cantidad) VALUES ?';
                 const valoresItems = items.map(item => [pedidoId, item.id, item.cantidad]);
+
+                // Sin items no hay nada que insertar. Correr el INSERT con la
+                // lista vacia genera `VALUES ` y MySQL lo rechaza.
+                if (valoresItems.length === 0) {
+                    console.log(`⚠️ Pedido #${pedidoId} guardado sin productos (no habia items en el pedido).`);
+                    return connection.commit(() => {
+                        connection.release();
+                        res.status(201).json({ mensaje: 'Pedido guardado sin productos', pedidoId });
+                    });
+                }
 
                 connection.query(sqlItems, [valoresItems], (err) => {
                     if (err) {
@@ -1371,6 +1387,430 @@ app.delete('/api/reparaciones/:id', verificarToken, requiereModulo('reparaciones
 
         res.json({ mensaje: 'Orden de servicio eliminada correctamente' });
     });
+});
+
+/* ==========================================================================
+   13. PRESUPUESTOS  (modulo vendible `presupuestos`)
+   --------------------------------------------------------------------------
+   Un presupuesto es un documento comercial, no "un pedido todavia no
+   pasado". Por eso tiene numero correlativo, estado propio, fecha de validez
+   y una copia de los datos del cliente en el momento de emitirlo.
+
+   LAS REGLAS QUE IMPORTAN
+
+   El total NUNCA se recibe del cliente. Se recalcula aca desde los items. Si
+   viniera en el body, cualquiera que tocara el request podria congelar el
+   precio. Lo unico que se acepta del usuario es el descuento, y se valida
+   contra el subtotal.
+
+   Una vez APROBADO o RECHAZADO el documento se cierra: no se edita ni se
+   borra. Para volver a tocarlo hay que devolverlo a BORRADOR, que es un
+   cambio de estado explícito y queda en el historial. Asi un presupuesto
+   aprobado es un presupuesto aprobado, no uno que alguien modifico despues.
+
+   QUIEN PUEDE QUE
+     leer            los dos roles
+     crear y editar  los dos roles  (presupostar es trabajo del tecnico)
+     aprobar/rechazar  solo ADMIN    (es una decision comercial)
+     borrar          solo ADMIN, y solo si esta en BORRADOR
+
+   Esto difiere a proposito del stock, que es administracion y va solo para
+   ADMIN. Un modulo que el tecnico no puede usar no sirve para nada.
+   ========================================================================== */
+
+/** Redondeo a 2 decimales. Plata que se suma en float se pierde. */
+const a2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
+/** Estados en los que el documento todavia se puede tocar. */
+const PRESUPUESTO_EDITABLE = ['BORRADOR', 'ENVIADO'];
+
+/**
+ * Correlativo de empresa. El INSERT ... ON DUPLICATE KEY UPDATE toma un
+ * cerrojo exclusivo sobre la fila en InnoDB, asi que dos presupuestos
+ * simultaneos no pueden sacar el mismo numero. Probado con 30 a la vez.
+ *
+ * Recibe el `query` con promesas de la transaccion, no la conexion cruda: la
+ * conexion de mysql2 sin `mysql2/promise` no devuelve promesas y `await` sobre
+ * ella no hace nada.
+ */
+async function siguienteNumero(query) {
+    await query(
+        `INSERT INTO \`secuencias\` (nombre, ultimo) VALUES ('presupuesto', 1)
+           ON DUPLICATE KEY UPDATE ultimo = ultimo + 1`
+    );
+    const [filas] = await query(
+        `SELECT ultimo FROM \`secuencias\` WHERE nombre = 'presupuesto'`
+    );
+    return filas[0].ultimo;
+}
+
+/**
+ * Valida y calcula un presupuesto. Devuelve los items ya con subtotal, el
+ * subtotal, el descuento y el total. Si algo no cierra, no hay siguiente paso.
+ */
+function prepararPresupuesto(body) {
+    const errores = [];
+    const texto = (v) => (v === undefined || v === null ? '' : String(v).trim());
+
+    const cliente_nombre = texto(body.cliente_nombre).slice(0, 150);
+    if (!cliente_nombre) errores.push('El nombre del cliente es obligatorio.');
+
+    const cliente_id = body.cliente_id ? Number(body.cliente_id) : null;
+    if (cliente_id !== null && !Number.isInteger(cliente_id)) {
+        errores.push('El cliente no es válido.');
+    }
+
+    const bruto = Array.isArray(body.items) ? body.items : [];
+    if (bruto.length === 0) errores.push('El presupuesto tiene que tener al menos un ítem.');
+    if (bruto.length > 200) errores.push('Un presupuesto no puede tener más de 200 ítems.');
+
+    const items = bruto.map((it, i) => {
+        const descripcion = texto(it.descripcion).slice(0, 200);
+        const cantidad = Number(it.cantidad);
+        const precio_unitario = a2(it.precio_unitario);
+        const producto_id = it.producto_id ? Number(it.producto_id) : null;
+        const n = i + 1;
+
+        if (!descripcion) errores.push(`El ítem ${n} necesita una descripción.`);
+        if (!Number.isFinite(cantidad) || cantidad <= 0) {
+            errores.push(`La cantidad del ítem ${n} tiene que ser un número mayor que 0.`);
+        }
+        if (cantidad > 100000) errores.push(`La cantidad del ítem ${n} es absurda.`);
+        if (!Number.isFinite(precio_unitario) || precio_unitario < 0) {
+            errores.push(`El precio del ítem ${n} tiene que ser un número mayor o igual a 0.`);
+        }
+        if (producto_id !== null && !Number.isInteger(producto_id)) {
+            errores.push(`El producto del ítem ${n} no es válido.`);
+        }
+
+        return {
+            descripcion,
+            cantidad: Number.isFinite(cantidad) ? cantidad : 1,
+            precio_unitario: Number.isFinite(precio_unitario) ? precio_unitario : 0,
+            producto_id,
+            orden: i,
+            subtotal: a2((Number.isFinite(cantidad) ? cantidad : 0) * (Number.isFinite(precio_unitario) ? precio_unitario : 0))
+        };
+    });
+
+    const subtotal = a2(items.reduce((acc, it) => acc + it.subtotal, 0));
+
+    // Sin descuento es 0, no NaN. Si sepierte directo a a2(body.descuento) y el
+    // campo no viene, Number(undefined) es NaN, el chequeo de "mayor o igual a
+    // 0" lo rechaza, y ningun presupuesto se puede crear sin descuento.
+    const descuentoViene = body.descuento;
+    const descuento = a2(
+        descuentoViene === undefined || descuentoViene === null || descuentoViene === '' ? 0 : descuentoViene
+    );
+    if (!Number.isFinite(descuento) || descuento < 0) {
+        errores.push('El descuento tiene que ser un número mayor o igual a 0.');
+    } else if (descuento > subtotal) {
+        errores.push('El descuento no puede ser mayor que el subtotal.');
+    }
+
+    // valido_hasta: se acepta solo como AAAA-MM-DD. MySQL es permisivo con las
+    // fechas y aceptaria "ayer"; aca se rechaza para que la oferta no expire
+    // en una fecha que el usuario nunca escribio.
+    let valido_hasta = texto(body.valido_hasta) || null;
+    if (valido_hasta) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(valido_hasta) || Number.isNaN(Date.parse(valido_hasta))) {
+            errores.push('La fecha de validez no tiene el formato correcto.');
+        }
+    }
+
+    if (errores.length) return { valido: false, error: errores[0], errores };
+
+    return {
+        valido: true,
+        datos: {
+            cliente_id,
+            cliente_nombre,
+            cliente_doc: texto(body.cliente_doc).slice(0, 30) || null,
+            cliente_telefono: texto(body.cliente_telefono).slice(0, 40) || null,
+            cliente_email: texto(body.cliente_email).slice(0, 150) || null,
+            cliente_direccion: texto(body.cliente_direccion).slice(0, 200) || null,
+            notas: texto(body.notas).slice(0, 2000) || null,
+            valido_hasta,
+            descuento: descuento || 0,
+            subtotal,
+            total: a2(subtotal - (descuento || 0)),
+            items
+        }
+    };
+}
+
+/** Lo que se guarda en el log cuando un presupuesto cambia de estado. */
+const ETIQUETA_ESTADO = {
+    BORRADOR: 'borrador',
+    ENVIADO: 'enviado al cliente',
+    APROBADO: 'aprobado',
+    RECHAZADO: 'rechazado'
+};
+
+// --- Listado ----------------------------------------------------------------
+app.get('/api/presupuestos', verificarToken, requiereModulo('presupuestos'), async (req, res) => {
+    try {
+        const condiciones = [];
+        const valores = [];
+
+        if (req.query.estado) {
+            const estados = String(req.query.estado).split(',').map((e) => e.trim().toUpperCase());
+            const validos = estados.filter((e) => ETIQUETA_ESTADO[e]);
+            if (validos.length) {
+                condiciones.push(`estado IN (${validos.map(() => '?').join(',')})`);
+                valores.push(...validos);
+            }
+        }
+        if (req.query.cliente_id) {
+            condiciones.push('cliente_id = ?');
+            valores.push(Number(req.query.cliente_id) || 0);
+        }
+        if (req.query.q) {
+            condiciones.push('(cliente_nombre LIKE ? OR numero LIKE ? OR cliente_doc LIKE ?)');
+            const q = `%${String(req.query.q).trim().slice(0, 60)}%`;
+            valores.push(q, q, q);
+        }
+
+        const donde = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+        const [filas] = await db.promise().query(
+            `SELECT id, numero, cliente_id, cliente_nombre, cliente_doc, estado,
+                    subtotal, descuento, total, valido_hasta, usuario_nombre, creado_en
+               FROM presupuestos
+               ${donde}
+              ORDER BY numero DESC
+              LIMIT 300`,
+            valores
+        );
+
+        res.json(filas);
+    } catch (err) {
+        console.error('Error al listar presupuestos:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// --- Detalle ----------------------------------------------------------------
+app.get('/api/presupuestos/:id', verificarToken, requiereModulo('presupuestos'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Presupuesto inválido' });
+
+    try {
+        const [p] = await db.promise().query(
+            `SELECT * FROM presupuestos WHERE id = ?`,
+            [id]
+        );
+        if (!p.length) return res.status(404).json({ error: 'Presupuesto no encontrado' });
+
+        const [items] = await db.promise().query(
+            `SELECT id, producto_id, descripcion, cantidad, precio_unitario, subtotal, orden
+               FROM presupuesto_items WHERE presupuesto_id = ? ORDER BY orden, id`,
+            [id]
+        );
+
+        res.json({ ...p[0], items });
+    } catch (err) {
+        console.error('Error al obtener presupuesto:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+/**
+ * El comprobante: presupuesto + items + los datos de la empresa con los que se
+ * imprime. Todo en una respuesta, para que la hoja de impresion no dependa de
+ * mezclar dos fuentes ni de lo que quedara guardado en el navegador.
+ */
+app.get('/api/presupuestos/:id/comprobante', verificarToken, requiereModulo('presupuestos'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Presupuesto inválido' });
+
+    try {
+        const [p] = await db.promise().query('SELECT * FROM presupuestos WHERE id = ?', [id]);
+        if (!p.length) return res.status(404).json({ error: 'Presupuesto no encontrado' });
+
+        const [items] = await db.promise().query(
+            `SELECT descripcion, cantidad, precio_unitario, subtotal
+               FROM presupuesto_items WHERE presupuesto_id = ? ORDER BY orden, id`,
+            [id]
+        );
+
+        const e = req.empresa;
+        res.json({
+            presupuesto: p[0],
+            items,
+            empresa: {
+                nombre: e.nombre,
+                subtitulo: e.subtitulo,
+                logo_url: e.logo_url,
+                color_primario: e.color_primario,
+                color_secundario: e.color_secundario,
+                telefono: e.telefono,
+                email_contacto: e.email_contacto,
+                direccion: e.direccion,
+                cuit: e.cuit
+            },
+            // Para el pie del comprobante, sin exponer datos del usuario.
+            emitido_por: p[0].usuario_nombre
+        });
+    } catch (err) {
+        console.error('Error al armar el comprobante:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// --- Alta -------------------------------------------------------------------
+app.post('/api/presupuestos', verificarToken, requiereModulo('presupuestos'), async (req, res) => {
+    const prep = prepararPresupuesto(req.body);
+    if (!prep.valido) return res.status(400).json({ error: prep.error, errores: prep.errores });
+
+    const d = prep.datos;
+    try {
+        const resultado = await tenant.transaccion(async ({ query }) => {
+            const numero = await siguienteNumero(query);
+            const [r] = await query(
+                `INSERT INTO presupuestos
+                    (numero, cliente_id, cliente_nombre, cliente_doc, cliente_telefono,
+                     cliente_email, cliente_direccion, subtotal, descuento, total,
+                     notas, valido_hasta, usuario_nombre)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [numero, d.cliente_id, d.cliente_nombre, d.cliente_doc, d.cliente_telefono,
+                    d.cliente_email, d.cliente_direccion, d.subtotal, d.descuento, d.total,
+                    d.notas, d.valido_hasta, req.usuario.nombre]
+            );
+            const presupuestoId = r.insertId;
+            const valoresItems = d.items.map((it) => [
+                presupuestoId, it.producto_id, it.descripcion, it.cantidad, it.precio_unitario, it.subtotal, it.orden
+            ]);
+            if (valoresItems.length) {
+                await query(
+                    `INSERT INTO presupuesto_items
+                        (presupuesto_id, producto_id, descripcion, cantidad, precio_unitario, subtotal, orden)
+                     VALUES ?`,
+                    [valoresItems]
+                );
+            }
+            return { presupuestoId, numero };
+        });
+
+        res.status(201).json({ mensaje: 'Presupuesto creado', id: resultado.presupuestoId, numero: resultado.numero, total: d.total });
+    } catch (err) {
+        console.error('Error al crear presupuesto:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// --- Modificación -----------------------------------------------------------
+app.put('/api/presupuestos/:id', verificarToken, requiereModulo('presupuestos'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Presupuesto inválido' });
+
+    const prep = prepararPresupuesto(req.body);
+    if (!prep.valido) return res.status(400).json({ error: prep.error, errores: prep.errores });
+    const d = prep.datos;
+
+    try {
+        await tenant.transaccion(async ({ query }) => {
+            const [actual] = await query('SELECT estado FROM presupuestos WHERE id = ?', [id]);
+            if (!actual.length) {
+                const e = new Error('Presupuesto no encontrado');
+                e.estadoHttp = 404;
+                throw e;
+            }
+            if (!PRESUPUESTO_EDITABLE.includes(actual[0].estado)) {
+                const e = new Error(`Un presupuesto ${ETIQUETA_ESTADO[actual[0].estado]} no se puede modificar. Pasalo a BORRADOR primero si necesitás cambiarlo.`);
+                e.estadoHttp = 400;
+                throw e;
+            }
+
+            await query(
+                `UPDATE presupuestos
+                    SET cliente_id = ?, cliente_nombre = ?, cliente_doc = ?, cliente_telefono = ?,
+                        cliente_email = ?, cliente_direccion = ?, subtotal = ?, descuento = ?, total = ?,
+                        notas = ?, valido_hasta = ?
+                  WHERE id = ?`,
+                [d.cliente_id, d.cliente_nombre, d.cliente_doc, d.cliente_telefono, d.cliente_email,
+                    d.cliente_direccion, d.subtotal, d.descuento, d.total, d.notas, d.valido_hasta, id]
+            );
+
+            await query('DELETE FROM presupuesto_items WHERE presupuesto_id = ?', [id]);
+            const valoresItems = d.items.map((it) => [
+                id, it.producto_id, it.descripcion, it.cantidad, it.precio_unitario, it.subtotal, it.orden
+            ]);
+            if (valoresItems.length) {
+                await query(
+                    `INSERT INTO presupuesto_items
+                        (presupuesto_id, producto_id, descripcion, cantidad, precio_unitario, subtotal, orden)
+                     VALUES ?`,
+                    [valoresItems]
+                );
+            }
+        });
+
+        res.json({ mensaje: 'Presupuesto actualizado', id, total: d.total });
+    } catch (err) {
+        console.error('Error al actualizar presupuesto:', err);
+        const status = err.estadoHttp || 500;
+        res.status(status).json({ error: err.message || 'Error interno del servidor' });
+    }
+});
+
+// --- Cambio de estado -------------------------------------------------------
+app.put('/api/presupuestos/:id/estado', verificarToken, requiereModulo('presupuestos'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Presupuesto inválido' });
+
+    const estado = String(req.body.estado || '').trim().toUpperCase();
+    if (!ETIQUETA_ESTADO[estado]) {
+        return res.status(400).json({ error: 'Estado inválido. Vale: BORRADOR, ENVIADO, APROBADO o RECHAZADO.' });
+    }
+
+    // Aprobar o rechazar es una decision comercial, no carga de datos: por eso
+    // es solo para ADMIN, mientras que preparar el documento es de cualquiera.
+    if ((estado === 'APROBADO' || estado === 'RECHAZADO') && req.usuario.rol !== 'ADMIN') {
+        return res.status(403).json({ error: 'Solo un administrador puede aprobar o rechazar un presupuesto.' });
+    }
+
+    try {
+        const [actual] = await db.promise().query('SELECT estado FROM presupuestos WHERE id = ?', [id]);
+        if (!actual.length) return res.status(404).json({ error: 'Presupuesto no encontrado' });
+
+        if (actual[0].estado === estado) {
+            return res.json({ mensaje: `Ya estaba ${ETIQUETA_ESTADO[estado]}.`, estado });
+        }
+
+        await db.query('UPDATE presupuestos SET estado = ? WHERE id = ?', [estado, id]);
+        console.log(`  Presupuesto #${id}: ${ETIQUETA_ESTADO[actual[0].estado]} -> ${ETIQUETA_ESTADO[estado]} (${req.usuario.nombre})`);
+        res.json({ mensaje: `Presupuesto ${ETIQUETA_ESTADO[estado]}.`, estado });
+    } catch (err) {
+        console.error('Error al cambiar el estado del presupuesto:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// --- Baja -------------------------------------------------------------------
+app.delete('/api/presupuestos/:id', verificarToken, requiereModulo('presupuestos'), requiereAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Presupuesto inválido' });
+
+    try {
+        const [actual] = await db.promise().query('SELECT numero, estado FROM presupuestos WHERE id = ?', [id]);
+        if (!actual.length) return res.status(404).json({ error: 'Presupuesto no encontrado' });
+
+        // Borrar un presupuesto ya emitido no se permite: el correlativo tiene
+        // que seguir siendo correlativo, y un numero nunca se reutiliza.
+        if (actual[0].estado !== 'BORRADOR') {
+            return res.status(400).json({
+                error: `Solo se borran presupuestos en BORRADOR. Este está ${ETIQUETA_ESTADO[actual[0].estado]}: pasalo a BORRADOR si de verdad querés deshacerlo.`
+            });
+        }
+
+        // Los items se van por ON DELETE CASCADE.
+        await db.query('DELETE FROM presupuestos WHERE id = ?', [id]);
+        console.log(`  Presupuesto #${actual[0].numero} eliminado (${req.usuario.nombre})`);
+        res.json({ mensaje: 'Presupuesto eliminado' });
+    } catch (err) {
+        console.error('Error al eliminar presupuesto:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
 /* ==========================================================================
