@@ -2,10 +2,26 @@
  * Comprobacion rapida de los tres arreglos de esta tanda.
  * No es el verificador completo (ese es f5b-verificar.js): esto solo mira que
  * las rutas nuevas respondan y rechacen lo que tienen que rechazar.
+ *
+ * La clave del SuperAdmin NO esta escrita aca a proposito. Va en
+ * CLAVE_SUPERADMIN, que se lee de una variable de entorno o de un archivo
+ * `.env` local (gitignored). Razon: esta herramienta entra de verdad al panel,
+ * asi que la clave queda expuesta en el historial de git si esta en el fuente.
+ * Ademas la clave se cambia (la rota el usuario o el propio smoke al probar el
+ * cambio de clave), y si queda fija en el archivo el smoke se rompe solo.
  */
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 const BASE = 'http://127.0.0.1:3000';
-const EMAIL = 'aguseslava11@gmail.com';
-const CLAVE = 'Bonoyhomero23';
+const EMAIL = process.env.SMOKE_EMAIL_SUPERADMIN || 'aguseslava11@gmail.com';
+const CLAVE = process.env.CLAVE_SUPERADMIN;
+
+if (!CLAVE) {
+  console.error('Falta la variable de entorno CLAVE_SUPERADMIN.');
+  console.error('Ejemplo:  $env:CLAVE_SUPERADMIN = "tu-clave";  node tools\\smoke-admin.js');
+  process.exit(2);
+}
 
 let ok = 0, fallo = 0;
 const p = (t) => console.log(`\n--- ${t} ---`);

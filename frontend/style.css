@@ -408,6 +408,7 @@ label {
 input[type="text"],
 input[type="number"],
 input[type="email"],
+input[type="password"],
 select,
 textarea {
     background-color: var(--bg-body);
@@ -419,15 +420,84 @@ textarea {
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+/*
+ * POR QUE `password` ESTA EN ESA LISTA
+ * ------------------------------------
+ * Faltaba, y por eso los campos de contraseña salian con fondo blanco y texto
+ * negro en el panel de administración y en el modal de cambio de clave: se
+ * caían al estilo por defecto del navegador. El síntoma era desconcertante
+ * porque al tocar el botón del ojo el `type` pasa a `text`, entra esta regla, y
+ * ahí el campo se veía bien. Parecía un problema del botón del ojo y era que el
+ * campo nunca estuvo en la lista.
+ *
+ * La página de login no sufría porque `.login-form input` (más abajo) sí
+ * cubre todos los tipos, incluido `password`.
+ */
 input[type="text"]:focus,
 input[type="number"]:focus,
 input[type="email"]:focus,
+input[type="password"]:focus,
 select:focus,
 textarea:focus {
     border-color: var(--si-blue-vibrant);
     outline: none;
     box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.15);   /* fallback sin color-mix */
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--si-blue-vibrant) 15%, transparent);
+}
+
+/* ==========================================================================
+   EL AUTO-RELLENO DEL NAVEGADOR PINTA SU PROPIO FONDO
+   --------------------------------------------------------------------------
+   Cuando el navegador completa solo un campo (el email guardado, el que se
+   precarga con Tab), le aplica su propio color de fondo y su propio color de
+   texto por encima de los de la pagina. No hay selector de la pagina que
+   gane: el navegador lo aplica en una capa aparte. Por eso `background-color`
+   solo no alcanza.
+
+ * El arreglo es el clasico: se le pega un `box-shadow` interior de 1000px del
+ * color de fondo de la pagina, que tapa lo que el navegador puso, y se fija el
+ * color del texto con `-webkit-text-fill-color` porque a ese atributo todavia
+ * le gana el navegador. Hay que repetir las cuatro variantes (normal, hover,
+ * focus y active): si falta una, el campo se pone blanco justo en el momento
+ * en que se pasa el mouse o se hace foco, que es cuando mas se nota.
+ *
+ * `background-color` va con `!important` ademas del `box-shadow`. Es una
+ * segunda linea de defensa, no la principal: en algunas versiones de Chrome el
+ * fondo del autocompletado se deja ganar con `background-color` y en otras no,
+ * y con `!important` funciona en las dos. No molesta porque el valor es el
+ * mismo que ya usa el campo.
+ * ========================================================================== */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    background-color: var(--bg-body) !important;
+    -webkit-text-fill-color: var(--text-main) !important;
+    caret-color: var(--text-main) !important;
+    -webkit-box-shadow: 0 0 0 1000px var(--bg-body) inset;
+    box-shadow: 0 0 0 1000px var(--bg-body) inset;
+    /* El navegador reaplica su fondo despues de que la pagina carga, y lo
+     * reaplica cada vez que el campo gana foco. Una transicion de 6000s hace
+     * que ese cambio de color tarde medio hora en verse, que para una sesion
+     * humana es nunca. Sin esto el campo se pone amarillo al instante. */
+    transition: background-color 6000s ease-in-out 0s;
+}
+
+/* El `box-shadow` de arriba pisa el aro de foco de la regla general: los dos
+ * selectores tienen la misma especificidad (elemento mas pseudo-clase) y este
+ * va despues. Sin este bloque, un campo con el email autocompletado se quedaba
+ * sin aro al hacer foco, que se notaba como "este campo no anda". El aro va
+ * primero y la sombra interior despues, al reves de lo habitual, porque una
+ * sombra "inset" de 1000px pinta por dentro del recuadro y deja intacto el
+ * borde de afuera. */
+input:-webkit-autofill:focus {
+    border-color: var(--si-blue-vibrant);
+    /* Dos declaraciones y no una: la primera es para los navegadores que no
+     *conocen `color-mix`, la segunda pisa a la primera donde si se conoce.
+     * El aro va antes que la sombra interior a proposito: una sombra inset
+     * pinta por dentro del recuadro y deja libre el borde de afuera. */
+    box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.15), 0 0 0 1000px var(--bg-body) inset;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--si-blue-vibrant) 15%, transparent), 0 0 0 1000px var(--bg-body) inset;
 }
 
 /* ==========================================================================
@@ -614,6 +684,37 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     border-color: var(--si-blue-dark);
 }
 .btn-secundario:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/*
+ * Boton de CANCELAR: rojo, y solo para abandonar una operacion.
+ *
+ * Antes cada pantalla resolvia el "Cancelar" por su cuenta y salian tres
+ * versiones distintas: azul solido en el alta de empresa, azul de contorno en
+ * Presupuestos y en el modal de clave. Un boton que descarta lo que se escribio
+ * se distingue mejor en rojo: es el unico caso donde el color de la accion
+ * avisa que algo se pierde.
+ *
+ * No reemplaza a `.btn-eliminar` (rojo solido): ese borra un dato guardado y
+ * este abandona un formulario a medio llenar. Por eso este va en contorno y
+ * aquele en solido.
+ *
+ * `.btn-secundario` se deja como estaba a proposito, porque tambien lo usan
+ * botones que NO abandonan nada: "Imprimir", "+ Agregar item", "Marcar
+ * enviado", "Volver a borrador". Esos en rojo serian un falso alarma.
+ */
+.btn-cancelar {
+    background-color: transparent;
+    color: var(--color-danger);
+    border: 1.5px solid var(--color-danger);
+}
+.btn-cancelar:hover {
+    background-color: color-mix(in srgb, var(--color-danger) 16%, transparent);
+    border-color: color-mix(in srgb, var(--color-danger) 80%, black);
+}
+.btn-cancelar:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }

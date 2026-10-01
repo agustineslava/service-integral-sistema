@@ -190,9 +190,8 @@ async function cambiar(slug, campo, valor) {
     const limpio = (valor === '' || valor === 'null' || valor === '-') ? null : String(valor).trim();
 
     // El formato se mira ANTES que el largo. Si alguien escribe "azul lindo"
-    // en un campo de color, telling them it is 10 characters long in a 7-wide
-    // column is technically true and completely useless: lo que quieren saber
-    // es que eso no es un color.
+    // en un campo de color, decirle que son 10 caracteres en un campo de 7 es
+    // cierto y no sirve de nada: lo que quieren saber es que eso no es un color.
     if (campo.startsWith('color')) {
         const problema = problemaEnColor(campo, limpio);
         if (problema) return { error: problema };

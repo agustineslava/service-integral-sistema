@@ -7,6 +7,46 @@ let reparacionesLocales = [];
 let repuestosAsignadosNuevo = [];
 let repuestosAsignadosEdit = [];
 
+/* ==========================================================================
+   PAGINACION DE LA LISTA DE ORDENES
+   --------------------------------------------------------------------------
+   Antes el backend mandaba la tabla entera y el navegador filtraba y ordenaba
+   el array. Ahora son 20 filas por pagina y el filtro, el orden y el corte los
+   hace el servidor. Las tres cosas que hay que tener presentes:
+
+   1. `paginaActual` sobrevive a las recargas. `cargarReparaciones()` se llama
+      despues de crear, editar, cambiar estado y borrar; si cada una de esas
+      llamadas volviera a la pagina 1, guardar una orden de la pagina 3 te
+      tiraba de vuelta al principio de la lista.
+
+   2. `reparacionesLocales` ahora es SOLO la pagina visible, no todo. Las
+      funciones que lo buscan por id (`abrirModalEditar`, `enviarWhatsAppTecnico`)
+      funcionan igual porque se invocan desde una fila que esta dibujada, o sea
+      que esta en la pagina. Si alguna vez se llaman con un id de otra pagina,
+      hay que ir a buscarlo a la API.
+
+   3. El buscador y el filtro de estado ya no leen el array: van al servidor con
+      un debounce, y por eso cada cambio vuelve a la pagina 1 (buscar en la
+      pagina 3 de un listado que acotas de filtro no encuentra nada util).
+   ========================================================================== */
+const REPARACIONES_POR_PAGINA = 20;
+let paginaActual = 1;
+let totalPaginas = 1;
+let totalReparaciones = 0;
+let esperandoBusqueda = null;
+
+/**
+ * Ajusta una pagina pedida al rango que existe de verdad.
+ *
+ * Recibe la pagina PEDIDA, no `paginaActual`. Sicomparara la pedida con
+ * `paginaActual` (que todavia es la anterior), el recorte siempre devolveria la
+ * anterior y `cargarReparaciones(2)` no avanzaria nunca: se comparaba 2 contra 1,
+ * se rechazaba, y se volvia a pedir la 1.
+ */
+function paginaValida(pedida) {
+    return Math.min(Math.max(1, pedida), Math.max(1, totalPaginas));
+}
+
 /**
  * Escapa caracteres especiales de HTML antes de insertarlos con innerHTML.
  */
@@ -93,19 +133,80 @@ function configurarBusquedaRepuestos() {
 }
 
 /**
- * Consulta la API y obtiene todas las reparaciones registradas
+ * Consulta la API y obtiene UNA pagina de reparaciones.
+ *
+ * El filtro de estado y el termino de busqueda viajan en la URL: el backend
+ * los aplica sobre el total y devuelve el corte ya hecho. `pagina` se revalida
+ * contra `totalPaginas` porque, si no, estar en la pagina 4 de un conjunto que
+ * quedo en 2 paginas devolveria una tabla vacia sin avisar.
  */
-async function cargarReparaciones() {
+async function cargarReparaciones(pagina = paginaActual) {
     const tbody = document.getElementById('tabla-reparaciones-cuerpo');
+    const params = new URLSearchParams({
+        page: String(pagina),
+        limit: String(REPARACIONES_POR_PAGINA)
+    });
+
+    const estado = document.getElementById('select-filtro-estado-rep');
+    if (estado && estado.value && estado.value !== 'TODOS') {
+        params.set('estado', estado.value);
+    }
+
+    const texto = document.getElementById('input-buscar-reparaciones');
+    const termino = texto ? texto.value.trim() : '';
+    if (termino !== '') params.set('buscar', termino);
+
     try {
-        const res = await apiFetch('/api/reparaciones');
-        reparacionesLocales = await res.json();
-        filtrarYRenderizarReparaciones();
+        const res = await apiFetch(`/api/reparaciones?${params.toString()}`);
+        const datos = await res.json();
+
+        if (!res.ok) {
+            throw new Error(datos.error || 'No se pudo cargar la lista.');
+        }
+
+        reparacionesLocales = datos.reparaciones || [];
+        totalPaginas = datos.totalPaginas || 1;
+        totalReparaciones = datos.total || 0;
+
+        // Si se borro la ultima fila de la ultima pagina, el servidor devuelve
+        // esa pagina vacia con el total ya achicado. Se vuelve a pedir la que
+        // corresponde en vez de dejar una tabla en blanco. `paginaValida` siempre
+        // devuelve un numero entre 1 y `totalPaginas`, asi que el rebote termina.
+        const valida = paginaValida(pagina);
+        if (pagina !== valida) {
+            return cargarReparaciones(valida);
+        }
+        paginaActual = pagina;
+
+        renderizarTablaReparaciones(reparacionesLocales);
+        actualizarControlesPaginacionReparaciones();
     } catch (e) {
+        console.error('Error al cargar las ordenes:', e);
+        reparacionesLocales = [];
         if (tbody) {
             tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:red;">Fallo al conectar con el servidor.</td></tr>';
         }
+        actualizarControlesPaginacionReparaciones();
     }
+}
+
+/**
+ * Muestra "Página 2 de 5 (112 órdenes)" y apaga la flecha que no lleva a
+ * ningun lado. Reutiliza los ids del paginador del stock para que las dos
+ * paginas se vean y se comporten igual.
+ */
+function actualizarControlesPaginacionReparaciones() {
+    const info = document.getElementById('info-paginacion-reparaciones');
+    const anterior = document.getElementById('btn-pagina-anterior-reparaciones');
+    const siguiente = document.getElementById('btn-pagina-siguiente-reparaciones');
+
+    if (info) {
+        info.textContent = totalReparaciones === 0
+            ? 'Sin órdenes para mostrar'
+            : `Página ${paginaActual} de ${totalPaginas} (${totalReparaciones} orden${totalReparaciones === 1 ? '' : 'es'} en total)`;
+    }
+    if (anterior) anterior.disabled = paginaActual <= 1;
+    if (siguiente) siguiente.disabled = paginaActual >= totalPaginas;
 }
 
 /**
@@ -212,78 +313,54 @@ function renderizarTablaReparaciones(lista) {
 }
 
 /**
- * Búsqueda combinada reactiva con orden de prioridad por antigüedad y estado
+ * Búsqueda combinada, ahora contra el servidor.
+ *
+ * El orden por antigüedad y estado NO se borró: se mudó al ORDER BY de
+ * `GET /api/reparaciones`, en `server.js`. Está escrito ahí clave por clave con
+ * el mismo criterio de este `sort`, y `tools/ver-orden-reparaciones.js` corre las
+ * dos versiones sobre el mismo conjunto y falla si devuelven distinta
+ * secuencia. Si se cambia uno de los dos lados, ese verificador es el que avisa.
+ *
+ * El debounce evita una consulta por tecla: 350 ms es lo que tardaba el filtro
+ * de antes en sermolesto, pero contra la base son 350 ms x cada tecla.
  */
 function filtrarYRenderizarReparaciones() {
-    const inputTexto = document.getElementById('input-buscar-reparaciones');
-    const selectEstado = document.getElementById('select-filtro-estado-rep');
-
-    const term = inputTexto ? inputTexto.value.toLowerCase().trim() : '';
-    const estadoFiltro = selectEstado ? selectEstado.value : 'TODOS';
-
-    const filtrados = reparacionesLocales.filter(r => {
-        const coincideEstado = (estadoFiltro === 'TODOS') || (r.estado === estadoFiltro);
-        const coincideTexto = term === '' || (
-            (r.cliente_nombre || '').toLowerCase().includes(term) ||
-            (r.cliente_telefono || '').toLowerCase().includes(term) ||
-            (r.direccion || '').toLowerCase().includes(term) ||
-            (r.equipo || '').toLowerCase().includes(term) ||
-            (r.falla_declarada || '').toLowerCase().includes(term) ||
-            (r.notas_servicio || '').toLowerCase().includes(term) ||
-            (r.diagnostico_tecnico || '').toLowerCase().includes(term) ||
-            (r.repuestos_usados || '').toLowerCase().includes(term) ||
-            String(r.id).includes(term)
-        );
-        return coincideEstado && coincideTexto;
-    });
-
-    const ahora = new Date().getTime();
-    const catorceDiasMs = 14 * 24 * 60 * 60 * 1000; // 14 días en milisegundos
-
-    filtrados.sort((a, b) => {
-        const aEsCerrado = (a.estado === 'Entregado' || a.estado === 'Cancelado');
-        const bEsCerrado = (b.estado === 'Entregado' || b.estado === 'Cancelado');
-
-        // Los cerrados van siempre al final
-        if (!aEsCerrado && bEsCerrado) return -1;
-        if (aEsCerrado && !bEsCerrado) return 1;
-
-        // Si ambos están cerrados, ordenar por fecha más reciente
-        if (aEsCerrado && bEsCerrado) {
-            return new Date(b.fecha_inicio) - new Date(a.fecha_inicio);
-        }
-
-        // Si ambos están activos/pendientes:
-        const tiempoA = ahora - new Date(a.fecha_inicio).getTime();
-        const tiempoB = ahora - new Date(b.fecha_inicio).getTime();
-
-        const aTieneMasDe2Semanas = tiempoA >= catorceDiasMs;
-        const bTieneMasDe2Semanas = tiempoB >= catorceDiasMs;
-
-        // Prioridad 1: Activos con 2 semanas o más
-        if (aTieneMasDe2Semanas && !bTieneMasDe2Semanas) return -1;
-        if (!aTieneMasDe2Semanas && bTieneMasDe2Semanas) return 1;
-
-        // Prioridad 2: Específicamente 'Pendiente' antes que otros estados activos
-        if (a.estado === 'Pendiente' && b.estado !== 'Pendiente') return -1;
-        if (a.estado !== 'Pendiente' && b.estado === 'Pendiente') return 1;
-
-        // Si tienen la misma prioridad, el que lleva más tiempo esperando aparece primero
-        return new Date(a.fecha_inicio) - new Date(b.fecha_inicio);
-    });
-
-    renderizarTablaReparaciones(filtrados);
+    clearTimeout(esperandoBusqueda);
+    esperandoBusqueda = setTimeout(() => {
+        // Buscar o cambiar el filtro reinicia la lista: el conjunto cambió, la
+        // página 3 ya no significa lo mismo.
+        paginaActual = 1;
+        cargarReparaciones(1);
+    }, 350);
 }
 
 const inputBuscarReparaciones = document.getElementById('input-buscar-reparaciones');
 if (inputBuscarReparaciones) {
     inputBuscarReparaciones.addEventListener('input', filtrarYRenderizarReparaciones);
+    // Si el usuario pega con el mouse o deja el foco, no espera los 350 ms.
+    inputBuscarReparaciones.addEventListener('change', () => {
+        clearTimeout(esperandoBusqueda);
+        paginaActual = 1;
+        cargarReparaciones(1);
+    });
 }
 
 const selectFiltroEstadoRep = document.getElementById('select-filtro-estado-rep');
 if (selectFiltroEstadoRep) {
-    selectFiltroEstadoRep.addEventListener('change', filtrarYRenderizarReparaciones);
+    selectFiltroEstadoRep.addEventListener('change', () => {
+        clearTimeout(esperandoBusqueda);
+        paginaActual = 1;
+        cargarReparaciones(1);
+    });
 }
+
+document.getElementById('btn-pagina-anterior-reparaciones')?.addEventListener('click', () => {
+    if (paginaActual > 1) cargarReparaciones(paginaActual - 1);
+});
+
+document.getElementById('btn-pagina-siguiente-reparaciones')?.addEventListener('click', () => {
+    if (paginaActual < totalPaginas) cargarReparaciones(paginaActual + 1);
+});
 
 /**
  * Añadir repuestos a la lista temporal

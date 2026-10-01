@@ -85,6 +85,157 @@ const API = `${window.location.origin}/api`;
 const $ = (id) => document.getElementById(id);
 
 // ==========================================================================
+// Subida del logo desde un archivo
+// --------------------------------------------------------------------------
+// El pedido fue que el logo se suba desde la carpeta del cliente, y con razón:
+// tiene el archivo descargado y lo único que sabe es dónde está en su disco.
+// Pedirle una dirección lo obligaba a subirlo antes a algún lado, y encima el
+// campo era el único error posible del formulario de alta.
+//
+// La subida va a `/api/admin/subir-logo`, NO a `/api/upload`: esa es ruta de
+// empresa y `verificarToken` le cierra la puerta al SUPERADMIN a propósito,
+// porque no tiene empresa ni base. `/api/admin/subir-logo` va con
+// `verificarSuperAdmin`, que es la guarda correcta para este panel.
+//
+// Lo que valida esta función es sólo para dar el error rápido y con el nombre
+// del archivo. La decisión es del servidor: si acá se pasara algo, el mismo
+// archivo enviado por API entraría igual.
+//
+// El SVG queda afuera a propósito, no por olvido: es XML con <script> adentro
+// y se ejecuta si alguien lo abre. El servidor sólo acepta jpeg, png, webp y
+// gif.
+// ==========================================================================
+
+const TIPOS_LOGO = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const PESO_MAXIMO_LOGO = 5 * 1024 * 1024;
+
+/**
+ * Sube un archivo de logo y devuelve la URL, o `null` si no se pudo.
+ *
+ * `alTerminar` recibe la URL o `null` para que el llamador la muestre.
+ */
+async function subirLogo(archivo, alTerminar) {
+    if (!archivo) {
+        alTerminar(null, 'No se seleccionó ningún archivo.');
+        return null;
+    }
+    if (!TIPOS_LOGO.includes(archivo.type)) {
+        alTerminar(null, `"${archivo.name}" no es una imagen. Solo JPG, PNG, WEBP o GIF.`);
+        return null;
+    }
+    if (archivo.size > PESO_MAXIMO_LOGO) {
+        const mb = (archivo.size / (1024 * 1024)).toFixed(1);
+        alTerminar(null, `"${archivo.name}" pesa ${mb} MB. El máximo es 5 MB.`);
+        return null;
+    }
+
+    const cuerpo = new FormData();
+    cuerpo.append('imagen', archivo);
+
+    try {
+        // FormData sin `Content-Type` a propósito: si se lo pone, el `boundary`
+        // que arma el navegador no viaja y el servidor no puede separar las
+        // partes del formulario. `apiFetch` lo respeta justamente por esto.
+        const r = await apiFetch(`${API}/admin/subir-logo`, { method: 'POST', body: cuerpo });
+        const d = await r.json();
+
+        if (!r.ok) {
+            alTerminar(null, d.error || 'No se pudo subir el logo.');
+            return null;
+        }
+
+        alTerminar(d.url, null);
+        return d.url;
+    } catch (err) {
+        console.error(err);
+        alTerminar(null, 'No se pudo conectar con el servidor.');
+        return null;
+    }
+}
+
+/**
+ * Pinta el resultado de una subida en el renglón de estado de un campo de logo.
+ * Un solo lugar para el texto, para que el alta y la edición se comporten igual.
+ */
+function pintarEstadoLogo(idEstado, texto, esError) {
+    const caja = $(idEstado);
+    if (!caja) return;
+    caja.textContent = texto;
+    caja.style.color = esError
+        ? 'var(--color-danger)'
+        : 'var(--color-success)';
+    caja.style.fontWeight = esError ? '700' : '600';
+}
+
+// --- Alta de empresa --------------------------------------------------------
+
+// Promesa de la subida en curso. El alta la espera antes de leer el campo: si
+// el SuperAdmin elige el archivo y aprieta "Crear empresa" enseguida, el alta
+// se mandaría con el logo vacío y la imagen quedaría subida pero huérfana.
+let logoAltaEnCurso = null;
+
+const inputLogoAlta = $('alta-logo-archivo');
+if (inputLogoAlta) {
+    inputLogoAlta.addEventListener('change', () => {
+        const archivo = inputLogoAlta.files && inputLogoAlta.files[0];
+        if (!archivo) return;
+
+        pintarEstadoLogo('alta-logo-estado', `Subiendo "${archivo.name}"...`, false);
+
+        logoAltaEnCurso = subirLogo(archivo, (url, error) => {
+            if (error) {
+                pintarEstadoLogo('alta-logo-estado', error, true);
+                inputLogoAlta.value = '';
+            } else {
+                $('alta-logo').value = url;
+                pintarEstadoLogo(
+                    'alta-logo-estado',
+                    `"${archivo.name}" subido. Se puede borrar del servidor más adelante.`,
+                    false
+                );
+            }
+            logoAltaEnCurso = null;
+        });
+    });
+}
+
+// --- Edición de una empresa existente ---------------------------------------
+
+// El detalle se dibuja dinámicamente, así que el input de archivo no existe
+// cuando se registra el listener. Se escucha en `document` y se filtra por id.
+document.addEventListener('change', (e) => {
+    if (e.target.id !== 'detalle-logo-archivo') return;
+    const archivo = e.target.files && e.target.files[0];
+    if (!archivo) return;
+
+    pintarEstadoLogo('detalle-logo-estado', `Subiendo "${archivo.name}"...`, false);
+
+    subirLogo(archivo, (url, error) => {
+        if (error) {
+            pintarEstadoLogo('detalle-logo-estado', error, true);
+            e.target.value = '';
+            return;
+        }
+        // Se escribe en el campo de texto y no se manda el PATCH solo: el
+        // botón "Guardar" es el que confirma. Subir el archivo no es cambiar la
+        // empresa, y guardar sin querer porque se eligió un archivo sería una
+        // sorpresa.
+        //
+        // El id sale del mismo `campo()` que arma el resto del formulario
+        // (`det-dato-` + nombre de columna), no de un nombre inventado acá: si
+        // se escribiera uno propio, el campo quedaría sin llenar y el "Guardar"
+        // mandaría `logo_url` vacío, borrando el logo que ya estaba.
+        const destino = $('det-dato-logo_url');
+        if (destino) destino.value = url;
+        pintarEstadoLogo(
+            'detalle-logo-estado',
+            `"${archivo.name}" subido. Presioná "Guardar datos y marca" para que quede.`,
+            false
+        );
+    });
+});
+
+// ==========================================================================
 // Aviso flotante
 // ==========================================================================
 
@@ -357,6 +508,19 @@ async function enviarAlta(e) {
     $('alta-avance-texto').textContent =
         `Creando la base de datos de "${$('alta-nombre').value.trim()}" y aplicando el esquema...`;
 
+    // Si hay un logo subiendo, se espera antes de armar el cuerpo. Sin esta
+    // espera, elegir el archivo y apretar "Crear empresa" enseguida manda el
+    // alta con `logo_url` vacío: la empresa queda creada sin marca y la imagen
+    // queda subida a Cloudinary sin que nada la apunte.
+    if (logoAltaEnCurso) {
+        try {
+            await logoAltaEnCurso;
+        } catch {
+            // `subirLogo` no rechaza: avisa por callback. Si llegó acá es que
+            // la promesa se rompió sola, y se sigue con lo que haya quedado.
+        }
+    }
+
     const cuerpo = {
         nombre: $('alta-nombre').value.trim(),
         rubro: $('alta-rubro').value,
@@ -533,18 +697,34 @@ function pintarDetalle(d) {
                 ${campo('Color secundario', 'color_secundario', 'color')}
             </div>
             <div class="admin-grilla" style="margin-top:12px;">
-                ${campo('Logo (URL)', 'logo_url', 'url', { pista: 'https://.../logo.png' })}
+                ${campo('Dirección del logo', 'logo_url', 'url', { pista: 'https://.../logo.png' })}
+                <div class="campo">
+                    <label for="detalle-logo-archivo">Subir desde un archivo</label>
+                    <input type="file" id="detalle-logo-archivo"
+                           accept="image/png,image/jpeg,image/webp,image/gif">
+                    <div id="detalle-logo-estado" class="admin-pista" style="margin-top:6px;">
+                        ${e.logo_url
+                            ? 'Hay un logo cargado. Subir otro lo reemplaza al guardar.'
+                            : 'Sin logo. Mientras esté vacío, los presupuestos se imprimen sin marca.'}
+                    </div>
+                </div>
                 <div class="campo" style="align-self:end;">
                     <button class="btn btn-actualizar" style="width:100%;" onclick="guardarDatosEmpresa(${e.id})">
                         Guardar datos y marca
                     </button>
                 </div>
             </div>
+            ${e.logo_url ? `
+                <div class="admin-pista" style="display:flex;align-items:center;gap:12px;margin-top:10px;">
+                    <img src="${escapeHtml(e.logo_url)}" alt="Logo actual"
+                         style="max-height:46px;max-width:150px;object-fit:contain;background:#fff;padding:5px;border-radius:6px;border:1px solid var(--border-color);">
+                    <span>Así se ve hoy en el presupuesto.</span>
+                </div>` : ''}
             <small class="admin-pista" style="display:block;margin-top:8px;">
                 Teléfono, dirección y CUIT salen impresos en presupuestos y órdenes: si
-                faltan, el comprobante se imprime sin ellos. El logo tiene que ser un PNG o
-                un JPG, y escrito como dirección completa: un SVG puede ejecutar código y
-                el servidor lo rechaza.
+                faltan, el comprobante se imprime sin ellos. El logo se sube desde el archivo
+                de arriba (JPG, PNG, WEBP o GIF, hasta 5 MB) o se pega la dirección si la
+                marca ya vive en un CDN. Un SVG puede ejecutar código y el servidor lo rechaza.
             </small>
         </div>
 

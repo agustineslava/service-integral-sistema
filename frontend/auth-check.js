@@ -537,7 +537,7 @@ function abrirModalCambiarPassword() {
                     </div>
                     <div id="mensaje-cambiar-password" style="color: var(--color-danger, #dc3545); font-size: 13px; margin-bottom: 8px; display:none;"></div>
                     <div class="admin-botones" style="display:flex;gap:10px;">
-                        <button type="button" class="btn btn-secundario" style="flex:1;" onclick="cerrarModal('modal-cambiar-password')">Cancelar</button>
+                        <button type="button" class="btn btn-cancelar" style="flex:1;" onclick="cerrarModal('modal-cambiar-password')">Cancelar</button>
                         <button type="submit" class="btn btn-crear" style="flex:1;" id="btn-guardar-clave">Guardar nueva contraseña</button>
                     </div>
                 </form>

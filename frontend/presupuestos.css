@@ -77,31 +77,64 @@
     font-size: 0.78rem;
 }
 
-/* --- Editor de ítems ----------------------------------------------------- */
+/* --- Editor de ítems -----------------------------------------------------
+ *
+ * POR QUE ESTA TABLA TIENE SU PROPIA SECCIÓN Y NO USA LA GLOBAL
+ *
+ * Antes los inputs de esta tabla pisaban el input global de style.css con
+ * `height: 34px; padding: 4px 7px`. Con 34px de alto y 1.5px de borde, el
+ * `border-radius: 6px` de la regla global quedaba aplastado: la barra salía
+ * casi cuadrada, y al lado de los inputs de los formularios (que sí respetan la
+ * regla global) se veía que eran de otra aplicación.
+ *
+ * Acá ya no se pisa nada: `.p-tabla-items input` sólo ajusta el ancho al 100%
+ * y deja que la regla global de style.css ponga el alto, el padding, el radio y
+ * el fondo. La cabecera sí se completa, porque la global pone `padding: 14px
+ * 12px` y en una fila de 5 columnas de formulario eso deja la tabla desarmada.
+ */
 .p-tabla-items {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0 10px;
+    margin-top: 4px;
 }
 
-.p-tabla-items th {
-    font-size: 0.75rem;
+/* La cabecera va en el color de la empresa, como la del comprobante, para que
+   el editor y el presupuesto impreso se lean como la misma cosa. */
+.p-tabla-items thead th {
+    background-color: var(--si-blue-vibrant);
+    color: #fff;
+    font-size: 0.72rem;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
-    color: var(--text-secondary, #777);
-    border-bottom: 1px solid var(--border-color, #ddd);
-    padding: 4px 4px;
+    letter-spacing: 0.4px;
+    font-weight: 700;
+    padding: 8px 10px;
+    text-align: left;
+    border: none;
 }
 
-.p-tabla-items td {
-    padding: 3px 3px;
+.p-tabla-items thead th:first-child { border-radius: 8px 0 0 8px; }
+.p-tabla-items thead th:last-child { border-radius: 0 8px 8px 0; }
+
+.p-tabla-items tbody td {
+    padding: 0;
     vertical-align: middle;
+    border: none;
+    background-color: var(--bg-body);
 }
 
+.p-tabla-items tbody td:first-child {
+    border-radius: 8px 0 0 8px;
+    padding-left: 10px;
+}
+.p-tabla-items tbody td:last-child {
+    border-radius: 0 8px 8px 0;
+    padding-right: 6px;
+}
+
+/* Se queda con el alto y el padding de la regla global; sólo se estira. */
 .p-tabla-items input {
     width: 100%;
-    height: 34px;
-    padding: 4px 7px;
-    font-size: 0.88rem;
 }
 
 .p-tabla-items input[type="number"] { text-align: right; }
@@ -115,17 +148,29 @@
     font-size: 0.9rem;
 }
 
+/* Botón de sacar un ítem. Es una acción destructiva sobre lo que el usuario ya
+   escribió a mano, así que se ve como las demás: un cuadrado rojo con la X, no
+   un texto suelto. */
 .p-quitar-item {
-    background: none;
-    border: none;
-    color: var(--si-red, #c0392b);
-    font-size: 1.25rem;
+    background-color: color-mix(in srgb, var(--color-danger) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 45%, transparent);
+    color: var(--color-danger);
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    font-size: 1rem;
     cursor: pointer;
     line-height: 1;
-    padding: 2px 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
 }
 
-.p-quitar-item:hover { color: #922; }
+.p-quitar-item:hover {
+    background-color: var(--color-danger);
+    color: #fff;
+}
 
 .p-aviso {
     margin-top: 10px;
@@ -290,10 +335,25 @@
     font-weight: bold;
 }
 
+/*
+ * Los datos de contacto del CLIENTE van en el color de la empresa, como los de
+ * las órdenes de trabajo. Antes iban en `#444` (gris de la hoja) y el teléfono
+ * se leía como texto de formulario impreso, no como un dato destacado.
+ *
+ * Se usa `--p-color-primario` y no un color fijo: en `presupuestos.js` esa
+ * variable se carga con `empresa.color_primario`, que es el mismo valor que
+ * `marca.js` publica como `--si-blue-vibrant`. Con una empresa que tiene otra
+ * paleta, el teléfono sale con su color y no con un azul que no es de nadie.
+ *
+ * Los datos de la EMPRESA (dirección, teléfono, email, CUIT) siguen en `#444`
+ * a propósito: esa hoja es la que se imprime y la que se manda por mail, y ahí
+ * los datos de contacto tienen que quedar legibles en blanco y negro.
+ */
 .p-comprobante-cliente p {
     margin: 2px 0 0;
     font-size: 0.86rem;
-    color: #444;
+    color: var(--p-color-primario, #1a4d8f);
+    font-weight: 600;
 }
 
 .p-comprobante-items {

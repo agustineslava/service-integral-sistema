@@ -4,11 +4,27 @@
  * Cambia la clave a un valor temporal, comprueba que la clave anterior deja de
  * servir, y la deja otra vez como estaba. Si algo falla en el medio, el
  * `finally` intenta volver atrás: nunca tiene que quedar la clave cambiada.
+ *
+ * ATENCION: esto cambia la clave REAL del SuperAdmin, dos veces, y depende de
+ * `reset-clave.js` para volver atrás. Si se interrumpe (se cierra la terminal,
+ * se apaga la maquina) entre el cambio y el `finally`, la clave queda siendo la
+ * temporal y hay que cambiarla a mano. Por eso la clave va en la variable de
+ * entorno `CLAVE_SUPERADMIN` y no escrita aca: queda fuera del historial de git
+ * y el archivo no la delata.
  */
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 const BASE = 'http://127.0.0.1:3000';
-const EMAIL = 'aguseslava11@gmail.com';
-const ORIGINAL = 'Bonoyhomero23';
+const EMAIL = process.env.SMOKE_EMAIL_SUPERADMIN || 'aguseslava11@gmail.com';
+const ORIGINAL = process.env.CLAVE_SUPERADMIN;
 const TEMPORAL = 'Temporal_Prueba_9x';
+
+if (!ORIGINAL) {
+    console.error('Falta la variable de entorno CLAVE_SUPERADMIN.');
+    console.error('Ejemplo:  $env:CLAVE_SUPERADMIN = "tu-clave";  node tools\\smoke-clave.js');
+    process.exit(2);
+}
 
 let ok = 0, fallo = 0;
 const p = (t) => console.log(`\n--- ${t} ---`);
@@ -37,7 +53,9 @@ const entrar = async (clave) => {
 (async () => {
     p('Punto de partida');
     const token = await entrar(ORIGINAL);
-    ok_(!!token, `la clave original (${ORIGINAL}) entra`);
+    // No se imprime la clave: esta salida a veces queda pegada en un issue o en
+    // un mensaje. Alcanza con decir que entra.
+    ok_(!!token, 'la clave original entra');
     if (!token) { console.log('  no puedo seguir sin token'); process.exit(1); }
 
     let tokenVivo = token;
@@ -53,7 +71,7 @@ const entrar = async (clave) => {
 
         p('La clave nueva sirve y la vieja ya no');
         const conNueva = await entrar(TEMPORAL);
-        ok_(!!conNueva, `la clave temporal (${TEMPORAL}) entra`);
+        ok_(!!conNueva, 'la clave temporal entra');
         const conVieja = await entrar(ORIGINAL);
         ok_(!conVieja, 'la clave vieja ya NO entra');
 

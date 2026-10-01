@@ -1765,15 +1765,156 @@ async function descontarStockPorReparacion(idOrden, equipo, tecnicoAsignado, lis
     }
 }
 
-app.get('/api/reparaciones', verificarToken, requiereModulo('reparaciones'), (req, res) => {
-    const sql = 'SELECT * FROM reparaciones ORDER BY id DESC';
-    db.query(sql, (err, rows) => {
-        if (err) {
-            console.error('Error al obtener reparaciones:', err);
-            return res.status(500).json({ error: 'Error interno del servidor' });
-        }
-        res.json(rows);
-    });
+/* ==========================================================================
+   ORDENES DE SERVICIO: ORDEN, BUSQUEDA Y PAGINACION EN EL SERVIDOR
+   --------------------------------------------------------------------------
+   Antes esta ruta era `SELECT * FROM reparaciones ORDER BY id DESC`, sin limite,
+   y el orden que ve el usuario NO era ese: el navegador reordenaba el array
+   entero con un comparator propio (cerrados al final, los que esperan hace mas
+   de 14 dias primero, 'Pendiente' antes que los otros activos, y dentro de cada
+   grupo el mas antiguo primero).
+
+   Por que no se puede paginar encima de un orden que vive en el navegador
+   --------------------------------------------------------------------------
+   Paginar trae una sola parte del conjunto, y ordenar esa parte no alcanza: si
+   el "mas antiguo primero" se calcula adentro de la pagina, la fila mas vieja
+   de la pagina 1 puede ser mas nueva que la de la pagina 2, y el taller ve el
+   mismo equipo dos veces con el mismo lugar y se le pierde uno. Ademas el
+   `total` que necesita el control de paginacion no existe si no hay COUNT(*).
+
+   Asi que el orden se expreso en SQL y la busqueda tambien. No es una forma
+   distinta de ordenar: es el mismo `filtrarYRenderizarReparaciones()` de
+   siempre, clave por clave, y abajo se explica como se tradujo cada regla.
+
+   El orden devuelto (cada regla sale del comparador de `reparaciones.js`):
+     1. Cerrados ('Entregado','Cancelado') al final, siempre.
+     2. Entre dos cerrados: el de `fecha_inicio` mas reciente primero.
+     3. Entre dos activos: los que llevan 14 dias o mas esperando, primero.
+     4. Entre dos activos: 'Pendiente' antes que cualquier otro estado activo.
+     5. Entre dos activos con la misma prioridad: el mas antiguo primero.
+
+   El desempate final por `id DESC` no estaba en el comparador de JavaScript
+   (que en la practica es estable y conservaba el orden de MySQL, `id DESC`).
+   Se pone aca porque dos paginas tienen que ser reproducibles: el mismo
+   `?page=2` tiene que devolver siempre las mismas 20 filas, y sin un desempate
+   total un ORDER BY con empate puede partir el conjunto en cualquier momento.
+   ========================================================================== */
+
+/**
+ * Los campos por los que buscaba el buscador del navegador, en el mismo orden.
+ * La busqueda pasa a ser del servidor, asi que la lista tiene que coincidir
+ * campo por campo con la de antes o el usuario va a "perder" resultados que
+ * antes encontraba.
+ */
+const COLUMNAS_BUSQUEDA_REPARACIONES = [
+    'cliente_nombre',
+    'cliente_telefono',
+    'direccion',
+    'equipo',
+    'falla_declarada',
+    'notas_servicio',
+    'diagnostico_tecnico',
+    'repuestos_usados'
+];
+
+/**
+ * Escapa los comodines de LIKE para que un `%` o un `_` que escriba el usuario
+ * se busquen como texto y no como comodin. Sin esto, buscar "%" devuelve la
+ * tabla entera.
+ */
+function escaparLike(texto) {
+    return texto.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+/** Lee un entero positivo de la query. Devuelve `defecto` si no sirve. */
+function enteroPositivo(valor, defecto, tope) {
+    if (valor === undefined || valor === '') return defecto;
+    const n = Number(valor);
+    if (!Number.isInteger(n) || n < 1) return null;
+    return tope ? Math.min(n, tope) : n;
+}
+
+app.get('/api/reparaciones', verificarToken, requiereModulo('reparaciones'), async (req, res) => {
+    // El limite tiene tope a proposito. `?limit=999999` tiene que devolver lo
+    // mismo que sin paginacion, y si lo permitimos la ruta sigue siendo un
+    // `SELECT *` con un parametro de adorno.
+    const pagina = enteroPositivo(req.query.page, 1);
+    const limite = enteroPositivo(req.query.limit, 20, 200);
+    if (pagina === null || limite === null) {
+        return res.status(400).json({ error: 'Los parametros page y limit tienen que ser enteros positivos.' });
+    }
+
+    const ESTADOS_VALIDOS = ['Pendiente', 'En Reparacion', 'Esperando Repuesto', 'Listo', 'Entregado', 'Cancelado'];
+    const estado = req.query.estado ? String(req.query.estado) : 'TODOS';
+    if (estado !== 'TODOS' && !ESTADOS_VALIDOS.includes(estado)) {
+        return res.status(400).json({ error: 'Estado desconocido.' });
+    }
+
+    const buscar = String(req.query.buscar || '').trim();
+    const patron = `%${escaparLike(buscar)}%`;
+
+    const condiciones = [];
+    const valores = [];
+
+    if (estado !== 'TODOS') {
+        condiciones.push('estado = ?');
+        valores.push(estado);
+    }
+
+    if (buscar !== '') {
+        const busquedas = COLUMNAS_BUSQUEDA_REPARACIONES.map((col) => `${col} LIKE ? ESCAPE '\\\\'`);
+        // `CAST(id AS CHAR)` reemplaza el `String(r.id).includes(term)` del
+        // navegador: buscar "7" tiene que encontrar tambien la orden #7.
+        busquedas.push(`CAST(id AS CHAR) LIKE ? ESCAPE '\\\\'`);
+        condiciones.push(`(${busquedas.join(' OR ')})`);
+        // Un patron por condicion: el placeholder tiene que coincidir con el
+        // orden de los `?`, y el orden de los `?` es el de `busquedas`.
+        valores.push(...busquedas.map(() => patron));
+    }
+
+    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+
+    // El `NOW()` del ORDER BY y el del COUNT son del mismo recorrido, pero se
+    // pide el COUNT primero para que el total no cambie a mitad de la respuesta.
+    const ordenSql = `
+        ORDER BY
+            CASE WHEN estado IN ('Entregado', 'Cancelado') THEN 1 ELSE 0 END ASC,
+            CASE WHEN estado IN ('Entregado', 'Cancelado') THEN fecha_inicio END DESC,
+            CASE
+                WHEN estado NOT IN ('Entregado', 'Cancelado')
+                 AND fecha_inicio <= DATE_SUB(NOW(), INTERVAL 14 DAY)
+                THEN 0 ELSE 1
+            END ASC,
+            CASE WHEN estado = 'Pendiente' THEN 0 ELSE 1 END ASC,
+            CASE WHEN estado NOT IN ('Entregado', 'Cancelado') THEN fecha_inicio END ASC,
+            id DESC
+    `;
+
+    try {
+        const conteo = await db.promise().query(
+            `SELECT COUNT(*) AS total FROM reparaciones ${where}`,
+            valores
+        );
+        const total = Number(conteo[0][0].total) || 0;
+        const totalPaginas = Math.max(1, Math.ceil(total / limite));
+
+        const offset = (pagina - 1) * limite;
+        const [filas] = await db.promise().query(
+            `SELECT * FROM reparaciones ${where} ${ordenSql} LIMIT ? OFFSET ?`,
+            [...valores, limite, offset]
+        );
+
+        res.json({
+            reparaciones: filas,
+            total,
+            pagina,
+            totalPaginas,
+            limite
+        });
+    } catch (err) {
+        console.error('Error al obtener reparaciones:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
 });
 
 app.post('/api/reparaciones', verificarToken, requiereModulo('reparaciones'), requiereAdmin, async (req, res) => {
@@ -3158,6 +3299,89 @@ app.post('/api/admin/yo/clave', verificarSuperAdmin, limitadorCambioPassword, ru
     );
 
     res.json({ mensaje: 'Contrasena actualizada con exito.', token: tokenNuevo });
+}));
+
+/**
+ * El SuperAdmin sube el logo de una empresa desde un archivo de su computadora.
+ *
+ * POR QUE NO SE REUSA /api/upload
+ * ------------------------------
+ * /api/upload es una ruta de TENANT: usa `verificarToken`, y ese middleware
+ * rechaza a proposito al SUPERADMIN porque no tiene empresa, ni pool, ni
+ * `req.empresa`. Reusarla obligaria a aflojar esa guarda o a colar al SuperAdmin
+ * por un atajo de tenant, y las dos cosas rompen la linea que esta seccion
+ * sostiene: el panel central no entra a la base de un cliente. Asi que la
+ * subida se resuelve por `verificarSuperAdmin`, que relee el usuario en la
+ * central en cada request y filtra rol y activo DENTRO del SQL.
+ *
+ * QUE DEVUELVE Y POR QUE NO GUARDA NADA
+ * --------------------------------------
+ * Devuelve la URL y no toca `empresas`. El formulario de alta todavía no tiene
+ * `empresa_id` (la fila se crea despues, en el POST), y la edicion ya tiene su
+ * propio PATCH validado que es el que va a persistir la URL. Mezclar las dos
+ * cosas aca dejaria un logo subido a una base de la que todavia no se sabe el
+ * nombre, o dos fuentes de verdad para la misma columna.
+ *
+ * SEGURIDAD DEL ARCHIVO
+ * ---------------------
+ * Reusa el `upload` de multer, que ya limita a 5 MB y acepta SOLO
+ * jpeg/png/webp/gif. Un SVG queda afuera a proposito: es XML y puede llevar
+ * <script> adentro, que se ejecuta si alguien abre el archivo. Por eso la
+ * validacion no se relaja ni para logos: el mismo filtro que sirve para las
+ * fotos de un producto sirve para la marca de la empresa.
+ *
+ * El `upload.single()` se corre DENTRO del handler y no como middleware suelto,
+ * para que un archivo rechazado (tipo raro o de mas de 5 MB) caiga en el
+ * try/catch de `rutaAdmin` y vuelva como 400 con un mensaje que se entienda.
+ * Como middleware aparte, el error de multer esquivaba `rutaAdmin` y el cliente
+ * recibia un 500 sin explicar por que.
+ */
+app.post('/api/admin/subir-logo', verificarSuperAdmin, rutaAdmin(async (req, res) => {
+    await new Promise((resolve, reject) => {
+        upload.single('imagen')(req, res, (err) => {
+            if (!err) return resolve();
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return reject(errorAdmin('El logo pesa mas de 5 MB.'));
+            }
+            return reject(errorAdmin(err.message || 'No se pudo leer el archivo.'));
+        });
+    });
+
+    if (!req.file) {
+        throw errorAdmin('No se selecciono ningun archivo.');
+    }
+
+    const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+
+    const url = await new Promise((resolve, reject) => {
+        cloudinary.uploader.upload(fileBase64, {
+            // Carpeta propia: un logo de empresa no se confunde nunca con una
+            // foto de producto si alguna vez hay que depurar el lado del CDN.
+            folder: 'service_integral/logos',
+            transformation: [
+                // El logo se imprime chico en el encabezado del presupuesto, asi
+                // que se limita el ancho. `limit` con las dos medidas mantiene la
+                // proporcion: no deforma un logo cuadrado ni uno muy angosto.
+                { width: 800, height: 400, crop: 'limit' },
+                { quality: 'auto' },
+                { fetch_format: 'auto' }
+            ]
+        }, (err, result) => {
+            if (err || !result) return reject(errorAdmin('No se pudo subir el logo.'));
+            resolve(result.secure_url);
+        });
+    });
+
+    await altas.auditar({
+        usuario: req.superadmin,
+        accion: 'superadmin.subir_logo',
+        detalle: { archivo: req.file.originalname, bytes: req.file.size },
+        ip: ipDe(req)
+    });
+
+    console.log(`  SuperAdmin subio un logo (${req.file.originalname}, ${req.file.size} bytes) por ${ipDe(req)}`);
+
+    res.json({ url });
 }));
 
 /* ==========================================================================

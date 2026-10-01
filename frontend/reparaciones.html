@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Integral - Taller y Reparaciones</title>
-    <script src="auth-check.js"></script>
-    <script src="marca.js"></script>
-    <link rel="stylesheet" href="style.css?v=1.3">
-    <link rel="stylesheet" href="reparaciones.css?v=1.1">
+    <script src="auth-check.js?v=2.2"></script>
+    <script src="marca.js?v=2.2"></script>
+    <link rel="stylesheet" href="style.css?v=2.2">
+    <link rel="stylesheet" href="reparaciones.css?v=2.2">
 </head>
 <body>
     <header>
@@ -184,6 +184,18 @@
                     </tbody>
                 </table>
             </div>
+
+            <!-- Paginación. Mismo marcado y mismos ids que el del stock, para
+                 que las dos listas se comporten igual. La búsqueda y el filtro
+                 de estado van al servidor, así que también se recortan sobre el
+                 total, no sobre las 20 filas de la pantalla. -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+                <span id="info-paginacion-reparaciones" style="font-size: 13px; color: var(--text-muted); font-weight: 600;">Cargando...</span>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" id="btn-pagina-anterior-reparaciones" class="btn btn-tabla btn-info" style="padding: 6px 14px;" disabled>&laquo; Anterior</button>
+                    <button type="button" id="btn-pagina-siguiente-reparaciones" class="btn btn-tabla btn-info" style="padding: 6px 14px;" disabled>Siguiente &raquo;</button>
+                </div>
+            </div>
         </section>
     </main>
 
@@ -286,6 +298,6 @@
     </div>
 
     <!-- SCRIPTS DE CONTROL -->
-    <script src="reparaciones.js"></script>
+    <script src="reparaciones.js?v=2.2"></script>
 </body>
 </html>
