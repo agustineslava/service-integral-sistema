@@ -631,7 +631,17 @@ async function main() {
             creadaPorAlta = rAlta.cuerpo.empresa;
             comprobar(true, 'alta completa: 201 (el permiso de base ya estaba concedido)');
             comprobar(creadaPorAlta.nombre_db.startsWith('si_tenant_'), 'la base se llama si_tenant_*', creadaPorAlta.nombre_db);
-            comprobar(creadaPorAlta.slug === 'alta-de-prueba-f5b', 'el slug se armó con el nombre', creadaPorAlta.slug);
+            // Prefijo, no igualdad. Con igualdad esta comprobacion fallaba por lo
+        // que menos tiene que ver con el alta: si quedaba una fila de pruebas
+        // anterior, el slug automatico se armaba como `alta-de-prueba-f5b-2` y
+        // el test decaia, cuando el alta estaba PERFECTA. Lo que se quiere
+        // comprobar aqui es que el slug salga del nombre, y eso lo dice el
+        // prefijo igual.
+        comprobar(
+            /^alta-de-prueba-f5b(-\d+)?$/.test(creadaPorAlta.slug),
+            'el slug se armó con el nombre',
+            creadaPorAlta.slug
+        );
 
             const fila = await central.uno('SELECT * FROM empresas WHERE id = ?', [creadaPorAlta.id]);
             comprobar(!!fila, 'la fila quedó en la central');

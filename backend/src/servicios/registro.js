@@ -77,6 +77,39 @@ async function usuarioPorEmail(email) {
 }
 
 /**
+ * Usuario activo cuya empresa ESTE OPERATIVA, para el lookup del login.
+ *
+ * Por que no alcanza con `usuarioPorEmail`: ese devuelve la primera fila que
+ * coincide con el correo, sin mirar la empresa. Si un mismo correo esta
+ * cargado en dos empresas (el caso real es un taller que tiene dos locales, o
+ * un grupo con dos razones sociales), y la primera fila que toca es la de la
+ * empresa suspendida, el lookup contestaba "no encontrado" aunque la otra
+ * empresa con el mismo correo este operativa. La persona ve una pantalla sin marca y
+ * concluye que su cuenta esta mal.
+ *
+ * El filtro va en SQL, no despues en JavaScript, por la misma razon del
+ * `superadminActivo` de mas abajo: si un dia alguien escribe mal la condicion,
+ * el resultado es "no encontrado" (fail closed), no "te muestro una empresa
+ * que no deberia".
+ */
+async function usuarioOperativoPorEmail(email) {
+    if (!email) return null;
+
+    return central.uno(
+        `SELECT u.*
+           FROM usuarios_globales u
+           JOIN empresas e ON e.id = u.empresa_id
+          WHERE u.email = ?
+            AND u.activo = 1
+            AND u.empresa_id IS NOT NULL
+            AND e.estado IN (${ESTADOS_OPERATIVOS.map(() => '?').join(', ')})
+          ORDER BY u.id
+          LIMIT 1`,
+        [String(email).trim().toLowerCase(), ...ESTADOS_OPERATIVOS]
+    );
+}
+
+/**
  * El SuperAdmin que hay DETRAS de un token, en este instante.
  *
  * Los dos filtros (`rol` y `activo`) van en la consulta y no en el codigo de
@@ -216,6 +249,7 @@ module.exports = {
     estaOperativa,
     empresaPorId,
     usuarioPorEmail,
+    usuarioOperativoPorEmail,
     superadminActivo,
     claveTemporalPendiente,
     invalidarClavePendiente,

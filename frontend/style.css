@@ -21,6 +21,13 @@
     --color-danger: #dc3545;      /* Rojo para eliminar, alertas críticas o borrar */
     --color-info: var(--si-blue-vibrant);
     --color-alerta-bg: rgba(255, 198, 0, 0.1); /* Fondo translúcido para stock mínimo */
+
+    /* --- SOMBRAS ---
+       Antes cada tarjeta repetia un rgba negro fijo (0 12px 32px rgba(0,0,0,.25)).
+       En modo claro eso es una mancha pesada debajo de un panel blanco: el
+       borde gris alcanza, la sombra no. Cada modo pone la suya. */
+    --sombra-tarjeta: 0 4px 10px rgba(0, 0, 0, 0.22), 0 12px 28px rgba(0, 0, 0, 0.18);
+    --sombra-tarjeta-hover: 0 6px 14px rgba(0, 0, 0, 0.26), 0 16px 36px rgba(0, 0, 0, 0.24);
 }
 
 /* 🌟 MODO CLARO AUTOMÁTICO (Se activa si el sistema operativo de la PC está en Claro) */
@@ -33,6 +40,10 @@
         --text-main: #2d3134;     /* Gris plomo oscuro del logo de la marca */
         --text-muted: #6c757d;    /* Gris medio para textos secundarios */
         --color-alerta-bg: #fff3cd; /* Fondo clásico amarillento de advertencia */
+        /* Sombra de tarjeta en claro: difusa y baja. La de modo oscuro no
+           serviría acá, se ve como un tache debajo de un panel blanco. */
+        --sombra-tarjeta: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 18px rgba(16, 24, 40, 0.07);
+        --sombra-tarjeta-hover: 0 2px 4px rgba(16, 24, 40, 0.08), 0 10px 26px rgba(16, 24, 40, 0.10);
     }
 }
 
@@ -44,6 +55,8 @@ body.tema-claro {
     --text-main: #2d3134;
     --text-muted: #6c757d;
     --color-alerta-bg: #fff3cd;
+    --sombra-tarjeta: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 18px rgba(16, 24, 40, 0.07);
+    --sombra-tarjeta-hover: 0 2px 4px rgba(16, 24, 40, 0.08), 0 10px 26px rgba(16, 24, 40, 0.10);
 }
 
 /* ==========================================================================
@@ -240,7 +253,7 @@ header {
 
 .menu-navegacion a:hover, 
 .menu-navegacion a.active {
-    background-color: #0077b5; 
+    background-color: var(--si-blue-dark); 
     color: #ffffff;
 }
 
@@ -359,7 +372,11 @@ header {
 .grupo-filtro select:focus {
     border-color: var(--si-blue-vibrant);
     outline: none;
+    /* El anillo se deriva del color de la empresa. Antes estaba fijo en el
+       azul de Service Integral: un cliente con otro color veía el borde de su
+       empresa y el halo azul de la nuestra, dos colores juntos. */
     box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.15);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--si-blue-vibrant) 15%, transparent);
 }
 
 /* ==========================================================================
@@ -409,7 +426,8 @@ select:focus,
 textarea:focus {
     border-color: var(--si-blue-vibrant);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.15);
+    box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.15);   /* fallback sin color-mix */
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--si-blue-vibrant) 15%, transparent);
 }
 
 /* ==========================================================================
@@ -897,7 +915,8 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 
 .btn-lupa-zoom:hover {
     transform: scale(1.15);
-    background-color: rgba(0, 159, 227, 0.9);
+    background-color: rgba(0, 159, 227, 0.9);   /* fallback sin color-mix */
+    background-color: color-mix(in srgb, var(--si-blue-vibrant) 90%, transparent);
 }
 
 .btn-lupa-zoom svg {
@@ -1236,22 +1255,27 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     border: 1px solid var(--border-color);
     width: 100%;
     max-width: 410px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--sombra-tarjeta);
     text-align: center;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: box-shadow 0.2s ease;
 }
 
 .caja-login:hover {
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--sombra-tarjeta-hover);
 }
 
 .login-logo {
     width: 90px;
     height: 90px;
-    object-fit: cover;
-    border-radius: 50%;
-    border: 3px solid #ffffff;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    /* `contain` y no `cover`: con `cover` un logo rectangular (que es lo
+       habitual) se recorta a una circunferencia y le queda un pedazo afuera. */
+    object-fit: contain;
+    border-radius: 14px;
+    /* El borde sigue el color de la tarjeta. Con blanco fijo, en modo oscuro
+       el logo quedaba con un aro blanco que no existe en la pantalla. */
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-card);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
     margin-bottom: 1rem;
 }
 
@@ -1261,6 +1285,17 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     font-weight: 800;
     margin-bottom: 0.25rem;
     letter-spacing: -0.5px;
+    /* Los nombres largos de empresa no entran en una linea y se parten a la
+       mitad de una palabra. */
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+}
+
+/* Antes de que se sepa de que empresa se trata, el titulo va en color de
+   texto: no tiene que_delatar el color de Service Integral en una pantalla
+   que todavia no pertenece a nadie. */
+.login-titulo[data-neutral] {
+    color: var(--text-main);
 }
 
 .login-subtitulo {
@@ -1295,7 +1330,12 @@ body.tema-claro .btn-alternar-tema .icono-luna {
 
 .login-form input:focus {
     border-color: var(--si-blue-vibrant);
-    box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.2);
+    /* Sin `outline`, el navegador dibuja su aro POR ENCIMA del box-shadow y
+       el campo queda con dos halos. El de 3px de abajo cumple la misma
+       función de "estoy enfocado" y se ve en el color de la empresa. */
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.2);   /* fallback sin color-mix */
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--si-blue-vibrant) 20%, transparent);
 }
 
 .btn-login {
@@ -1315,7 +1355,45 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     font-size: 0.85rem;
     font-weight: 600;
     margin-bottom: 1.2rem;
-    display: none;
+}
+
+/* Aviso que NO es un error: "Entrando a Service Integral", la marca que se
+   acaba de detectar. No puede verse igual que un fallo, o la gente lo lee
+   como que algo anda mal. */
+.info-login {
+    background-color: rgba(40, 167, 69, 0.12);
+    color: #28a745;
+    border: 1px solid rgba(40, 167, 69, 0.28);
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 1.2rem;
+}
+
+/* El atributo `hidden` vale para los dos avisos. Con `display` en la regla de
+   arriba, `hidden` solo no alcanzaba: hay que ganarle en especificidad. */
+[hidden] { display: none !important; }
+
+/* Indicador de "buscando la empresa" en el campo de correo. Se hace con el
+   gradiente animado, sin imagen: no depende de ningun archivo extra. */
+.login-form input.buscando {
+    background-image:
+        linear-gradient(90deg,
+            transparent 0%, rgba(0, 159, 227, 0.12) 50%, transparent 100%);
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: barrido 0.9s linear infinite;
+    color: transparent;
+}
+
+@keyframes barrido {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-form input.buscando { animation: none; }
 }
 
 /* ==========================================================================

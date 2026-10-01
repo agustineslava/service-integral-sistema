@@ -3,22 +3,33 @@
  *
  * DE DONDE VIENE LA MARCA
  * -----------------------------------------------------------------------
- * Antes esta pagina iba siempre a `/api/config-comercio`, y esa ruta leia
- * variables de entorno del servidor. Con eso la empresa numero 2 entra al
- * sistema y ve en el header el nombre y el logo de la numero 1: el sistema
- * decia ser de varias empresas y en pantalla era de una sola.
+ * La ruta `/api/config-comercio` resuelve sola:
+ *   - si hay sesion (Bearer), responde con la fila de ESA empresa;
+ *   - si viene `?slug=`, responde con la marca de esa empresa;
+ *   - si no hay nada de eso, responde con las variables de entorno.
  *
- * Ahora la ruta resuelve sola:
- *   - si hay sesion, responde con la fila de ESA empresa en la base central;
- *   - si no hay sesion (pantalla de login), responde con las variables de
- *     entorno, que son la marca de la unica empresa instalada.
+ * POR QUE ESTA PAGINA NO APLICA NADA SI NO HAY SESION
+ * -----------------------------------------------------------------------
+ * Antes, entrar a login.html sin sesion aplicaba la marca de entorno, que es
+ * la de Service Integral. Con eso TODOS los clientes veian el nombre y el
+ * logo de Service Integral en la pantalla de login, antes de escribir una
+ * sola letra: el sistema se anunciaba como de una sola empresa, que es
+ * justamente lo contrario de lo que se esta vendiendo.
  *
- * Por eso esta pagina no tiene que decidir nada: solo pide y aplica.
+ * Ahora, sin token esta pagina no hace nada y deja la pantalla neutral. La
+ * marca correcta la pone login.html recien cuando el email escrito
+ * pertenece a una empresa (ver `aplicarMarcaDesdeConfig`).
+ *
+ * COMO SE USA
+ * -----------------------------------------------------------------------
+ *   - En el resto de las paginas: no hay que llamarla, se sola sola.
+ *   - En login.html: `aplicarMarcaDesdeConfig(conf)` con lo que devuelve
+ *     `/api/config-comercio?slug=...`.
  *
  * Un detalle importante: la respuesta puede traer `color_primario: null`
  * (la empresa todavia no cargo su color). En ese caso NO se toca la variable
- * de CSS, para que la pantalla conserve la paleta de Service Integral y no
- * se quede sin acento.
+ * de CSS, para que la pantalla conserve la paleta por defecto y no se quede
+ * sin acento.
  */
 
 /** Un color tiene que ser #RGB o #RRGGBB. Cualquier otra cosa se ignora. */
@@ -34,22 +45,39 @@ function rutaDeLogo(valor) {
     return '/' + v;
 }
 
-async function aplicarMarcaDinamica() {
-    let conf = null;
-    try {
-        const token = localStorage.getItem('jwt_token');
-        const res = await fetch('/api/config-comercio', {
-            headers: token ? { Authorization: `Bearer ${token}` } : {}
-        });
-        if (res.ok) conf = await res.json();
-    } catch (err) {
-        console.warn('No se pudo cargar la marca de la empresa:', err);
+/**
+ * Oscurece un color #RRGGBB un 18%, para el estado hover.
+ *
+ * Se hace a mano y no con `filter: brightness()` porque ese filtro aplicaria
+ * tambien al texto de los botones que ya son blancos, y un boton con el texto
+ * mas claro de lo que deberia es peor que un boton sin hover.
+ * Acepta tambien #RGB, que son tres caracteres y hay que duplicar.
+ */
+function oscurecer(color) {
+    let c = color.trim();
+    if (c.length === 4) {
+        c = '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3];
     }
+    if (!/^#[0-9a-f]{6}$/i.test(c)) return c;
 
-    // Sin respuesta no se cae la pagina: se deja la marca que ya esta en el
-    // HTML, que es la de por defecto. Es preferible mostrar la marca de la
-    // casa antes que no mostrar nada.
-    if (!conf || !conf.nombre) return;
+    const num = parseInt(c.slice(1), 16);
+    const r = Math.max(0, Math.round(((num >> 16) & 0xff) * 0.82));
+    const g = Math.max(0, Math.round(((num >> 8) & 0xff) * 0.82));
+    const b = Math.max(0, Math.round((num & 0xff) * 0.82));
+
+    return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Escribe una marca en la pantalla. Es la funcion que usan TODAS las paginas,
+ * con o sin sesion, para no tener dos copias de la misma logica.
+ *
+ * Devuelve true si se aplico algo. Si la respuesta no trae nombre, no hace
+ * nada y devuelve false: es preferible mostrar la marca que ya esta escrita
+ * en el HTML antes que dejar la pantalla a medias.
+ */
+function aplicarMarcaDesdeConfig(conf) {
+    if (!conf || !conf.nombre) return false;
 
     const nombre = String(conf.nombre);
 
@@ -64,11 +92,17 @@ async function aplicarMarcaDinamica() {
     document.querySelectorAll('.logo img, .login-logo').forEach((img) => {
         img.src = logoSrc;
         img.alt = `Logo ${nombre}`;
+        // Si venia oculto (pantalla de login neutral), se muestra.
+        img.style.display = '';
+        img.hidden = false;
     });
 
     // 3. Nombre comercial.
     document.querySelectorAll('.login-titulo').forEach((el) => {
         el.textContent = nombre;
+    });
+    document.querySelectorAll('[data-neutral]').forEach((el) => {
+        el.hidden = true;
     });
 
     const bienvenidaH1 = document.querySelector('.bienvenida h1');
@@ -94,7 +128,7 @@ async function aplicarMarcaDinamica() {
     //
     // `--si-blue-vibrant` es el acento (16 usos) y `--si-blue-dark` el hover
     // (2 usos). Si la empresa no cargo color_secundario se usa el primario
-    // clarifies: si no, el boton queda del mismo color al pasar el mouse y
+    // oscurecido: si no, el boton queda del mismo color al pasar el mouse y
     // el usuario no ve que se puede apretar.
     if (esColorValido(conf.color_primario)) {
         document.documentElement.style.setProperty('--si-blue-vibrant', conf.color_primario.trim());
@@ -103,29 +137,35 @@ async function aplicarMarcaDinamica() {
     if (esColorValido(conf.color_secundario)) {
         document.documentElement.style.setProperty('--si-blue-dark', conf.color_secundario.trim());
     }
+
+    return true;
 }
 
 /**
- * Oscurece un color #RRGGBB un 18%, para el estado hover.
- *
- * Se hace a mano y no con `filter: brightness()` porque ese filtro aplicaria
- * tambien al texto de los botones que ya son blancos, y un boton con el texto
- * mas claro de lo que deberia es peor que un boton sin hover.
- * Acepta tambien #RGB, que son tres caracteres y hay que duplicar.
+ * Rutina de las paginas con sesion. Sin token no hace nada: la pantalla de
+ * login es neutral y la marca la elige login.html segun el email escrito.
  */
-function oscurecer(color) {
-    let c = color.trim();
-    if (c.length === 4) {
-        c = '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3];
+async function aplicarMarcaDinamica() {
+    const token = localStorage.getItem('jwt_token');
+    if (!token) return;                 // pagina de login: que siga neutral
+
+    let conf = null;
+    try {
+        const res = await fetch('/api/config-comercio', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) conf = await res.json();
+    } catch (err) {
+        console.warn('No se pudo cargar la marca de la empresa:', err);
     }
-    if (!/^#[0-9a-f]{6}$/i.test(c)) return c;
 
-    const num = parseInt(c.slice(1), 16);
-    const r = Math.max(0, Math.round(((num >> 16) & 0xff) * 0.82));
-    const g = Math.max(0, Math.round(((num >> 8) & 0xff) * 0.82));
-    const b = Math.max(0, Math.round((num & 0xff) * 0.82));
+    // `sin_empresa` = el token es valido pero no pertenece a ninguna empresa
+    // (el SUPERADMIN). En ese caso la respuesta trae la marca de entorno, que
+    // es la de Service Integral: aplicarla、Windows lo que hacia era poner el
+    // nombre de una empresa que no es esta en una pantalla que no es de nadie.
+    if (conf && conf.sin_empresa) return;
 
-    return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+    aplicarMarcaDesdeConfig(conf);
 }
 
 document.addEventListener('DOMContentLoaded', aplicarMarcaDinamica);

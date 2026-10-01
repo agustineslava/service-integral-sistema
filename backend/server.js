@@ -181,21 +181,38 @@ app.get('/api/config-comercio', async (req, res) => {
     const token = auth && auth.startsWith('Bearer ') ? auth.split(' ')[1] : null;
     const slug = req.query.slug; // opcional: pre-login lookup por slug
 
+    // Un token VÁLIDO que no pertenece a ninguna empresa (el SUPERADMIN) se
+    // distingue de la ausencia de token. Con el codigo anterior los dos caian
+    // al final y recibian `marcaDeEntorno()`, o sea la marca de Service
+    // Integral: entrar a login.html con la sesion del panel abierta volvia a
+    // poner el nombre de Service Integral en una pantalla que no es de nadie.
+    let tokenValido = false;
+
     if (token) {
         try {
             const carga = jwt.verify(token, JWT_SECRET);
-            if (carga && carga.empresa_id) {
-                const empresa = await registro.empresaPorId(carga.empresa_id);
-                if (empresa) return res.json(datosDeMarca(empresa));
+            if (carga) {
+                tokenValido = true;
+                if (carga.empresa_id) {
+                    const empresa = await registro.empresaPorId(carga.empresa_id);
+                    if (empresa) return res.json(datosDeMarca(empresa));
+                }
             }
         } catch {
-            // Token inválido: se sigue con slug o entorno.
+            // Token inválido o vencido: se sigue con slug o entorno.
         }
     }
 
     if (slug) {
         const empresa = await central.uno('SELECT * FROM empresas WHERE slug = ?', [slug]);
         if (empresa) return res.json(datosDeMarca(empresa));
+    }
+
+    // Con un token de SUPERADMIN no hay empresa que marcar. Se responde igual
+    // (esta ruta nunca dice "no") pero avisando que no hay marca, y el cliente
+    // deja la pantalla neutral en vez de inventar una.
+    if (tokenValido) {
+        return res.json({ ...marcaDeEntorno(), sin_empresa: true });
     }
 
     res.json(marcaDeEntorno());
@@ -226,8 +243,15 @@ app.get('/api/central/empresa-por-email', limitadorLookupEmail, async (req, res)
 
     try {
         // Solo busca usuarios ACTIVOS. Un usuario inactivo no debe ser "encontrable".
-        const usuario = await registro.usuarioPorEmail(email);
-        if (!usuario || !usuario.activo || !usuario.empresa_id) {
+        //
+        // `usuarioPorEmail` devuelve lo primero que encuentra con ese correo. Un
+        // mismo correo puede estar en dos empresas (dos talleres con el mismo
+        // dominio, por ejemplo). Si devuelve la primera y esa empresa esta
+        // suspendida o de baja, la pantalla queda sin marca aunque la otra
+        // empresa sea operativa. Por eso se filtra en SQL por empresa operativa:
+        // la fila que se muestra es la empresa realmente activa, no la primera.
+        const usuario = await registro.usuarioOperativoPorEmail(email);
+        if (!usuario || !usuario.empresa_id) {
             return res.json({ encontrado: false });
         }
 
@@ -3009,11 +3033,22 @@ async function realizarBackup() {
         // Este mensaje va a stderr -> logs/errores.log
         console.error(`❌ BACKUP FALLIDO: ${err.message}`);
         console.error('   No se publicó ningún archivo. El backup anterior sigue intacto.');
+
+        // Red de seguridad. `realizarBackup` ya tiene su try/catch, pero si el
+        // throw viene de algo que se ejecuta FUERA de ese try (por ejemplo un
+        // rechazo sin manejar dentro de src/jobs/backup.js), la promesa
+        // rechazada sin `.catch` se vuelve una unhandledRejection y Node 22
+        // TIRA EL PROCESO ABAJO. Un backup nunca puede apagar el sistema.
+        if (err.rescate) {
+            console.error(`   El dump se salvó como: ${path.basename(err.rescate)}`);
+        }
     }
 }
 
 cron.schedule('0 20 * * *', () => {
-    realizarBackup();
+    realizarBackup().catch((err) => {
+        console.error('❌ BACKUP FALLIDO (fuera del try):', err && err.message);
+    });
 }, {
     scheduled: true,
     timezone: 'America/Argentina/Buenos_Aires'

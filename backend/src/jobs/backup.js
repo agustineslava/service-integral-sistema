@@ -47,6 +47,81 @@ function timestampLocal() {
 }
 
 /**
+ * Publica el .tmp con el nombre final, en el mismo volumen (rename = atomico).
+ *
+ * POR QUE ESTA FUNCION EXISTE (incidente 2026-09-30 20:00)
+ * --------------------------------------------------------------------------
+ * Antes:  fs.renameSync(rutaTmp, rutaFinal);
+ *
+ * En Windows ese rename NO es_atomico ni estable:
+ *   - Si el destino existe, Node usa MoveFileEx con REPLACE_EXISTING, pero si
+ *     otro proceso tiene abierto el destino devuelve EBUSY (ERROR_SHARING_
+ *     VIOLATION) o EACCES (ERROR_ACCESS_DENIED).
+ *   - El caso real: el antivirus de Windows abre los .sql recien escritos para
+ *     escanearlos. Durante esa ventana el rename falla.
+ *
+ * Y ese throw ocurria DENTRO del callback `close` de execFile, que corre en un
+ * tick del event loop, FUERA del executor de la Promise. Por lo tanto no lo
+ * atrapaba ni el try/catch de `realizarBackup()` ni el reject(): se convertia
+ * en una uncaughtException y MATABA EL PROCESO ENTERO. Todo el sistema caido
+ * por un backup. pm2 lo levanto 4 minutos despues y quedo como si nada, asi
+ * que el fallo se repitio cada noche a las 20:00 sin que se viera.
+ *
+ * Regla que deja esto escrito: un job de respaldo NUNCA puede tirar el proceso
+ * de abajo. Si no se puede publicar, se devuelve .tmp con otro nombre y el
+ * backup anterior queda intacto.
+ */
+function publicarAtomico(rutaTmp, rutaFinal) {
+    const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    return (async () => {
+        let ultimoError = 'desconocido';
+
+        for (let intento = 1; intento <= 4; intento++) {
+            try {
+                fs.renameSync(rutaTmp, rutaFinal);
+                return rutaFinal;
+            } catch (e) {
+                ultimoError = e.message;
+
+                // Si el destino ya existe (mismo timestamp, o corrida anterior que
+                // se quedo a medias), se libera antes de reintentar.
+                if (['EEXIST', 'EPERM', 'EACCES', 'EBUSY'].includes(e.code)) {
+                    try { if (fs.existsSync(rutaFinal)) fs.unlinkSync(rutaFinal); } catch {}
+                }
+
+                // Espera creciente: da tiempo a que el antivirus suelte el archivo.
+                await dormir(intento * 750);
+            }
+        }
+
+        // No se pudo publicar con el nombre final. NO se pierde el dump: se
+        // publica con sufijo .pendiente y se avisa. El backup anterior queda
+        // intacto y el operador ve el nombre del archivo para investigarlo.
+        try {
+            const rutaRescate = rutaFinal + '.pendiente';
+            fs.renameSync(rutaTmp, rutaRescate);
+            const e = new Error(
+                `No se pudo publicar el backup con su nombre final (${ultimoError}).\n` +
+                `    Quedo como: ${path.basename(rutaRescate)}\n` +
+                `    Motivo habitual en Windows: el antivirus tiene abierto el .sql.\n` +
+                `    El backup NO se perdio y el anterior sigue intacto.`
+            );
+            e.rescate = rutaRescate;
+            throw e;
+        } catch (e) {
+            // Si el rescate tambien falla, el .tmp queda en disco para que se vea.
+            if (e.rescate) throw e;
+            throw new Error(
+                `No se pudo publicar el backup (${ultimoError}).\n` +
+                `    El dump quedo sin publicar en: ${rutaTmp}\n` +
+                `    El backup anterior sigue intacto.`
+            );
+        }
+    })();
+}
+
+/**
  * Ejecuta mysqldump y devuelve un dump verificado, o lanza error.
  * Nunca deja un archivo corrupto con nombre de backup.
  */
@@ -97,7 +172,7 @@ function ejecutarDump(opciones = {}) {
             timeout: timeoutMs,
             maxBuffer: 4 * 1024 * 1024,
             windowsHide: true
-        }, (error, stdout, stderr) => {
+        }, async (error, stdout, stderr) => {
             const duracion = ((Date.now() - started) / 1000).toFixed(1);
 
             if (error) {
@@ -158,8 +233,15 @@ function ejecutarDump(opciones = {}) {
                 return reject(new Error('El dump no contiene "Dump completed". Archivo incompleto, descartado.'));
             }
 
-            // Publicacion ATOMICA: rename en el mismo volumen, instantaneo y seguro
-            fs.renameSync(rutaTmp, rutaFinal);
+            // Publicacion ATOMICA: rename en el mismo volumen, instantaneo y seguro.
+            // `publicarAtomico` reintenta si Windows tiene el destino tomado. Si
+            // aun asi no puede, RECHAZA la promesa (no tira): ver la nota del
+            // incidente del 30/09, cuando un throw aqui mataba el proceso.
+            try {
+                await publicarAtomico(rutaTmp, rutaFinal);
+            } catch (e) {
+                return reject(Object.assign(e, { stderr, duracionSeg: Number(duracion) }));
+            }
 
             resolve({
                 ok: true,
@@ -228,5 +310,6 @@ module.exports = {
     copiarOffsite,
     renombrarBackupsConZonaIncorrecta,
     timestampLocal,
+    publicarAtomico,
     RETENCION_DIAS_DEFAULT
 };
