@@ -60,7 +60,7 @@
 
                 <input type="text" id="input-buscar" placeholder="Buscar por cliente, número o documento..." autocomplete="off" style="flex: 1; min-width: 220px; height: 42px;">
 
-                <button class="btn-primario" id="btn-nuevo" onclick="abrirFormulario()">+ Nuevo presupuesto</button>
+                <button class="btn btn-crear" id="btn-nuevo" onclick="abrirFormulario()">+ Nuevo presupuesto</button>
             </div>
         </section>
 
@@ -140,7 +140,7 @@
                          HTML invalido: el navegador deja el <datalist> entre los
                          <tr> y la tabla se renderiza con filas fantasma. -->
                     <datalist id="lista-productos"></datalist>
-                    <button type="button" class="btn-secundario" onclick="agregarItem()" style="margin-top: 8px;">+ Agregar ítem</button>
+                    <button type="button" class="btn btn-secundario" onclick="agregarItem()" style="margin-top: 8px;">+ Agregar ítem</button>
 
                     <div id="p-aviso-catalogo" class="p-aviso" style="display: none;">
                         Esta empresa no tiene contratado el módulo de stock, así que los ítems se cargan a mano.
@@ -172,8 +172,8 @@
             <div id="p-error" class="p-error" style="display: none;"></div>
 
             <div class="modal-acciones">
-                <button class="btn-primario" id="btn-guardar" onclick="guardar()">Guardar</button>
-                <button class="btn-secundario" onclick="cerrarFormulario()">Cancelar</button>
+                <button class="btn btn-crear" id="btn-guardar" onclick="guardar()">Guardar</button>
+                <button class="btn btn-secundario" onclick="cerrarFormulario()">Cancelar</button>
             </div>
         </div>
     </div>
@@ -187,7 +187,7 @@
 
             <div class="p-detalle-acciones no-imprimir">
                 <div id="p-detalle-botones" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
-                <button class="btn-secundario" onclick="cerrarDetalle()">Cerrar</button>
+                <button class="btn btn-secundario" onclick="cerrarDetalle()">Cerrar</button>
             </div>
 
             <!-- Hoja imprimible -->

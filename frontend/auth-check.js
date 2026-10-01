@@ -479,6 +479,26 @@ async function eliminarUsuario(id, nombre) {
  * Abre el modal de "cambiar mi contraseña". Lo crea la primera vez que se
  * necesita e inyecta en el <body>, así funciona en cualquier página sin
  * tener que agregar el HTML del modal a mano en index.html/pedidos.html/reparaciones.html.
+ *
+ * EL SUPERADMIN USA OTRA RUTA
+ * ---------------------------------------------------------------------------
+ * Este modal es el mismo para todos, pero la ruta que llama NO puede ser la
+ * misma:
+ *
+ *   - Los usuarios de una empresa van a POST /api/usuarios/cambiar-password,
+ *     que exige `verificarToken`.
+ *   - Ese middleware rechaza al SUPERADMIN a propósito, porque el panel no
+ *     tiene empresa, ni base, ni pool:
+ *         if (payload.rol === 'SUPERADMIN' || !payload.empresa_id) return 403;
+ *     Ese rechazo está bien para todo lo demás, pero dejaba al SuperAdmin sin
+ *     forma de cambiar su propia clave: el único modo era pedirle a alguien que
+ *     corriera `npm run reset-clave` desde la consola del servidor.
+ *   - Para el está POST /api/admin/yo/clave, que va con `verificarSuperAdmin`.
+ *
+ * Antes se mandaba siempre a la primera ruta, así que en admin.html el menú
+ * abría el modal, se escribía la clave nueva, y el servidor la rechazaba con
+ * un 403 que se traducía en "No se pudo cambiar la contraseña". De afuera
+ * parecía que el botón no funcionaba.
  */
 function abrirModalCambiarPassword() {
     let modal = document.getElementById('modal-cambiar-password');
@@ -502,52 +522,140 @@ function abrirModalCambiarPassword() {
                         </div>
                     </div>
                     <div class="campo">
-                        <label for="cambiar-password-nueva">Contraseña nueva (mínimo 6 caracteres):</label>
+                        <label for="cambiar-password-nueva">Contraseña nueva (mínimo 8 caracteres):</label>
                         <div class="campo-password-wrapper">
-                            <input type="password" id="cambiar-password-nueva" required minlength="6">
+                            <input type="password" id="cambiar-password-nueva" required minlength="8">
                             <button type="button" class="btn-toggle-password" onclick="toggleVisibilidadPassword('cambiar-password-nueva', this)" aria-label="Mostrar contraseña">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                             </button>
                         </div>
                     </div>
+                    <div class="campo">
+                        <label for="cambiar-password-repetir">Repetir la nueva:</label>
+                        <input type="password" id="cambiar-password-repetir" required minlength="8">
+                        <small class="admin-pista" id="pista-fuerza-clave" style="display:block;margin-top:6px;"></small>
+                    </div>
                     <div id="mensaje-cambiar-password" style="color: var(--color-danger, #dc3545); font-size: 13px; margin-bottom: 8px; display:none;"></div>
-                    <button type="submit" class="btn btn-crear w-100">Guardar nueva contraseña</button>
+                    <div class="admin-botones" style="display:flex;gap:10px;">
+                        <button type="button" class="btn btn-secundario" style="flex:1;" onclick="cerrarModal('modal-cambiar-password')">Cancelar</button>
+                        <button type="submit" class="btn btn-crear" style="flex:1;" id="btn-guardar-clave">Guardar nueva contraseña</button>
+                    </div>
                 </form>
             </div>
         `;
         document.body.appendChild(modal);
 
+        // Cuanto más larga y variada, mejor. Es una ayuda, no una regla: el
+        // servidor solo exige el mínimo de 8 caracteres y no juzga la
+        // contraseña. Mostrar esto evita el "ya está, son 8 caracteres" sin
+        // obligar a nadie a seguir un criterio arbitrario.
+        const pistaFuerza = document.getElementById('pista-fuerza-clave');
+        const medirFuerza = () => {
+            const v = document.getElementById('cambiar-password-nueva').value;
+            if (!v) { pistaFuerza.textContent = ''; return; }
+            let puntos = 0;
+            if (v.length >= 8) puntos++;
+            if (v.length >= 12) puntos++;
+            if (/[a-z]/.test(v) && /[A-Z]/.test(v)) puntos++;
+            if (/\d/.test(v)) puntos++;
+            if (/[^\w\s]/.test(v)) puntos++;
+            const nivel = puntos <= 2 ? 'Débil' : (puntos <= 4 ? 'Aceptable' : 'Buena');
+            const color = puntos <= 2 ? 'var(--color-danger, #dc3545)'
+                        : (puntos <= 4 ? 'var(--si-yellow, #ffc600)' : 'var(--color-success, #28a745)');
+            pistaFuerza.textContent = `${v.length} caracteres · ${nivel}`;
+            pistaFuerza.style.color = color;
+        };
+        document.getElementById('cambiar-password-nueva').addEventListener('input', medirFuerza);
+
         document.getElementById('form-cambiar-password').addEventListener('submit', async (e) => {
             e.preventDefault();
+
             const passwordActual = document.getElementById('cambiar-password-actual').value;
             const passwordNueva = document.getElementById('cambiar-password-nueva').value;
+            const repetir = document.getElementById('cambiar-password-repetir').value;
             const mensajeDiv = document.getElementById('mensaje-cambiar-password');
+            const boton = document.getElementById('btn-guardar-clave');
+
+            const mostrarError = (texto) => {
+                mensajeDiv.textContent = texto;
+                mensajeDiv.style.display = 'block';
+            };
             mensajeDiv.style.display = 'none';
 
+            // La comparación va en el navegador para que el error salga al
+            // instante, sin gastar un intento del limitador del servidor. La
+            // validación que manda sigue siendo la del backend.
+            if (passwordNueva.length < 8) {
+                return mostrarError('La contraseña nueva tiene que tener al menos 8 caracteres.');
+            }
+            if (passwordNueva !== repetir) {
+                return mostrarError('Las dos contraseñas nuevas no son iguales.');
+            }
+            if (passwordNueva === passwordActual) {
+                return mostrarError('La contraseña nueva es igual a la actual.');
+            }
+
+            // SuperAdmin: ruta del panel. Los demás: la ruta de su empresa.
+            const esSuperAdmin = (JSON.parse(localStorage.getItem('usuario_actual') || '{}')).rol === 'SUPERADMIN';
+            const url = esSuperAdmin
+                ? `${window.location.origin}/api/admin/yo/clave`
+                : `${window.location.origin}/api/usuarios/cambiar-password`;
+
+            boton.disabled = true;
+            boton.textContent = 'Guardando...';
+
             try {
-                const respuesta = await apiFetch(`${window.location.origin}/api/usuarios/cambiar-password`, {
+                const respuesta = await apiFetch(url, {
                     method: 'POST',
                     body: JSON.stringify({ passwordActual, passwordNueva })
                 });
                 const data = await respuesta.json();
 
                 if (respuesta.ok) {
-                    alert('¡Contraseña actualizada con éxito!');
+                    // El panel devuelve un token nuevo y hay que guardarlo: si
+                    // no, el token viejo sigue siendo el del navegador. No es
+                    // un problema de seguridad (la clave no viaja en el token),
+                    // pero el token viejo se sigue mostrando en el pie y la
+                    // sesión queda medio inconsistente.
+                    if (data.token) {
+                        localStorage.setItem('jwt_token', data.token);
+                    }
+                    mensajeDiv.style.display = 'none';
+                    avisarClaveCambiada();
                     document.getElementById('form-cambiar-password').reset();
+                    if (pistaFuerza) { pistaFuerza.textContent = ''; }
                     cerrarModal('modal-cambiar-password');
                 } else {
-                    mensajeDiv.textContent = data.error || 'No se pudo cambiar la contraseña.';
-                    mensajeDiv.style.display = 'block';
+                    mostrarError(data.error || 'No se pudo cambiar la contraseña.');
+                    boton.disabled = false;
+                    boton.textContent = 'Guardar nueva contraseña';
                 }
             } catch (error) {
                 console.error('Error al cambiar contraseña:', error);
-                mensajeDiv.textContent = 'No se pudo conectar con el servidor.';
-                mensajeDiv.style.display = 'block';
+                mostrarError('No se pudo conectar con el servidor.');
+                boton.disabled = false;
+                boton.textContent = 'Guardar nueva contraseña';
             }
         });
     }
 
     modal.style.display = 'block';
+}
+
+/** Aviso de "contraseña cambiada" sin `alert()`. */
+function avisarClaveCambiada() {
+    if (typeof avisar === 'function') {
+        avisar('Contraseña actualizada con éxito.');
+        return;
+    }
+    // En las páginas de empresa no está `avisar` (es del panel admin).
+    const caja = document.createElement('div');
+    caja.textContent = 'Contraseña actualizada con éxito.';
+    caja.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;padding:12px 18px;'
+        + 'border-radius:8px;background:var(--color-success,#28a745);color:#fff;font-weight:700;'
+        + 'box-shadow:0 4px 14px rgba(0,0,0,.25)';
+    document.body.appendChild(caja);
+    setTimeout(() => caja.remove(), 4000);
 }
 
 function cerrarSesion() {

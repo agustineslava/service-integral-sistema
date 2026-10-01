@@ -1023,9 +1023,52 @@ async function main() {
         console.log('  Limpiando...');
         try {
             if (falsa) await borrarEmpresaFalsa(falsa.id, falsa.nombre_db);
+
             if (creadaPorAlta) {
-                await central.query('DELETE FROM empresas WHERE slug LIKE ?', [`${PREFIJO}%`]);
+                // POR ID, NO POR PREFIJO DE SLUG.
+                //
+                // Antes decía:
+                //     DELETE FROM empresas WHERE slug LIKE 'f5b-prueba%'
+                // pero el alta de prueba se llama "Alta de Prueba F5b" y su slug
+                // sale del nombre: `alta-de-prueba-f5b`. Nunca empezó con
+                // "f5b-prueba", así que esa sentencia borraba CERO filas. La
+                // base sí se bajaba (la línea de abajo usa `nombre_db`, que es
+                // el dato correcto), y quedaba la fila sin base.
+                //
+                // El resultado era una huérfana por corrida: 5 corridas, 5
+                // empresas "Alta De Prueba F5b" en la lista del panel, sin base
+                // y sin forma de saber de dónde salían. La fila se borra con el
+                // `id` que devolvió la propia alta: es el único dato que no
+                // depende de adivinar un patrón.
+                await central.query('DELETE FROM usuarios_globales WHERE empresa_id = ?', [creadaPorAlta.id]);
+                await central.query('DELETE FROM empresas WHERE id = ?', [creadaPorAlta.id]);
                 await borrarBasePorAdmin(creadaPorAlta.nombre_db);
+            }
+
+            // --- residuo de corridas anteriores ---------------------------
+            //
+            // Si una corrida vieja quedó a medias (por ejemplo, el limitador de
+            // intentos cortó el login y la prueba murió antes de asignar
+            // `creadaPorAlta`), su fila y su base quedan ahí. Antes esto se
+            // barría con `slug LIKE 'f5b-prueba%'`, que no coincide con nada.
+            //
+            // Se arma una lista de candidatas por `nombre_db` —el nombre real,
+            // con el sufijo automático— y para CADA una se baja la base y
+            // después la fila. En ese orden: una base sin fila no se ve y no se
+            // puede borrar desde el panel, mientras que una fila sin base se ve,
+            // se puede borrar a mano y molesta menos.
+            const [residuo] = await (await admin()).query(
+                `SELECT id, nombre_db FROM empresas
+                  WHERE nombre_db LIKE 'si\\_tenant\\_alta\\_de\\_prueba\\_f5b%'
+                     OR slug LIKE 'f5b-prueba%'`
+            );
+            for (const r of residuo) {
+                await borrarBasePorAdmin(r.nombre_db);
+                await central.query('DELETE FROM usuarios_globales WHERE empresa_id = ?', [r.id]);
+                await central.query('DELETE FROM empresas WHERE id = ?', [r.id]);
+            }
+            if (residuo.length) {
+                console.log(`  Residuo de corridas anteriores: ${residuo.length} empresa(s) barrida(s).`);
             }
             // El usuario "intruso" de la seccion 2 tambien es de prueba. Si el
             // guard estuviera roto se habria creado de verdad, y sin esta linea

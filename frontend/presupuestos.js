@@ -593,28 +593,28 @@ function dibujarBotonesDetalle() {
     const botones = [];
 
     if (p.estado !== 'APROBADO' && p.estado !== 'RECHAZADO') {
-        botones.push(`<button class="btn-primario" onclick="editarDesdeDetalle()">Editar</button>`);
-        botones.push(`<button class="btn-secundario" onclick="cambiarEstado('ENVIADO')">Marcar enviado</button>`);
+        botones.push(`<button class="btn btn-crear" onclick="editarDesdeDetalle()">Editar</button>`);
+        botones.push(`<button class="btn btn-secundario" onclick="cambiarEstado('ENVIADO')">Marcar enviado</button>`);
     }
 
     if (admin) {
         if (p.estado !== 'APROBADO') {
-            botones.push(`<button class="btn-primario" onclick="cambiarEstado('APROBADO')">Aprobar</button>`);
+            botones.push(`<button class="btn btn-crear" onclick="cambiarEstado('APROBADO')">Aprobar</button>`);
         }
         if (p.estado !== 'RECHAZADO') {
-            botones.push(`<button class="btn-secundario" onclick="cambiarEstado('RECHAZADO')">Rechazar</button>`);
+            botones.push(`<button class="btn btn-secundario" onclick="cambiarEstado('RECHAZADO')">Rechazar</button>`);
         }
         // Para tocar un documento cerrado hay que devolverlo a borrador. Es un
         // cambio de estado explícito, no una excepción escondida.
         if (p.estado === 'APROBADO' || p.estado === 'RECHAZADO') {
-            botones.push(`<button class="btn-secundario" onclick="cambiarEstado('BORRADOR')">Volver a borrador</button>`);
+            botones.push(`<button class="btn btn-secundario" onclick="cambiarEstado('BORRADOR')">Volver a borrador</button>`);
         }
         if (p.estado === 'BORRADOR') {
-            botones.push(`<button class="btn-peligro" onclick="borrarDetalle()">Eliminar</button>`);
+            botones.push(`<button class="btn btn-eliminar" onclick="borrarDetalle()">Eliminar</button>`);
         }
     }
 
-    botones.push(`<button class="btn-secundario" onclick="window.print()">Imprimir</button>`);
+    botones.push(`<button class="btn btn-secundario" onclick="window.print()">Imprimir</button>`);
 
     caja.innerHTML = botones.join(' ');
 }

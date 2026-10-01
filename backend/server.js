@@ -2673,6 +2673,94 @@ app.patch('/api/admin/empresas/:id', verificarSuperAdmin, rutaAdmin(async (req, 
         cambios.push('notas actualizadas');
     }
 
+    /* --- Datos de la empresa y de su marca -------------------------------
+     *
+     * Antes esto no se podia hacer desde el panel: el PATCH solo aceptaba
+     * estado, plan, limite, vencimiento y notas. Para tocar el nombre, el
+     * subtitulo, los colores, el logo o los datos que salen impresos en los
+     * comprobantes habia que entrar por consola con `npm run datos-empresa`.
+     * Eso es exactamente el dato que un SuperAdmin cambia todos los dias
+     * (arreglar un telefono, poner el CUIT, cambiar el logo de un cliente que
+     * no se sabe cual es), asi que quedo en la pantalla.
+     *
+     * LO QUE NO SE PUEDE CAMBIAR POR ACA, Y POR QUE
+     *   - `slug`: es el subdominio y la clave con la que se resuelve la empresa
+     *     antes de iniciar sesion. Cambiarlo rompe los enlaces guardados y los
+     *     que ya se imprimieron en papel.
+     *   - `nombre_db`: es contra la que se abre el pool de cada request. Un
+     *     nombre de base equivocado no es un dato mal escrito, es una base que
+     *     no existe: la empresa entera deja de andar y no se nota cual es.
+     *   - `id`: lo elige la base.
+     *
+     * Si alguno de los dos llega igual, se ignora en silencio en vez de
+     * fallar. No es un error del cliente: son datos que la pantalla no manda.
+     */
+    const EDITABLES = {
+        nombre:           { largo: 150, requerido: true },
+        rubro:            { largo: 40,  requerido: true, minusculas: true },
+        subtitulo:        { largo: 120, vacio: null },
+        telefono:         { largo: 50,  vacio: null },
+        email_contacto:   { largo: 150, vacio: null, email: true },
+        direccion:        { largo: 255, vacio: null },
+        cuit:             { largo: 20,  vacio: null },
+        logo_url:         { largo: 500, vacio: null, url: true },
+        color_primario:   { largo: 7,   vacio: null, color: true },
+        color_secundario: { largo: 7,   vacio: null, color: true }
+    };
+
+    for (const [campo, regla] of Object.entries(EDITABLES)) {
+        if (b[campo] === undefined) continue;
+
+        // Un string vacío se guarda como NULL, no como ''. Es la diferencia
+        // entre "no cargó el CUIT" y "cargó un CUIT que no se ve": la consulta
+        // de los comprobantes distingue las dos cosas con `IS NOT NULL`.
+        const crudo = b[campo] === null ? '' : String(b[campo]).trim();
+        // `let`, no `const`: más abajo se normaliza (minúsculas, color en
+        // minúsculas) y con `const` eso era un 500 "Assignment to constant
+        // variable" en el primer campo que llegaba en mayúsculas. Pasaba
+        // desapercibido porque los campos INVÁLIDOS se rechazan antes de
+        // llegar ahí: solo fallaban los válidos, que son los que se usan.
+        let valor = crudo === '' ? (regla.vacio === undefined ? '' : regla.vacio) : crudo;
+
+        if (regla.requerido && (valor === null || valor === '')) {
+            throw errorAdmin(`El campo "${campo}" no puede quedar vacío.`);
+        }
+        if (valor !== null && String(valor).length > regla.largo) {
+            throw errorAdmin(
+                `"${campo}" tiene ${String(valor).length} caracteres y el máximo es ${regla.largo}.`
+            );
+        }
+        if (regla.minusculas && valor) valor = valor.toLowerCase();
+        if (regla.email && valor && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor)) {
+            throw errorAdmin(`"${valor}" no es un email válido.`);
+        }
+        if (regla.url && valor) {
+            if (!/^https?:\/\/[^\s]+$/i.test(valor)) {
+                throw errorAdmin('El logo tiene que ser una dirección web completa (http o https).');
+            }
+            if (/\.(svg)$/i.test(valor)) {
+                // Un SVG es un programa: puede ejecutar JavaScript y pedir
+                // archivos de la red de quien lo abre. Puesto en un <img> no
+                // corre script, pero el mismo valor se usa en descargas y en
+                // plantillas, y ahi si podria. No se acepta.
+                throw errorAdmin('El logo no puede ser un SVG. Usá un PNG o un JPG.');
+            }
+        }
+        if (regla.color && valor && !/^#[0-9a-fA-F]{6}$/.test(valor)) {
+            throw errorAdmin(`"${valor}" no es un color. Se escriben seis dígitos hexadecimales, como #1a7fbc.`);
+        }
+
+        // Normalizar el color en minúsculas: si no, el mismo color se
+        // guardaría de dos formas distintas y el diff de la auditoría sería ruido.
+        if (regla.color && valor) valor = valor.toLowerCase();
+
+        const previo = actual[campo] ?? null;
+        if (String(previo ?? '') === String(valor ?? '')) continue;
+
+        sets.push(`${campo} = ?`); vals.push(valor);
+        cambios.push(`${campo}: ${previo || '(vacío)'} -> ${valor || '(vacío)'}`);
+    }
+
     if (!sets.length) {
         return res.json({ mensaje: 'No había nada que cambiar.', empresa: actual });
     }
@@ -2992,6 +3080,84 @@ app.get('/api/admin/yo', verificarSuperAdmin, rutaAdmin(async (req, res) => {
             metricas: metricas.n
         }
     });
+}));
+
+/**
+ * El SuperAdmin cambia SU PROPIA clave.
+ *
+ * POR QUE ESTA RUTA EXISTE Y NO SE REUSA /api/usuarios/cambiar-password
+ * --------------------------------------------------------------------------
+ * Esa ruta (la de los usuarios de una empresa) exige `verificarToken`, y ese
+ * middleware rechaza al SUPERADMIN a proposito:
+ *
+ *     if (payload.rol === 'SUPERADMIN' || !payload.empresa_id) {
+ *         return res.status(403).json({ error: 'Esta sesion no corresponde a una empresa.' });
+ *     }
+ *
+ * El rechazo esta bien justificado para todo lo demas (el panel no tiene base
+ * de empresa, ni pool, ni `req.empresa`). Pero dejaba al SuperAdmin sin forma
+ * de cambiar su propia clave: la unica puerta cerrada por `verificarToken`
+ * que de verdad le hacía falta, no tenía equivalente. El único modo era pedir
+ * que alguien ejecutara `npm run reset-clave` desde la consola del servidor.
+ *
+ * Por eso va con `verificarSuperAdmin`, que relee el usuario en la base
+ * central en cada request y filtra rol y activo DENTRO del SQL. Esa guarda no
+ * usa `conContexto` ni `db`: no hay empresa, no hay pool que abrir.
+ *
+ * Devuelve un token nuevo, como la de los usuarios de empresa: el que trae el
+ * SuperAdmin sigue siendo valido (no se guarda la contrasena en el token), pero
+ * renovarlo evita que el panel siga mostrando "sesion vieja" y, sobre todo,
+ * deja el estado del navegador consistente con el cambio recien hecho.
+ */
+app.post('/api/admin/yo/clave', verificarSuperAdmin, limitadorCambioPassword, rutaAdmin(async (req, res) => {
+    const { passwordActual, passwordNueva } = req.body || {};
+
+    if (!passwordActual || !passwordNueva) {
+        throw errorAdmin('Faltan datos.');
+    }
+    if (typeof passwordNueva !== 'string' || passwordNueva.length < 8) {
+        throw errorAdmin('La contrasena nueva tiene que tener al menos 8 caracteres.');
+    }
+    if (passwordActual === passwordNueva) {
+        throw errorAdmin('La contrasena nueva es igual a la actual.');
+    }
+
+    const fila = await central.uno(
+        'SELECT id, email, nombre, rol, password_hash FROM usuarios_globales WHERE id = ?',
+        [req.superadmin.id]
+    );
+    if (!fila) return res.status(404).json({ error: 'Usuario no encontrado.' });
+
+    const coincide = await bcrypt.compare(String(passwordActual), fila.password_hash);
+    if (!coincide) {
+        // No se distingue entre "no existe" y "clave incorrecta": ya se sabe
+        // que existe, es el propio SuperAdmin, asi que el mensaje puede ser
+        // claro sin filtrar nada.
+        throw errorAdmin('La contrasena actual no es correcta.');
+    }
+
+    const hashNuevo = await bcrypt.hash(String(passwordNueva), 10);
+    await central.query(
+        'UPDATE usuarios_globales SET password_hash = ? WHERE id = ?',
+        [hashNuevo, fila.id]
+    );
+
+    await altas.auditar({
+        usuario: req.superadmin,
+        accion: 'superadmin.cambiar_clave',
+        detalle: { email: fila.email },
+        ip: ipDe(req)
+    });
+
+    console.log(`  SuperAdmin ${fila.email} cambio su propia clave por ${ipDe(req)}`);
+
+    const tokenNuevo = jwt.sign(
+        { id: fila.id, email: fila.email, nombre: fila.nombre, rol: fila.rol, empresa_id: null },
+        JWT_SECRET,
+        { expiresIn: '8h' }
+    );
+
+    res.json({ mensaje: 'Contrasena actualizada con exito.', token: tokenNuevo });
 }));
 
 /* ==========================================================================

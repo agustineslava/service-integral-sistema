@@ -433,8 +433,56 @@ textarea:focus {
 /* ==========================================================================
    6. TABLAS DE DATOS
    ========================================================================== */
+
+/*
+ * POR QUE LA TABLA NO SE PUEDE USAR SIN ESTA REGLA
+ * -----------------------------------------------------------------------
+ * Antes: `overflow-x: auto` y nada más. Eso deja el scroll horizontal
+ * funcionando, pero la barra aparece ABAJO de la tabla. En "Equipos en
+ * Servicio Técnico" hay diez columnas y, con zoom al 150% o más, cada fila
+ * ocupa varias alturas: para moverte a la derecha tenías que bajar hasta el
+ * final de la tabla a buscar la barra y entonces volver arriba. Con muchas
+ * órdenes eso es un viaje largo y la tabla parecía no tener scroll.
+ *
+ * Lo que hace acá:
+ *   - `max-height` acota la altura, así la barra horizontal queda siempre a la
+ *     vista, sin importar cuántas filas haya;
+ *   - `overflow-y: auto` deja el scroll vertical donde corresponde, dentro de
+ *     la tabla y no en la página entera;
+ *   - el `thead` queda fijo, para saber siempre qué columna se está mirando.
+ *
+ * `max-height` en `vh` y no en pixels: con el zoom del navegador, `vh` se
+ * mantiene en pantalla, que es lo que se necesita.
+ *
+ * Para las tablas que NO quieren esta altura (las de detalle, que son cortas)
+ * se usa `.tabla-wrapper.sin-tope`, que saca el `max-height`.
+ */
 .tabla-wrapper {
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: 70vh;
+
+    /* La barra tiene que verse sobre el fondo de la tarjeta, no flotando
+       sobre el de la página, que en modo oscuro es casi igual y se pierde. */
+    scrollbar-color: var(--si-blue-vibrant) transparent;
+}
+
+/* Para tablas cortas: scroll horizontal sí, alto libre. */
+.tabla-wrapper.sin-tope {
+    max-height: none;
+    overflow-y: visible;
+}
+
+/* La cabecera no se va con el scroll. Sin esto, con el scroll interno arriba,
+   al bajar a la fila 40 no se sabe si es "Fecha" o "Estado". */
+.tabla-wrapper thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    /* OJO: se repite `var(--bg-body)`, el mismo fondo que ya tiene la regla
+       `th`. Sticky necesita un fondo opaco o las filas se leen a traves del
+       encabezado, pero no hay que cambiarle el color a la cabecera. */
+    background-color: var(--bg-body);
 }
 
 table {
@@ -542,6 +590,33 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
 .btn-info { background-color: var(--si-blue-vibrant); }
 .btn-actualizar { background-color: var(--color-success); }
 .btn-eliminar { background-color: var(--color-danger); }
+
+/*
+ * Boton secundario: la accion que se puede hacer, pero no es la principal.
+ * Cancelar, Cerrar, Imprimir, "volver a borrador".
+ *
+ * Se agrego porque la pagina de Presupuestos usaba `btn-primario`,
+ * `btn-secundario` y `btn-peligro`, tres clases que NO existian en ningun CSS.
+ * Esos botones salian como texto pelado, sin fondo ni forma, y por eso la
+ * pagina se veía distinta de todas las demas. Ahora los nombres coinciden con
+ * el resto del sistema: `btn-crear` para lo principal, `btn-secundario` para lo
+ * secundario, `btn-eliminar` para lo destructivo.
+ */
+.btn-secundario {
+    background-color: transparent;
+    color: var(--si-blue-vibrant);
+    border: 1.5px solid var(--si-blue-vibrant);
+}
+.btn-secundario:hover {
+    /* Se oscurece el fondo, no el texto: el azul del texto tiene que quedar
+       igual porque el fondo es casi transparente. */
+    background-color: color-mix(in srgb, var(--si-blue-vibrant) 14%, transparent);
+    border-color: var(--si-blue-dark);
+}
+.btn-secundario:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 
 .btn-svg-icono {
     display: inline-flex;

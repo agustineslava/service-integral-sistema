@@ -171,6 +171,11 @@ function renderizarTablaReparaciones(lista) {
                             <strong>📝</strong> ${escapeHtml(r.notas_servicio)}
                         </div>
                     ` : '<small style="color: var(--text-muted); font-style: italic;">Sin notas</small>'}
+                    ${r.diagnostico_tecnico ? `
+                        <div style="margin-top: 5px; font-size: 12px; color: var(--si-blue-vibrant); background: color-mix(in srgb, var(--si-blue-vibrant) 8%, transparent); padding: 5px 8px; border-radius: 5px; border-left: 3px solid var(--si-blue-vibrant); line-height: 1.3;">
+                            <strong>🔧</strong> ${escapeHtml(r.diagnostico_tecnico)}
+                        </div>
+                    ` : ''}
                 </td>
                 <td><strong style="color: var(--si-blue-vibrant); font-size: 12px;">${escapeHtml(textoRepuestos)}</strong></td>
                 <td><strong>$${parseFloat(r.total).toFixed(2)}</strong></td>
@@ -225,6 +230,7 @@ function filtrarYRenderizarReparaciones() {
             (r.equipo || '').toLowerCase().includes(term) ||
             (r.falla_declarada || '').toLowerCase().includes(term) ||
             (r.notas_servicio || '').toLowerCase().includes(term) ||
+            (r.diagnostico_tecnico || '').toLowerCase().includes(term) ||
             (r.repuestos_usados || '').toLowerCase().includes(term) ||
             String(r.id).includes(term)
         );
@@ -398,6 +404,9 @@ function abrirModalEditar(id) {
     const inputNotas = document.getElementById('edit-rep-notas');
     if (inputNotas) inputNotas.value = r.notas_servicio || '';
 
+    const inputTrabajo = document.getElementById('edit-rep-diagnostico');
+    if (inputTrabajo) inputTrabajo.value = r.diagnostico_tecnico || '';
+
     document.getElementById('edit-rep-mano-obra').value = r.costo_mano_obra;
     document.getElementById('edit-rep-costo-rep').value = r.costo_repuestos;
     document.getElementById('edit-rep-estado').value = r.estado;
@@ -437,6 +446,9 @@ if (formEditarReparacion) {
             equipo: capitalizarPalabras(document.getElementById('edit-rep-equipo').value),
             falla_declarada: capitalizarPrimeraLetra(document.getElementById('edit-rep-falla').value),
             notas_servicio: document.getElementById('edit-rep-notas') ? capitalizarPrimeraLetra(document.getElementById('edit-rep-notas').value) : null,
+            // Trabajo realizado. La columna `diagnostico_tecnico` ya la aceptaba
+            // el backend; faltaba mandarla desde acá.
+            diagnostico_tecnico: document.getElementById('edit-rep-diagnostico') ? capitalizarPrimeraLetra(document.getElementById('edit-rep-diagnostico').value) : null,
             repuestos_detalle: repuestosAsignadosEdit,
             costo_mano_obra: document.getElementById('edit-rep-mano-obra').value,
             costo_repuestos: document.getElementById('edit-rep-costo-rep').value,
@@ -484,6 +496,8 @@ if (formReparacion) {
             equipo: capitalizarPalabras(document.getElementById('rep-equipo').value),
             falla_declarada: capitalizarPrimeraLetra(document.getElementById('rep-falla').value),
             notas_servicio: document.getElementById('rep-notas') ? capitalizarPrimeraLetra(document.getElementById('rep-notas').value) : null,
+            // Trabajo realizado (columna `diagnostico_tecnico`).
+            diagnostico_tecnico: document.getElementById('rep-diagnostico') ? capitalizarPrimeraLetra(document.getElementById('rep-diagnostico').value) : null,
             repuestos_detalle: repuestosAsignadosNuevo,
             costo_mano_obra: document.getElementById('rep-mano-obra').value,
             costo_repuestos: document.getElementById('rep-costo-rep').value,
@@ -500,6 +514,7 @@ if (formReparacion) {
                 alert('¡Orden de trabajo registrada con éxito!');
                 formReparacion.reset();
                 if (document.getElementById('rep-notas')) document.getElementById('rep-notas').value = '';
+                if (document.getElementById('rep-diagnostico')) document.getElementById('rep-diagnostico').value = '';
                 repuestosAsignadosNuevo = [];
                 renderizarChipsRepuestos('nuevo');
                 await cargarReparaciones();
@@ -528,6 +543,7 @@ function enviarWhatsAppTecnico(id) {
     msj += `⚙️ *Equipo:* ${r.equipo} (${r.tipo_cobertura})\n`;
     msj += `⚠️ *Falla Declarada:* ${r.falla_declarada}\n`;
     if (r.notas_servicio) msj += `📝 *Notas/Logística:* ${r.notas_servicio}\n`;
+    if (r.diagnostico_tecnico) msj += `🔧 *Trabajo realizado:* ${r.diagnostico_tecnico}\n`;
     msj += `🔩 *Repuestos:* ${r.repuestos_usados || 'Ninguno'}\n`;
     msj += `📌 *Estado:* ${r.estado}\n`;
     msj += `💵 *Total:* $${parseFloat(r.total).toFixed(2)}\n`;

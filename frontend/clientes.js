@@ -143,6 +143,9 @@ function renderizarHistorialCliente(historial) {
                     <span class="badge-estado-taller ${claseBadge}">${escapeHtml(r.estado)}</span>
                 </div>
                 <small style="color: var(--text-muted);"><strong>Falla:</strong> ${escapeHtml(r.falla_declarada)}</small>
+                ${r.diagnostico_tecnico ? `
+                    <small style="color: var(--si-blue-vibrant);"><strong>Trabajo realizado:</strong> ${escapeHtml(r.diagnostico_tecnico)}</small>
+                ` : ''}
                 <small style="color: var(--si-blue-vibrant); font-size: 12px;"><strong>Repuestos:</strong> ${escapeHtml(textoRepuestos)}</small>
                 <small style="color: var(--text-muted);">Ingresó: ${fecha} — Total: $${parseFloat(r.total || 0).toFixed(2)}</small>
             </div>

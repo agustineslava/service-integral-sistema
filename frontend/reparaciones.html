@@ -88,6 +88,20 @@
                     <textarea id="rep-notas" rows="2" placeholder="Ej: Retirar martes por la tarde. Portón negro sin timbre. Llamar antes al llegar." style="width: 100%; font-family: inherit; resize: vertical;"></textarea>
                 </div>
 
+                <!-- TRABAJO REALIZADO
+                     La columna `diagnostico_tecnico` ya existía en la base y la
+                     API la aceptaba en el alta y en la edición, pero no había
+                     ningún campo en la pantalla: era imposible de escribir. Se
+                     agrega acá, al lado de las notas.
+
+                     Es distinto a "Falla declarada": la falla es lo que el
+                     cliente dice que le pasa, esto es lo que el técnico hizo. Se
+                     muestra después en la ficha del cliente. -->
+                <div class="campo" style="margin-bottom: 15px;">
+                    <label for="rep-diagnostico">Trabajo Realizado:</label>
+                    <textarea id="rep-diagnostico" rows="2" placeholder="Ej: Se cambió la placa y el capacitor. Se probó 30 min, quedó funcionando." style="width: 100%; font-family: inherit; resize: vertical;"></textarea>
+                </div>
+
                 <!-- SELECCIÓN MÚLTIPLE DE REPUESTOS -->
                 <div class="campo" style="margin-bottom: 15px;">
                     <label>Repuestos Utilizados / Asignados:</label>
@@ -222,6 +236,12 @@
                     <div class="campo" style="margin-top: 10px;">
                         <label for="edit-rep-notas">Notas de Servicio / Logística:</label>
                         <textarea id="edit-rep-notas" rows="2" placeholder="Indicaciones de visita, retiro o entrega..." style="width: 100%; font-family: inherit; resize: vertical;"></textarea>
+                    </div>
+
+                    <!-- Trabajo Realizado. Mismo campo que en el alta. -->
+                    <div class="campo" style="margin-top: 10px;">
+                        <label for="edit-rep-diagnostico">Trabajo Realizado:</label>
+                        <textarea id="edit-rep-diagnostico" rows="2" placeholder="Qué se hizo al equipo, qué se cambió y cómo quedó..." style="width: 100%; font-family: inherit; resize: vertical;"></textarea>
                     </div>
 
                     <div class="campo" style="margin-top: 10px;">

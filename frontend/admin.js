@@ -444,35 +444,124 @@ function pintarDetalle(d) {
             <div class="valor ${valor ? '' : 'vacio'}">${valor ? escapeHtml(valor) : 'sin cargar'}</div>
         </div>`;
 
+    /*
+     * Atajo para los controles del formulario de datos.
+     *
+     * El `data-campo` lleva el NOMBRE de la columna, que no siempre se deduce
+     * del id del control. Es lo que permite que la función que guarda sea
+     * una sola y no una tabla de ids: lee los `[data-campo]` del formulario y
+     * arma el PATCH con lo que encuentra.
+     */
+    const campo = (etiqueta, columna, tipo, opciones = {}) => {
+        const id = `det-dato-${columna}`;
+        const valor = (e[columna] === null || e[columna] === undefined) ? '' : String(e[columna]);
+        const comunes = `id="${id}" data-campo="${columna}" placeholder="${escapeHtml(opciones.pista || 'Sin cargar')}"`
+                        + (opciones.requerido ? ' required' : '');
+
+        if (tipo === 'select') {
+            return `
+                <div class="campo">
+                    <label for="${id}">${escapeHtml(etiqueta)}</label>
+                    <select ${comunes}>
+                        ${opciones.valores.map((v) => `
+                            <option value="${escapeHtml(v[0])}" ${v[0] === valor ? 'selected' : ''}>
+                                ${escapeHtml(v[1])}
+                            </option>`).join('')}
+                    </select>
+                </div>`;
+        }
+
+        if (tipo === 'color') {
+            /*
+             * Un <input type="color"> no admite valor vacío: el navegador le
+             * pone uno por su cuenta (#000000) si no hay. Como el cliente
+             * puede no tener color cargado todavía, se le pone un azul
+             * genérico que se ve en el cuadradito de al lado, y el campo de
+             * texto es el que manda de verdad. Si se guardara el color del
+             * cuadradito, un cliente sin marca cargada quedaría con azul
+             * puesto sin que nadie lo haya elegido.
+             */
+            const colorValido = /^#[0-9a-fA-F]{6}$/.test(valor);
+            return `
+                <div class="campo">
+                    <label for="${id}">${escapeHtml(etiqueta)}</label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <input type="color" data-color-aux="${id}" value="${colorValido ? valor : '#1a7fbc'}"
+                               style="width:46px;height:38px;padding:2px;cursor:pointer;flex-shrink:0;"
+                               aria-hidden="true" tabindex="-1">
+                        <input type="text" ${comunes} value="${escapeHtml(valor)}"
+                               style="flex:1;min-width:0;font-family:monospace;" maxlength="7">
+                    </div>
+                </div>`;
+        }
+
+        return `
+            <div class="campo">
+                <label for="${id}">${escapeHtml(etiqueta)}</label>
+                <input type="${tipo}" ${comunes} value="${escapeHtml(valor)}">
+            </div>`;
+    };
+
     return `
         <div class="admin-detalle-seccion">
-            <h3>Identificación</h3>
-            <div class="admin-datos">
-                ${dato('Identificador', e.slug)}
-                ${dato('Base de datos', e.nombre_db)}
-                ${dato('Rubro', e.rubro)}
-                ${dato('Alta', e.fecha_alta ? new Date(e.fecha_alta).toLocaleString('es-AR') : null)}
-                ${dato('Vencimiento', e.fecha_vencimiento)}
-                ${dato('Estado', e.estado)}
+            <h3>Datos de la empresa</h3>
+            <div class="admin-grilla">
+                ${campo('Nombre', 'nombre', 'text', { requerido: true, pista: 'Service Integral S.A.' })}
+                ${campo('Rubro', 'rubro', 'select', {
+                    valores: [
+                        ['taller', 'Taller / Mecánico'],
+                        ['cerrajeria', 'Cerrajería'],
+                        ['electricidad', 'Electricidad'],
+                        ['plomeria', 'Plomería'],
+                        ['climatizacion', 'Climatización'],
+                        ['computacion', 'Computación'],
+                        ['general', 'General']
+                    ]
+                })}
+                ${campo('Subtítulo', 'subtitulo', 'text', { pista: 'Service Integral · Mantenimiento' })}
             </div>
         </div>
 
         <div class="admin-detalle-seccion">
             <h3>Marca y comprobantes</h3>
-            <div class="admin-datos">
-                ${dato('Subtítulo', e.subtitulo)}
-                ${dato('Teléfono', e.telefono)}
-                ${dato('Email de contacto', e.email_contacto)}
-                ${dato('Dirección', e.direccion)}
-                ${dato('CUIT', e.cuit)}
-                ${dato('Logo', e.logo_url)}
-                ${dato('Color primario', e.color_primario)}
-                ${dato('Color secundario', e.color_secundario)}
+            <div class="admin-grilla">
+                ${campo('Teléfono', 'telefono', 'tel', { pista: '+54 11 1234-5678' })}
+                ${campo('Email de contacto', 'email_contacto', 'email', { pista: 'contacto@empresa.com' })}
+                ${campo('Dirección', 'direccion', 'text', { pista: 'Av. Siempreviva 742' })}
+                ${campo('CUIT', 'cuit', 'text', { pista: '30-12345678-9' })}
+                ${campo('Color primario', 'color_primario', 'color')}
+                ${campo('Color secundario', 'color_secundario', 'color')}
+            </div>
+            <div class="admin-grilla" style="margin-top:12px;">
+                ${campo('Logo (URL)', 'logo_url', 'url', { pista: 'https://.../logo.png' })}
+                <div class="campo" style="align-self:end;">
+                    <button class="btn btn-actualizar" style="width:100%;" onclick="guardarDatosEmpresa(${e.id})">
+                        Guardar datos y marca
+                    </button>
+                </div>
             </div>
             <small class="admin-pista" style="display:block;margin-top:8px;">
-                Con <code>npm run datos-empresa ${escapeHtml(e.slug)} &lt;campo&gt; &lt;valor&gt;</code> se cambian.
-                Si el teléfono, la dirección y el CUIT están sin cargar, el presupuesto
-                impreso sale sin esos datos.
+                Teléfono, dirección y CUIT salen impresos en presupuestos y órdenes: si
+                faltan, el comprobante se imprime sin ellos. El logo tiene que ser un PNG o
+                un JPG, y escrito como dirección completa: un SVG puede ejecutar código y
+                el servidor lo rechaza.
+            </small>
+        </div>
+
+        <div class="admin-detalle-seccion">
+            <h3>Identificación técnica</h3>
+            <div class="admin-datos">
+                ${dato('Identificador', e.slug)}
+                ${dato('Base de datos', e.nombre_db)}
+                ${dato('Alta', e.fecha_alta ? new Date(e.fecha_alta).toLocaleString('es-AR') : null)}
+                ${dato('Vencimiento', e.fecha_vencimiento)}
+                ${dato('Estado', e.estado)}
+            </div>
+            <small class="admin-pista" style="display:block;margin-top:8px;">
+                El identificador y la base de datos no se cambian desde acá, a propósito.
+                El identificador es el subdominio con el que se resuelve la empresa antes
+                de iniciar sesión, y la base es contra la que se abre la conexión de cada
+                pedido. Tocarlos desde un formulario rompe cosas que no se ven.
             </small>
         </div>
 
@@ -649,6 +738,76 @@ async function guardarCambios(id, campo, valor) {
         await abrirDetalle(id);
     }
 }
+
+/**
+ * Guarda TODOS los campos de datos y marca de una empresa en un solo PATCH.
+ *
+ * Por que todos juntos y no uno por uno al perder el foco:
+ *   - El PATCH del backend solo arma el UPDATE con los campos que cambian, y
+ *     devuelve un arreglo `cambios` con lo que efectivamente se movio. Mandando
+ *     todo de una vez se ve ese resumen, que es lo que uno quiere saber: "que
+ *     toco". Mandando campo por campo se verian diez mensajes de "guardado".
+ *   - Diez requests por guardado es una forma facil de que uno falle en
+ *     silencio y queden la mitad de los datos viejos.
+ *
+ * Los campos se leen por `[data-campo]`, asi que agregar uno nuevo es
+ * agregar una linea en `pintarDetalle` y nada mas: no hay que tocar esta
+ * funcion ni el backend.
+ */
+async function guardarDatosEmpresa(id) {
+    const cuerpo = document.getElementById('detalle-cuerpo');
+    const controles = cuerpo.querySelectorAll('[data-campo]');
+    if (!controles.length) return;
+
+    const datos = {};
+    controles.forEach((el) => { datos[el.dataset.campo] = el.value; });
+
+    // El select de rubro siempre tiene valor, asi que la validacion de "no
+    // vacio" del backend no la agarra. El nombre si puede quedar en blanco.
+    if (!datos.nombre || !datos.nombre.trim()) {
+        avisar('El nombre de la empresa no puede quedar vacío.', true);
+        const input = cuerpo.querySelector('[data-campo="nombre"]');
+        if (input) input.focus();
+        return;
+    }
+
+    const boton = cuerpo.querySelector('button[onclick^="guardarDatosEmpresa"]');
+    if (boton) { boton.disabled = true; boton.textContent = 'Guardando...'; }
+
+    try {
+        const r = await apiFetch(`${API}/admin/empresas/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(datos)
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'No se pudo guardar.');
+
+        avisar(d.mensaje || 'Guardado.');
+        await cargarEmpresas();
+        await abrirDetalle(id);
+    } catch (err) {
+        avisar(err.message, true);
+        // No se recarga el detalle: recargarlo borra lo que el SuperAdmin
+        // acaba de escribir y obliga a reescribirlo entero.
+        if (boton) { boton.disabled = false; boton.textContent = 'Guardar datos y marca'; }
+    }
+}
+
+/**
+ * Mantiene el cuadradito de color pegado al texto de al lado.
+ *
+ * El texto manda: se puede escribir a mano y el servidor lo valida. El
+ * cuadradito es la Vista previa, y va al revés porque escribir "#a1b2c3" es
+ * mas comodo que mover un control de color.
+ */
+document.addEventListener('input', (ev) => {
+    const texto = ev.target;
+    if (!texto.matches || !texto.matches('input[data-campo^="color_"]')) return;
+    const valor = texto.value.trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(valor)) return;
+    const aux = document.querySelector(`input[data-color-aux="${texto.id}"]`);
+    if (aux) aux.value = valor;
+});
 
 // ==========================================================================
 // Módulos
