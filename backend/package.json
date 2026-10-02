@@ -25,6 +25,8 @@
     "f4:verificar": "node tools/f4-verificar.js",
     "f5:verificar": "node tools/f5-verificar.js",
     "f5b:verificar": "node tools/f5b-verificar.js",
+    "f5e:verificar": "node tools/ver-etiquetas-qr.js",
+    "f5e:mutar": "node tools/mutar-etiquetas-qr.js",
     "f4:limpiar": "node tools/f4-limpiar-usuarios.js",
     "limites": "node tools/limite-usuarios.js",
     "modulos": "node tools/modulos.js",

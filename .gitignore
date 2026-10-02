@@ -31,6 +31,10 @@ logs/
 backend/logs/
 *.log
 
+# Maniobras de una sola vez: leer un esquema, borrar rutas, medir una cosa.
+# Lo que queda para siempre va en backend/tools/, no aca.
+backend/scratch/
+
 # ===========================================================================
 # Binarios locales y artefactos de tunnel
 # ===========================================================================

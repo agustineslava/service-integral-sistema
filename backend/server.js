@@ -1330,8 +1330,21 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 
 /**
- * Genera un codigo corto unico para URL publica /e/:codigo
+ * Genera un codigo corto unico para la etiqueta.
  * 12 chars alfanumericos (sin vocales para evitar palabras feas).
+ *
+ * QUE CONTIENE EL QR: SOLO EL CODIGO, NADA MAS
+ * Antes el QR llevaba la URL publica (`http://host/e/<codigo>`) y eso ataba la
+ * etiqueta a un dominio que todavia no existe: en desarrollo apuntaba a
+ * `localhost:3000`, que en un celular no significa nada, y el dia que la empresa
+ * se mude a su dominio las etiquetas ya impresas dejarian de servir. Ademas esa
+ * URL era publica, asi que cualquiera que la abriera leia precio, stock y
+ * distribuidor sin entrar al sistema.
+ *
+ * Ahora el QR es solo el codigo y se lee con el escaner de la propia aplicacion,
+ * que exige iniciar sesion y por lo tanto resuelve la base de la empresa
+ * correcta. La etiqueta deja de depender del dominio: imprime el mismo hoy y
+ * dentro de cinco anos.
  */
 function generarCodigoEtiqueta() {
     const alfabeto = 'BCDFGHJKLMNPQRSTVWXYZ23456789';
@@ -1360,12 +1373,11 @@ function construirSnapshot(producto) {
     };
 }
 
-/**
- * URL publica base (se sobreescribe en produccion con dominio real).
- */
-function urlPublicaBase(req) {
-    return `${req.protocol}://${req.get('host')}`;
-}
+/* Ya no hay URL publica de etiqueta. Se usaba para armar el QR y para las dos
+   rutas `/e/...`, que se eliminaron: eran accesibles sin iniciar sesion y la
+   segunda abria a la base de la empresa 1 escrita a mano. Ver `contextoActual()`:
+   una ruta que consulta sin empresa en el contexto tira error en vez de adivinar
+   a que base pegarle. */
 
 // 1. LISTAR etiquetas (con/sin QR) — filtro para saber que productos tienen QR
 app.get('/api/etiquetas', verificarToken, requiereModulo('etiquetas_qr'), (req, res) => {
@@ -1420,12 +1432,11 @@ app.post('/api/etiquetas/generar', verificarToken, requiereModulo('etiquetas_qr'
 
         const codigo = generarCodigoEtiqueta();
         const snapshot = construirSnapshot(producto);
-        const urlPublica = `${urlPublicaBase(req)}/e/${codigo}`;
 
-        // Generar QR como SVG
+        // El QR lleva SOLO el codigo. Ver la nota de `generarCodigoEtiqueta`.
         let qrSvg;
         try {
-            qrSvg = await QRCode.toString(urlPublica, {
+            qrSvg = await QRCode.toString(codigo, {
                 type: 'svg',
                 width: 200,
                 margin: 1,
@@ -1450,7 +1461,6 @@ app.post('/api/etiquetas/generar', verificarToken, requiereModulo('etiquetas_qr'
                 res.json({
                     mensaje: 'Etiqueta QR generada',
                     codigo,
-                    url_publica: urlPublica,
                     qr_svg: qrSvg,
                     snapshot
                 });
@@ -1481,19 +1491,18 @@ app.get('/api/etiquetas/:id', verificarToken, requiereModulo('etiquetas_qr'), as
                 return res.status(404).json({ error: 'Etiqueta no encontrada' });
             }
             const e = rows[0];
-            const urlPublica = `${urlPublicaBase(req)}/e/${e.codigo}`;
 
             let qrSvg, qrPng;
             try {
-                qrSvg = await QRCode.toString(urlPublica, { type: 'svg', width: 200, margin: 1 });
-                qrPng = await QRCode.toDataURL(urlPublica, { width: 400, margin: 1 });
+                qrSvg = await QRCode.toString(e.codigo, { type: 'svg', width: 200, margin: 1 });
+                qrPng = await QRCode.toDataURL(e.codigo, { width: 400, margin: 1 });
             } catch (e2) {
                 console.error('Error generando QR:', e2);
                 return res.status(500).json({ error: 'Error generando QR' });
             }
 
             res.json({
-                etiqueta: { ...e, url_publica: urlPublica },
+                etiqueta: e,
                 qr_svg: qrSvg,
                 qr_png_base64: qrPng
             });
@@ -1519,104 +1528,114 @@ app.delete('/api/etiquetas/:id', verificarToken, requiereModulo('etiquetas_qr'),
     });
 });
 
-function escapeHtml(s) {
-    if (!s) return '';
-    return String(s)
-        .replace(/&/g, '&')
-        .replace(/</g, '<')
-        .replace(/>/g, '>')
-        .replace(/"/g, '"');
-}
+/* --------------------------------------------------------------------------
+   RUTAS PUBLICAS DE ETIQUETA: ELIMINADAS
 
-// 5. RUTA PUBLICA — SVG del QR para <img> en la pagina publica (DEBE IR ANTES que /e/:codigo)
-app.get('/e/:codigo.svg', (req, res) => {
-    const codigo = req.params.codigo;
-    if (!/^[A-Z0-9]{8,16}$/i.test(codigo)) {
-        return res.status(404).send('Código inválido');
-    }
-    const pool = require('./src/db/tenant').obtenerPool('serviceintegralsistema');
-    pool.query('SELECT codigo FROM etiquetas_qr WHERE codigo = ? AND activo = 1', [codigo], async (err, rows) => {
-        if (err || !rows.length) return res.status(404).send('No encontrado');
-        const url = `${req.protocol}://${req.get('host')}/e/${codigo}`;
-        try {
-            const svg = await QRCode.toString(url, { type: 'svg', width: 200, margin: 1 });
-            res.set('Content-Type', 'image/svg+xml');
-            res.set('Cache-Control', 'public, max-age=31536000');
-            res.send(svg);
-        } catch (e) {
-            res.status(500).send('Error generando QR');
-        }
-    });
-});
+   Existian GET /e/:codigo.svg (el QR) y GET /e/:codigo (la ficha del repuesto).
+   Las dos tenian tres problemas que no se pueden arreglar sin cambiarlas de
+   fondo:
 
-// 6. RUTA PUBLICA — Página HTML al escanear /e/:codigo
-app.get('/e/:codigo', (req, res) => {
-    const codigo = req.params.codigo;
-    if (!/^[A-Z0-9]{8,16}$/i.test(codigo)) {
-        return res.status(404).send('Código inválido');
+     1. No exigian iniciar sesion. Cualquiera que tuviera el codigo leia el
+        nombre del repuesto, el precio, el stock actual, el stock minimo y el
+        distribuidor. A una empresa le sirve saber eso de la competencia.
+     2. La ficha abria a una base escrita a mano:
+            obtenerPool('serviceintegralsistema')
+        que es la de la empresa 1. Si una segunda empresa contrata este modulo,
+        sus etiquetas se resuelven contra los datos de la primera.
+     3. El QR llevaba la URL, asi que la etiqueta quedaba atada a un dominio:
+        en desarrollo era localhost:3000 (que en un celular no existe) y el dia
+        que la empresa se mude a su dominio las etiquetas ya impresas dejarian
+        de servir.
+
+   Ahora el QR lleva solo el codigo y se lee con el escaner de la aplicacion
+   (ruta 5 mas abajo), que exige sesion y por lo tanto ya resuelve la base de la
+   empresa correcta sin que nadie la escriba a mano.
+
+   La funcion escapeHtml que estaba entre estas rutas tambien se borro: la
+   usaban solo ellas. Y ademas estaba rota: reemplazaba "&" por "&" y "<" por
+   "<", o sea no escapaba nada. No la habria detectado ni el verificador mas
+   estricto, porque un escape que no escapa tiene exactamente la misma forma que
+   uno que escapa bien.
+   -------------------------------------------------------------------------- */
+
+// 5. CONSULTAR POR CODIGO — lo que llama el escaner de la aplicacion.
+//
+//    No colisiona con `/api/etiquetas/:id` de mas abajo, que queda registrado
+//    despues: `:id` matchea UN segmento y esta ruta matchea DOS
+//    (`codigo` + el codigo). No hay ambiguedad que resolver ni orden que
+//    cuidar. Comprobado con scratch/probar-orden-rutas.js.
+app.get('/api/etiquetas/codigo/:codigo', verificarToken, requiereModulo('etiquetas_qr'), (req, res) => {
+    const codigo = String(req.params.codigo || '').trim().toUpperCase();
+
+    // El mismo alfabeto y el mismo largo con el que se generan los codigos. Si
+    // no cumple, se responde sin consultar: el "LIKE" de abajo con un wildcard
+    // seria otra consulta distinta.
+    if (!/^[BCDFGHJKLMNPQRSTVWXYZ23456789]{12}$/.test(codigo)) {
+        return res.status(404).json({ error: 'Código inválido' });
     }
-    // Usamos la conexion del tenant por defecto (la primera empresa activa)
-    // En produccion con multi-tenant real, esto se resolvia por subdominio.
-    // Por ahora: la empresa 1 (taller) es la que tiene etiquetas.
-    const pool = require('./src/db/tenant').obtenerPool('serviceintegralsistema');
-    pool.query(
-        `SELECT e.datos_json, e.creado_en, p.nombre, p.codigoDistribuidor, p.distribuidor, p.precio
+
+    // `db` es el pool de la empresa de la sesion: sale de conContexto, que tira
+    // error si no hay empresa. Por eso esta ruta no puede terminar en la base de
+    // otra empresa ni aunque se le olvide algo.
+    db.query(
+        `SELECT e.codigo, e.datos_json, e.creado_en, e.activo,
+                p.id AS producto_id, p.nombre, p.codigoDistribuidor,
+                p.stock, p.stockMinimo, p.distribuidor, p.precio, p.categoria,
+                p.descripcion
            FROM etiquetas_qr e
            JOIN productos p ON p.id = e.producto_id
-          WHERE e.codigo = ? AND e.activo = 1`,
+          WHERE e.codigo = ?`,
         [codigo],
         (err, rows) => {
-            if (err || !rows.length) {
-                return res.status(404).send(`
-                    <!DOCTYPE html><html><head><meta charset="utf-8"><title>No encontrado</title>
-                    <style>body{font-family:sans-serif;max-width:400px;margin:3rem auto;text-align:center;color:#666}</style>
-                    </head><body><h1>Etiqueta no encontrada</h1><p>El código <code>${escapeHtml(codigo)}</code> no existe o fue desactivado.</p></body></html>
-                `);
+            if (err) {
+                console.error('Error consultando etiqueta por codigo:', err);
+                return res.status(500).json({ error: 'Error interno' });
             }
-            const d = rows[0];
-            const datos = typeof d.datos_json === 'string' ? JSON.parse(d.datos_json) : d.datos_json;
-            const precio = Number(d.precio).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
-            const fechaGen = new Date(d.creado_en).toLocaleString('es-AR');
-            const html = `
-                <!DOCTYPE html>
-                <html lang="es">
-                <head>
-                    <meta charset="utf-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1">
-                    <title>${escapeHtml(datos.nombre)}</title>
-                    <style>
-                        body{font-family:system-ui,sans-serif;max-width:100%;margin:0;padding:1rem;background:#f8f9fa}
-                        .card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:1.25rem}
-                        h1{font-size:1.1rem;margin:0 0 .5rem;color:#1a1a2e}
-                        .meta{font-size:.85rem;color:#666;margin-bottom:.75rem}
-                        .row{display:flex;justify-content:space-between;padding:.4rem 0;border-top:1px solid #eee}
-                        .label{color:#888;font-size:.9rem}
-                        .value{font-weight:600;color:#1a1a2e;text-align:right}
-                        .badge{display:inline-block;background:#e8f5e9;color:#2e7d32;padding:.15rem .5rem;border-radius:999px;font-size:.75rem;font-weight:600}
-                        .qr{display:block;margin:1rem auto 0;max-width:180px}
-                        footer{margin-top:1.5rem;font-size:.7rem;color:#999;text-align:center}
-                    </style>
-                </head>
-                <body>
-                    <div class="card">
-                        <h1>${escapeHtml(datos.nombre)}</h1>
-                        <div class="meta">
-                            <span class="badge">Repuesto</span>
-                            ${datos.codigo_interno ? `<span class="badge" style="background:#e3f2fd;color:#1565c0;margin-left:.4rem">${escapeHtml(datos.codigo_interno)}</span>` : ''}
-                        </div>
-                        <div class="row"><span class="label">Código interno</span><span class="value">${escapeHtml(datos.codigo_interno || '—')}</span></div>
-                        <div class="row"><span class="label">Stock actual</span><span class="value">${Number(datos.stock_actual).toLocaleString()}</span></div>
-                        <div class="row"><span class="label">Stock mínimo</span><span class="value">${Number(datos.stock_minimo).toLocaleString()}</span></div>
-                        <div class="row"><span class="label">Ubicación</span><span class="value">${escapeHtml(datos.ubicacion || '—')}</span></div>
-                        <div class="row"><span class="label">Distribuidor</span><span class="value">${escapeHtml(datos.distribuidor || '—')}</span></div>
-                        <div class="row"><span class="label">Precio</span><span class="value">${precio}</span></div>
-                        <img class="qr" src="/e/${escapeHtml(codigo)}.svg" alt="QR">
-                        <footer>Generado el ${fechaGen} · Service Integral</footer>
-                    </div>
-                </body>
-                </html>
-            `;
-            res.send(html);
+            if (!rows.length || !rows[0].activo) {
+                return res.status(404).json({ error: 'Etiqueta no encontrada o desactivada' });
+            }
+
+            const e = rows[0];
+            const datos = typeof e.datos_json === 'string' ? JSON.parse(e.datos_json) : (e.datos_json || {});
+
+            /* Se mandan DOS juegos de numeros a proposito:
+                 - etiqueta: lo que quedo impreso en el papel, que no cambia.
+                 - producto: lo que esta en el catalogo ahora.
+               Si el repuesto se recibio o se vendio despues de colgar la
+               etiqueta, el papel ya no dice la verdad, y el que escanea tiene que
+               poder verlo en vez de confiar en un numero viejo. */
+            res.json({
+                codigo: e.codigo,
+                etiqueta: {
+                    codigo_interno: datos.codigo_interno || null,
+                    nombre: datos.nombre || e.nombre,
+                    stock_actual: datos.stock_actual ?? null,
+                    stock_minimo: datos.stock_minimo ?? null,
+                    precio_venta: datos.precio_venta ?? null,
+                    distribuidor: datos.distribuidor || null,
+                    generado_en: e.creado_en
+                },
+                producto: {
+                    id: e.producto_id,
+                    nombre: e.nombre,
+                    categoria: e.categoria,
+                    descripcion: e.descripcion,
+                    codigoDistribuidor: e.codigoDistribuidor,
+                    stock: e.stock,
+                    stockMinimo: e.stockMinimo,
+                    distribuidor: e.distribuidor,
+                    precio: e.precio
+                    /* `productos` no tiene columna de ubicacion ni de deposito.
+                       El snapshot la trae vacia porque era el lugar donde se
+                      iba a guardar, pero no hay de donde llenarla. Si algún
+                       dia la hay, se agrega acá y no hay que tocar nada más. */
+                },
+                /* Si el papel no coincide con el catalogo, el escaner lo avisa
+                   arriba de todo en vez de dejar que alguien anote sobre un
+                   stock que no existe. */
+                desactualizada: Number(e.stock) !== Number(datos.stock_actual)
+                    || Number(e.precio) !== Number(datos.precio_venta)
+            });
         }
     );
 });
