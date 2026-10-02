@@ -393,7 +393,7 @@ const MUTACIONES = [
     },
     {
         nombre: 'la 006 deja de ser reaplicable',
-        porQue: 'ESTE BUG ESTA EN PRODUCCION Y ROMPIA EL ALTA DE EMPRESAS. `altas.js` carga `schema/schema-actual.sql` (el esquema actual, con `precio_cobrado` ya puesto) y DESPUES corre la cadena de migraciones encima. Un `ALTER ... ADD COLUMN` a secas revienta con `Duplicate column name` y toda empresa nueva se rechaza al registrarse. El motor no lo ve nunca porque tiene ledger: contra la base del taller, que ya esta migrada, la 006 ni se intenta. Lo unico que lo agarra es armar una base desde cero como hace el alta. La 006 fue la primera migracion con un ALTER — 004 y 005 solo usan CREATE TABLE IF NOT EXISTS — asi que nunca habia pasado',
+        porQue: 'ESTE BUG ROMPIA EL ALTA DE EMPRESAS Y ESTA YA ARREGLADO. El alta cargaba `schema/schema-actual.sql` (el volcado del esquema final, con `precio_cobrado` ya puesto) y DESPUES corria la cadena. Un `ALTER ... ADD COLUMN` a secas ahi revienta con `Duplicate column name` y toda empresa nueva se rechazaba al registrarse. El motor no lo ve nunca porque tiene ledger: contra la base del taller, que ya esta migrada, la 006 ni se intenta. Hoy el alta carga `base.sql`, que no tiene la columna, asi que esta mutacion no rompe el alta; pero SI rompe cualquier reconstruccion de base y el `ver:base` la ve. La 006 fue la primera migracion con un ALTER — 004 y 005 solo usan CREATE TABLE IF NOT EXISTS — asi que nunca habia pasado',
         hacer() {
             reemplazar('migrations/tenant/006_facturacion.sql',
                 'SET @precio_cobrado_sql := IF(@precio_cobrado_ya_existe > 0,\n    \'DO 0\',\n    \'ALTER TABLE `reparaciones`',

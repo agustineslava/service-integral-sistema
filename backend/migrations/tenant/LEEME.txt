@@ -29,36 +29,43 @@ Reglas:
   5. TODA MIGRACIÓN TIENE QUE SER REAPLICABLE.
      Corrida sobre un esquema que ya la tiene, no cambia nada.
 
-     Por qué: la base de una empresa nueva se arma en dos pasos, en este orden.
+     La base de una empresa nueva se arma en dos pasos, en este orden:
 
-         1. se carga `schema/schema-actual.sql`
-         2. DESPUÉS se corre esta cadena de migraciones encima
+        1. se carga `schema/base.sql`
+        2. DESPUÉS se corre esta cadena de migraciones encima
 
-     `schema-actual.sql` es un volcado del esquema ACTUAL — tiene las columnas
-     nuevas porque es el volcado de una base que ya está migrada. Así que la
-     cadena se corre SOBRE un esquema que ya la tiene. Si una migración no
-     tolera eso, el alta de la empresa muere en el paso 2 con un error que no
-     dice nada de la migración: `Duplicate column name 'precio_cobrado'`, o
-     `Table 'facturas' already exists`.
+     `base.sql` es una CONGELACIÓN: el esquema antes de que existiera la
+     primera migración. No trae presupuestos, ni etiquetas, ni facturas, ni
+     la columna `precio_cobrado`. Así que la cadena se corre sobre un esquema
+     que todavía NO la tiene, que es la forma normal.
+
+     Igual la regla sigue, por dos razones.
+
+     La primera es que este proyecto no solo da de alta empresas: también
+     ARMA BASES NUEVAS para probar cosas. Si hay que reconstruir la base de
+     una empresa, se hace con `base.sql` más esta cadena, y ahí sí importa
+     que la 006 se pueda correr dos veces.
+
+     La segunda es que una migración reaplicable cuesta un `IF`, y una que no
+     lo es rompe el alta sin decir por qué. Cuando las dos dan el mismo
+     resultado, se elige la que se rompe antes y más fuerte.
 
      En la práctica:
 
-         BIEN:  CREATE TABLE IF NOT EXISTS ...
-         BIEN:  un ALTER guardado con un IF sobre information_schema, armado
-                con SQL dinámico (MySQL no tiene ADD COLUMN IF NOT EXISTS;
-                MariaDB sí)
-         MAL:   ALTER TABLE ... ADD COLUMN a secas
-         MAL:   DROP COLUMN a secas
-         MAL:   cualquier cosa que dé por hecho que el esquema está "virgen"
+        BIEN:  CREATE TABLE IF NOT EXISTS ...
+        BIEN:  un ALTER guardado con un IF sobre information_schema, armado
+               con SQL dinámico (MySQL no tiene ADD COLUMN IF NOT EXISTS;
+               MariaDB sí)
+        MAL:   ALTER TABLE ... ADD COLUMN a secas
+        MAL:   DROP COLUMN a secas
+        MAL:   cualquier cosa que dé por hecho que el esquema está "virgen"
 
-     El que lo encuentra no es el motor: el motor tiene un ledger y se saltea lo
-     ya aplicado, así que contra una base que ya está al día nunca ve el
-     problema. Lo encuentra `npm run f4:verificar`, que arma una base de empresa
-     desde cero exactamente como lo hace el alta. Ese verificador es la prueba de
-     que el camino de alta funciona, y por eso corre antes de cada commit.
+  6. UNA MIGRACIÓN NO TOCA `schema/base.sql`.
 
-     La 006 fue la primera migración con un ALTER y ya costó una: toda empresa
-     nueva se habría rechazado al registrarse.
+     `base.sql` es la congelación de antes de la 001. Si una migración nueva
+     necesita una tabla, esa tabla la crea la migración. Meter la tabla en
+     `base.sql` es volver al problema de antes: el taller la tiene y las
+     empresas nuevas no, sin que nada lo note.
 
 Cómo se aplican:
 
@@ -73,6 +80,44 @@ Cómo se aplican:
 Este directorio tiene los cambios de esquema que se aplican a la base de CADA
 empresa: 004 presupuestos, 005 etiquetas QR, 006 facturación interna.
 
-Antes de la 004 el esquema base venía (y sigue viniendo) de
-`schema/schema-actual.sql`, que es también lo que se carga al dar de alta una
-empresa. Por eso la regla 5 importa tanto.
+Antes de la 004, el esquema base venía de `schema/schema-actual.sql`, que era
+también lo que se cargaba al dar de alta una empresa. Ahí está el bug que
+costó una:
+
+    `altas.js` cargaba el volcado del esquema FINAL y después corría la cadena
+    encima. El volcado ya traía las tablas, así que las migraciones veían
+    `CREATE TABLE IF NOT EXISTS`, se las salteaban, y quedaban como aplicadas
+    sin haber hecho nada. Para el taller, que ya tenía todo, no se notaba.
+
+    Para una empresa nueva, la 006 moría en el paso 2 con
+    `Duplicate column name 'precio_cobrado'`, y toda alta quedaba rechazada.
+
+Y las verificaciones daban verde, por dos motivos:
+
+    - `f4:verificar` armaba su base de empresa con el MISMO volcado. Probaba
+      el camino roto, así que pasaba.
+    - el motor tiene un ledger. Contra una base ya migrada nunca intenta
+      correr la 006, y nunca ve el problema.
+
+Por eso ahora hay tres cosas distintas, y las tres importan:
+
+    `schema/base.sql`
+        La congelación. La carga el alta. No se le tocan las tablas.
+
+    `schema/schema-actual.sql`
+        Un volcado del estado final, SOLO para leer. Los verificadores sacan
+        de ahí la lista de columnas con la que comparan el código. Si algún
+        día queda viejo, esos verificadores comparan contra la nada; por eso
+        hay que regenerarlo con `npm run schema:snapshot` cuando cambia el
+        esquema. NO se usa para armar bases.
+
+    `npm run ver:base`
+        Arma una base de verdad con `base.sql` más esta cadena, la compara
+        con el taller tabla por tabla, columna por columna, tipo por tipo,
+        y la borra. Dice si la congelación está bien.
+
+    `npm run f4:verificar`
+        Da de alta una empresa de verdad, con el mismo camino que el alta, y
+        usa la base.
+
+Los dos últimos existieron porque el primero no.

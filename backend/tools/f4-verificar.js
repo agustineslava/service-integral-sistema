@@ -117,7 +117,23 @@ async function servidorVivo() {
     }
 }
 
-/** Crea una base de empresa nueva con el esquema base y las migraciones. */
+/**
+ * Crea una base de empresa nueva IGUAL que la crea `altas.js`.
+ *
+ * OJO al archivo que carga. Antes cargaba `schema/schema-actual.sql`, que es un
+ * volcado del estado final. Con eso esta funcion probaba un camino que ya no
+ * existe: cargaba el esquema entero y despues corria las migraciones encima,
+ * que con el ledger vacio veian `CREATE TABLE IF NOT EXISTS`, se salteaban
+ * todo y quedaban como aplicadas sin haber hecho nada. O sea, esta prueba
+ *_sigio_ verde con las migraciones rotas.
+ *
+ * Ahora carga `schema/base.sql`, el estado base congelado, que es lo que carga
+ * el alta de verdad. Las migraciones despues, y ahora sí se ejecutan.
+ *
+ * Y el nombre del archivo NO esta escrito a mano: se lee del `RUTA_ESQUEMA` de
+ * `altas.js`. Si alguien lo cambia, esto cambia con el, y las dos cosas no
+ * pueden dejar de coincidir en silencio. Ver `tools/ver-base-esquema.js`.
+ */
 async function crearBaseDeEmpresa(nombreDb) {
     const admin = await mysql.createConnection(configAdmin(nombreCentral()));
     try {
@@ -129,7 +145,7 @@ async function crearBaseDeEmpresa(nombreDb) {
 
     const con = await mysql.createConnection({ ...configAdmin(nombreDb), multipleStatements: true });
     try {
-        const base = fs.readFileSync(path.join(__dirname, '..', 'schema', 'schema-actual.sql'), 'utf8');
+        const base = fs.readFileSync(archivoDeEsquemaDelAlta(), 'utf8');
         await con.query(base);
         // Y despues las migraciones, que es el camino real de una empresa nueva.
         const r = await migraciones.aplicar(con, 'tenant', { log: (m) => console.log(m) });
@@ -137,6 +153,30 @@ async function crearBaseDeEmpresa(nombreDb) {
     } finally {
         await con.end();
     }
+}
+
+/**
+ * El archivo que `altas.js` carga, leido de `altas.js`.
+ *
+ * Si no se puede leer, se avisa y se cae. Convolver a `schema-actual.sql`
+ * "porque era lo que estaba" seria volver al problema de golpe y sin que nadie
+ * lo note.
+ */
+function archivoDeEsquemaDelAlta() {
+    const rutaAltas = path.join(__dirname, '..', 'src', 'servicios', 'altas.js');
+    const txt = fs.readFileSync(rutaAltas, 'utf8');
+    const def = txt.match(/const\s+RUTA_ESQUEMA\s*=\s*path\.join\(([^;]*)\)/);
+
+    if (!def || !/^\s*__dirname\s*,/.test(def[1])) {
+        throw new Error(
+            `No se pudo leer RUTA_ESQUEMA de ${rutaAltas}.\n` +
+            'Sin saber que archivo carga el alta, esta prueba no puede decir que prueba el alta.\n' +
+            'Revisar la constante RUTA_ESQUEMA de altas.js.'
+        );
+    }
+
+    const trozos = [...def[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
+    return path.resolve(path.dirname(rutaAltas), ...trozos);
 }
 
 async function borrarBaseDeEmpresa(nombreDb) {

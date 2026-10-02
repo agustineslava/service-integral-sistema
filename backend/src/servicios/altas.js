@@ -77,7 +77,31 @@ const validacion = (mensaje) => conEstado(mensaje, 400);
 
 /** No existe lo que pidio. 404. */
 const noEncontrado = (mensaje) => conEstado(mensaje, 404);
-const RUTA_ESQUEMA = path.join(__dirname, '..', '..', 'schema', 'schema-actual.sql');
+
+/**
+ * El esquema BASE de una base de empresa: el estado antes de la primera
+ * migracion.
+ *
+ * OJO al nombre del archivo. Antes apuntaba a `schema-actual.sql`, que es un
+ * DUMP del estado final y por lo tanto traia tambien las tablas que crean las
+ * migraciones. Con eso el alta de una empresa nueva salia bien por el dump, no
+ * por las migraciones: estas llegaban con `CREATE TABLE IF NOT EXISTS`, se
+ * salteaban la tabla porque ya estaba, y quedaban como aplicadas sin haber
+ * hecho nada. Para el taller, que ya tenia todo, eso no se notaba; para una
+ * empresa nueva, si.
+ *
+ * Con `base.sql` el orden es el correcto: base primero, migraciones despues, y
+ * las migraciones se ejecutan de verdad en cada alta.
+ *
+ * Las dos cosas estan probadas, no acordadas:
+ *   - `node tools/ver-base-esquema.js` arma una base de verdad con este archivo
+ *     y la cadena, y la compara con el esquema del taller.
+ *   - `f4-verificar.js` da de alta una empresa de verdad y usa la base.
+ *
+ * El encabezado de `base.sql` explica por que esta congelado y por que no se
+ * le tocan las tablas a mano.
+ */
+const RUTA_ESQUEMA = path.join(__dirname, '..', '..', 'schema', 'base.sql');
 
 /**
  * Un nombre de base solo puede llevar letras, numeros y guion bajo.

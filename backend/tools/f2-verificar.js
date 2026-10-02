@@ -391,6 +391,15 @@ async function main() {
         await admin.query(`DROP DATABASE IF EXISTS \`${DB_PRUEBA}\``);
         await admin.query(`CREATE DATABASE \`${DB_PRUEBA}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`);
 
+        /* Acá se carga el VOLCADO, no `base.sql`, y NO se corre la cadena de
+   migraciones. Es a proposito: esta base existe solo para probar que una
+   consulta de una empresa no ve los datos de otra, y para eso hace falta una
+   base Llena de las tablas que usan las consultas. No prueba el alta de
+   empresas.
+
+   El camino del alta lo prueba `f4-verificar.js`, y ese carga `base.sql` y
+   corre la cadena, como hace `altas.js`. Si alguna vez se cambia el alta, el
+   que hay que cambiar primero es `f4-verificar.js`, no este. */
         const schema = fs.readFileSync(path.join(__dirname, '..', 'schema', 'schema-actual.sql'), 'utf8');
         const conPrueba = await mysql.createConnection({ ...configAdmin(DB_PRUEBA), multipleStatements: true });
         await conPrueba.query(schema);

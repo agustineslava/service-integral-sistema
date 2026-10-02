@@ -20,6 +20,8 @@
     "f2:migrar": "node tools/f2-migrar-taller.js",
     "f2:migrar:simular": "node tools/f2-migrar-taller.js --dry-run",
     "f2:verificar": "node tools/f2-verificar.js",
+    "ver:base": "node tools/ver-base-esquema.js",
+    "ver:base:mutar": "node tools/mutar-base-esquema.js",
     "f3:verificar": "node tools/f3-verificar.js",
     "f3:restaurar": "node tools/f3-verificar.js --restaurar",
     "f4:verificar": "node tools/f4-verificar.js",

@@ -431,15 +431,22 @@ check(/`precio_cobrado`\s+DECIMAL\(12,2\)\s+NULL/.test(migracion),
  *
  * El motor tiene ledger y se saltea lo ya aplicado, así que contra la base del
  * taller —que ya esta migrada— una migración no reaplicable no se nota nunca.
- * Se nota al DAR DE ALTA una empresa: `altas.js` carga `schema/schema-actual.sql`
- * (el esquema ACTUAL, con la columna ya puesta) y DESPUES corre la cadena
- * encima. Un `ALTER ... ADD COLUMN` a secas revienta con `Duplicate column
- * name`, y el alta de la empresa muere con un error que no menciona la
- * migración ni dice que hay que rehacerla.
+ * Se notaba al DAR DE ALTA una empresa: `altas.js` cargaba
+ * `schema/schema-actual.sql` (el esquema ACTUAL, con la columna ya puesta) y
+ * DESPUES corria la cadena encima. Un `ALTER ... ADD COLUMN` a secas revienta
+ * con `Duplicate column name`, y el alta de la empresa moria con un error que
+ * no menciona la migración ni dice que hay que rehacerla.
  *
- * La 006 fue la primera con un ALTER y toda empresa nueva se habria rechazado al
- * registrarse. Lo encontro `f4-verificar.js`, que es la prueba real de que el
- * camino de alta anda; estos controles son la red estatica que avisa antes. */
+ * ESO YA ESTA ARREGlado de otra forma: ahora el alta carga `schema/base.sql`,
+ * que no tiene la columna, así que el ALTER a secas andaría bien en el alta.
+ * El arreglo de raíz esta en `ver-base-esquema.js`, que arma una base con el
+ * archivo que el alta carga de verdad y la compara con el taller.
+ *
+ * La regla de reaplicabilidad sigue en pie igual, porque este proyecto tambien
+ * ARMA BASES sobre esquemas que ya la tienen, y porque una migración
+ * reaplicable cuesta un IF mientras que una que no lo es revienta sin decir
+ * por qué. Estos controles quedan como la red estatica que avisa antes de que
+ * algo lo pruebe de la mala manera. */
 check(!/^\s*ALTER\s+TABLE\s+`?reparaciones`?\s*$/im.test(migracion),
     'la 006 no tiene un ALTER TABLE a secas sobre reparaciones');
 check(/information_schema\.COLUMNS/.test(migracion) && /PREPARE/.test(migracion),
