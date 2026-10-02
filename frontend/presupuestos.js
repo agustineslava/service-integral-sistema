@@ -626,6 +626,23 @@ function dibujarBotonesDetalle() {
         }
     }
 
+    /* Facturar: solo un presupuesto APROBADO, y solo si la empresa contrató el
+     * módulo de facturación.
+     *
+     * Las dos condiciones. Que el presupuesto esté aprobado es una regla de
+     * negocio (el servidor la exige: un presupuesto en borrador no se factura).
+     * Que la empresa tenga el módulo es cortesía —si no lo contrató, `tieneModulo`
+     * devuelve false y el botón no aparece; y si alguien lo pide por URL, el
+     * servidor contesta 404 igual que en cualquier otra sección.
+     *
+     * El botón NO se esconde a un rol. Crear una factura es escribir un
+     * borrador: no saca número, no mueve el depósito, no se puede deshacer con
+     * un clic. Lo que es de ADMIN —emitir, anular— sí está en la otra página,
+     * y ahí lo manda el servidor. */
+    if (p.estado === 'APROBADO' && tieneModulo('facturacion')) {
+        botones.push(`<button class="btn btn-crear" onclick="facturarPresupuesto(this)">Facturar este presupuesto</button>`);
+    }
+
     botones.push(`<button class="btn btn-secundario" onclick="window.print()">Imprimir</button>`);
 
     caja.innerHTML = botones.join(' ');
@@ -682,6 +699,55 @@ async function borrarDetalle() {
         await cargarListado();
     } catch {
         alert('No se pudo conectar con el servidor.');
+    }
+}
+
+/* --------------------------------------------------------------------------
+   FACTURAR UN PRESUPUESTO APROBADO
+   --------------------------------------------------------------------------
+   Un presupuesto no se convierte en factura por una puerta de atrás: se pide
+   una por `POST /api/facturas/desde-presupuesto/:id` y el servidor la crea
+   DESPUÉS de pasar por la misma validación que una factura escrita a mano. Una
+   segunda puerta sería una segunda lista de reglas que se puede quedar vieja.
+
+   El botón va en el detalle del presupuesto porque es el lugar donde ya está
+   la decisión ("el cliente lo aprobó"), y no en el listado, que es para mirar.
+   --------------------------------------------------------------------------
+   */
+
+async function facturarPresupuesto(boton) {
+    const id = P.detalle.presupuesto.id;
+    const numero = P.detalle.presupuesto.numero;
+
+    if (!confirm(
+        `¿Crear una factura a partir del presupuesto N° ${numero}?\n\n` +
+        'Se abre un BORRADOR: todavía no tiene número y no se descontó nada del depósito. ' +
+        'Eso pasa cuando lo emitas.')) return;
+
+    boton.disabled = true;
+    try {
+        const res = await apiFetch(`/api/facturas/desde-presupuesto/${id}`, {
+            method: 'POST',
+            body: '{}'
+        });
+        const datos = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+            alert(datos.errores && datos.errores.length
+                ? datos.errores.join('\n')
+                : (datos.error || 'No se pudo crear la factura'));
+            boton.disabled = false;
+            return;
+        }
+
+        // Se cierra el detalle y se va a la pantalla de facturación con el
+        // borrador ya abierto. Si acá solo se refrescara la lista, el usuario
+        // quedaría buscando una factura que todavía no aparece con número.
+        cerrarDetalle();
+        window.location.href = `facturacion.html?nuevo=${datos.id}`;
+    } catch {
+        alert('No se pudo conectar con el servidor.');
+        boton.disabled = false;
     }
 }
 

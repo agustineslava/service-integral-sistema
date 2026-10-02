@@ -323,6 +323,54 @@ const MUTACIONES = [
             reemplazar('presupuestos.css', '    padding-right: 10px;\n    font-size: 0.9rem;\n}', '    padding-right: 6px;\n    font-size: 0.9rem;\n}');
         },
         espera: 'el subtotal se alinea con la derecha'
+    },
+
+    /* --- Los iconos del boton de tema --------------------------------------
+       Estos dos checks se escribieron porque en el navegador apareció un error
+       de consola en facturacion.html y no en ninguna otra pagina: el <path> de
+       la luna traia "9 0 1 1-9-9Z" en vez de "9 9 0 1 1-9-9Z". El boton andaba
+       igual, asi que no se veia: estaba en la consola y en nada mas.
+
+       Un SVG mal escrito es el error mas invisible que hay, porque el navegador
+       descarta el elemento y sigue. Sin este par de mutaciones, los dos checks
+       nuevos serian los unicos del archivo que nunca se probaron. */
+    {
+        nombre: 'una pagina se desincroniza del icono de la luna',
+        porQue: 'es el error que paso de verdad, y es el que ninguna revision de codigo ve: el path del SVG esta correcto, es el correcto de otra pagina, y nadie mira un numero adentro de un atributo d',
+        hacer() {
+            reemplazar('facturacion.html',
+                'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z',
+                'M12 3a6 6 0 0 0 9 9 9 0 1 1-9-9Z');
+        },
+        espera: 'el icono de la luna es el mismo en las'
+    },
+    {
+        nombre: 'una pagina se queda sin el icono de la luna',
+        porQue: 'el CSS muestra uno u otro segun el tema, asi que el que falta es el que se ve en la mitad de los temas. Y el boton de tema sigue siendo un boton, con su icono visible, asi que tampoco se nota mirando la pantalla',
+        hacer() {
+            reemplazar('facturacion.html',
+                '<svg class="icono-luna"',
+                '<svg class="icono-luna-OLD"');
+        },
+        espera: 'tiene el <svg class="icono-luna"> del boton de tema'
+    },
+    {
+        nombre: 'una pagina se queda sin el icono del sol',
+        porQue: 'el reves del anterior, y por eso el check se hace para los dos iconos y no solo para el que se rompio una vez. Un boton de tema necesita las dos metades: la que se ve en claro y la que se ve en oscuro',
+        hacer() {
+            reemplazar('facturacion.html',
+                '<svg class="icono-sol"',
+                '<svg class="icono-sol-OLD"');
+        },
+        espera: 'tiene el <svg class="icono-sol"> del boton de tema'
+    },
+    {
+        nombre: 'una pagina se queda con los iconos sin atributo d',
+        porQue: 'pasa cuando se copia el SVG de un lugar donde los trazados vienen de un <defs> o de un <use>. El <svg> esta, el CSS lo muestra, y no dibuja nada: sale un boton de tema vacio en los dos temas',
+        hacer() {
+            reemplazar('facturacion.html', ' d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"', '');
+        },
+        espera: 'el icono "icono-luna" tiene los <path> con atributo d'
     }
 ];
 

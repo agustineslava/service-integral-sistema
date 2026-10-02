@@ -386,7 +386,11 @@ check(/classList\.toggle\(\s*['"]tema-claro['"]/.test(auth), 'auth-check.js pone
 check(/classList\.toggle\(\s*['"]tema-oscuro['"]/.test(auth), 'auth-check.js pone `tema-oscuro` con `classList.toggle`');
 
 /* Se aplica en el `<head>`, antes de que el navegador pinte nada. */
-const paginasConBoton = ['index.html', 'pedidos.html', 'reparaciones.html', 'clientes.html', 'presupuestos.html', 'admin.html'];
+/* La lista esta escrita a mano, y por eso corre el riesgo de quedar corta: cada
+   pagina nueva que se agregue tiene que entrar aca, o el tema se aplica tarde
+   y sin avisar en esa pagina y en ninguna otra. `facturacion.html` entro junto
+   con la pagina. */
+const paginasConBoton = ['index.html', 'pedidos.html', 'reparaciones.html', 'clientes.html', 'presupuestos.html', 'facturacion.html', 'admin.html'];
 for (const pagina of paginasConBoton) {
     const txt = leer(pagina);
     const cabeza = txt.slice(0, txt.search(/<body/i));
@@ -410,6 +414,54 @@ check(defineLaFuncion.length === 1 && defineLaFuncion[0] === 'auth-check.js',
    criterio: el icono muestra a que tema se pasa al hacer clic. */
 check(!/ajustarIconoTema\s*\(/.test(sinComentarios(leer('admin.js'))), 'admin.js ya no mueve el ícono del tema con estilos en línea');
 check(/html\.tema-claro\s+\.btn-alternar-tema\s+\.icono-sol/.test(css), 'el ícono del botón lo decide el CSS, según la clase del tema');
+
+/* Los dos iconos del boton de tema son UNO solo, copiado a mano en cada pagina.
+   Y al copiar a mano, un caracter se pierde: en facturacion.html el path de la
+   luna traia "9 0 1 1-9-9Z" donde las otras seis paginas traen "9 9 0 1 1-9-9Z".
+   Faltaba un 9, el navegador tiraba "Expected arc flag" en la consola, y el
+   boton igual funcionaba: es un error invisible en una pantalla que se usa
+   todos los dias.
+
+   No se busca que el SVG "este bien": no hay forma de saber si un path es el
+   correcto sin dibujarlo. Se busca que sea EL MISMO en todas las paginas, que es
+   la condicion que hace que no se puedan volver a desincronizar entre si. */
+const ICONOS = ['icono-sol', 'icono-luna'];
+const pathsPorPagina = new Map();
+
+for (const pagina of paginasConBoton) {
+    const txt = leer(pagina);
+
+    for (const icono of ICONOS) {
+        const bloque = (txt.match(new RegExp('<svg[^>]*class="' + icono + '"[^>]*>([\\s\\S]*?)</svg>', 'i')) || [, ''])[1];
+
+        check(bloque.length > 0, `${pagina} tiene el <svg class="${icono}"> del boton de tema`,
+            'el CSS decide cual de los dos se ve segun el tema; si falta uno, en ese tema no se ve nada.');
+
+        const d = (bloque.match(/d="([^"]+)"/g) || []).join(' ').replace(/\s+/g, ' ').trim();
+        check(d.length > 0, `${pagina} el icono "${icono}" tiene los <path> con atributo d`);
+
+        if (icono === 'icono-luna' && d) {
+            if (!pathsPorPagina.has('luna')) pathsPorPagina.set('luna', new Map());
+            pathsPorPagina.get('luna').set(pagina, d);
+        }
+    }
+}
+
+/* El de la luna es el unico que se dibuja con una curva: es el que tiene el
+   path con flags de arco ("a6 6 0 0 0 ...Z"), que es donde se perdio el 9. */
+const lunas = pathsPorPagina.get('luna') || new Map();
+check(lunas.size === paginasConBoton.length,
+    `se leyo el icono de la luna en las ${paginasConBoton.length} paginas`,
+    `se leyeron en: ${[...lunas.keys()].join(', ')}`);
+
+if (lunas.size === paginasConBoton.length) {
+    const distintas = new Set(lunas.values());
+    check(distintas.size === 1,
+        `el icono de la luna es el mismo en las ${paginasConBoton.length} paginas`,
+        `hay ${distintas.size} versiones distintas: ` +
+        [...lunas.entries()].filter(([, d]) => d !== [...lunas.values()][0])
+            .map(([p, d]) => `${p} -> ${d}`).join(' | '));
+}
 
 /* ==========================================================================
    5. EL LISTADO DE PRESUPUESTOS

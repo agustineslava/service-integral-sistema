@@ -1,0 +1,166 @@
+/* ==========================================================================
+   FACTURACIÓN
+   --------------------------------------------------------------------------
+   Esta hoja es CHUNTA a propósito. Lo que la factura comparte con el presupuesto
+   —el formulario de dos columnas, el editor de ítems, la hoja imprimible— lo
+   trae `presupuestos.css`, y `facturacion.html` la carga. Acá está solamente lo
+   que es de la factura:
+
+     - el aviso de que no es comprobante fiscal
+     - la columna de IVA del editor de ítems
+     - el detalle de cada línea (stock, fracciones, IVA)
+     - la fila de totales con el IVA en el medio
+
+   Lo que NO se hace es copiar las reglas compartidas. Dos copias de lo mismo
+   divergen: ya pasó una vez en este proyecto, con `--text-secondary` (que valía
+   negro) en vez de `--text-muted`, y el texto salía negro sobre el fondo oscuro
+   en una página y no en la otra.
+   ========================================================================== */
+
+/* --- Aviso de que no es facturación electrónica ---------------------------
+ *
+ * Va en la pantalla y en la hoja impresa. Es el mismo texto en los dos lugares,
+ * a propósito: el aviso que importa es el que está en el papel que se le da al
+ * cliente, y si el texto fuera distinto entre pantalla e impresión, uno de los
+ * dos sería el que falla.
+ */
+.f-aviso-legal {
+    margin: 0 0 18px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--color-warning) 45%, transparent);
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    font-size: 0.87rem;
+    line-height: 1.5;
+    color: var(--text-main);
+}
+
+.f-aviso-legal strong { color: var(--text-main); }
+
+/* Los tres estados que no tiene el presupuesto. Mismo criterio que las cuatro
+ * de `presupuestos.css`: fondo atenuado del color, texto fuerte del mismo color.
+ * ANULADA va en rojo igual que RECHAZADO en el presupuesto, y por el mismo
+ * motivo: es el estado que hay que poder ver de reojo en un listado largo. */
+.p-estado-emitida  { background: rgba(52, 152, 219, 0.18); color: #1c6ca8; }
+.p-estado-pagada   { background: rgba(46, 160, 67, 0.18);  color: #2c7a3f; }
+.p-estado-anulada  { background: rgba(192, 57, 43, 0.16);  color: #922; }
+
+/* En la hoja impresa va sobre blanco y no puede depender de las variables del
+ * tema: la impresión no es la pantalla, y acá no hay a quién leerse en oscuro. */
+.p-comprobante .f-aviso-legal {
+    background: #fff8e6;
+    border: 1px solid #e0b64a;
+    color: #6b5410;
+    font-size: 0.78rem;
+    padding: 8px 10px;
+    margin-top: 18px;
+}
+
+/* --- Editor de ítems ----------------------------------------------------- */
+
+/* La tabla de la factura tiene una columna más que la del presupuesto, así que
+ * los anchos se reparten distinto. El padding de las celdas NO se toca: lo
+ * define `presupuestos.css` y es lo que alinea cada input debajo de su rótulo. */
+.f-tabla-items th,
+.f-tabla-items td { padding-left: 6px; padding-right: 6px; }
+
+.f-tabla-items th:first-child,
+.f-tabla-items tbody td:first-child { padding-left: 10px; }
+
+/* La celda de la X no lleva aire: es un botón de 30px, no un input que tenga que
+ * alinearse con un rótulo. */
+.f-tabla-items tbody td:last-child { padding-right: 0; }
+
+/* El IVA es un <select> con tres valores. Hereda el alto de la regla global
+ * como cualquier input; sólo se le ajusta el ancho y el centrado. */
+.f-tabla-items select[data-campo="iva_porcentaje"] {
+    width: 100%;
+    text-align: right;
+    padding-right: 4px;
+}
+
+/* "Neto + IVA" es el importe que realmente suma el renglón después del
+ * descuento. Se muestra con dos decimales fijos y en cifras de ancho
+ * constante: si el ancho dependiera de los dígitos, la columna bailaría al
+ * tipear. */
+.f-neto-calc {
+    display: block;
+    text-align: right;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    padding-right: 6px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+/* --- Lo que se avisa de cada línea ----------------------------------------
+ *
+ * Va DEBAJO de la fila del ítem, no adentro: el detalle tiene que poder ser
+ * largo (el nombre de un producto es largo) sin empujar la tabla ni romper el
+ * borde de la celda.
+ */
+.f-linea-detalle td {
+    padding: 0 10px 8px !important;
+    border: none;
+    background: none;
+}
+
+.f-item-aviso {
+    display: block;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    padding: 5px 9px;
+    border-radius: 6px;
+    border-left: 3px solid var(--color-warning);
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    color: var(--text-main);
+}
+
+/* Aviso de stock o de cantidad fraccionada con producto: son las dos cosas que
+ * el servidor va a rechazar al emitir, y avisar acá es la diferencia entre
+ * "el botón no hace nada" y "esto hay que corregirlo". */
+.f-item-aviso-error {
+    border-left-color: var(--color-danger);
+    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+/* El texto que aclara un campo, como el de "la fecha va impresa". */
+.f-help {
+    display: block;
+    margin-top: 3px;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* --- La regla del depósito ------------------------------------------------
+ *
+ * Visible siempre en el formulario. Está en la pantalla y no solo en un
+ * `confirm()` porque la regla es lo bastante frecuente como para que se tenga
+ * que leer una vez, y no en cada emisión.
+ */
+.f-aviso-regla {
+    margin-top: 12px;
+    padding: 9px 11px;
+    border-radius: 6px;
+    border: 1px dashed color-mix(in srgb, var(--text-muted) 45%, transparent);
+    background: rgba(128, 128, 128, 0.05);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-main);
+}
+
+/* --- Comprobante: las filas del IVA -------------------------------------- */
+
+/* En la hoja impresa el IVA va en su propia columna y en su propio renglón del
+ * cierre. Va separado de los descuentos para que se lea "neto, IVA, total", que
+ * es el orden en que se reconstruye el importe. */
+.p-comprobante-items th:nth-child(5),
+.p-comprobante-items td:nth-child(5) { text-align: right; }
+
+.p-comprobante .f-desglose-iva {
+    margin-top: -12px;
+    margin-bottom: 18px;
+    font-size: 0.82rem;
+    color: #555;
+}

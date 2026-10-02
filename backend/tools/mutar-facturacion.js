@@ -452,6 +452,269 @@ const MUTACIONES = [
                 "app.post('/api/facturas/:facturaId/pagar', verificarToken, requiereModulo('facturacion'), async");
         },
         espera: 'llega a POST /api/facturas/:id/pagar'
+    },
+
+    /* --- 7. La pantalla: contra el servidor y contra el esquema --------------
+       RAIZ es el backend, asi que el navegador se nombra con "../frontend/...".
+       Sin el "..", `abrir` resuelve "frontend/facturacion.js" dentro de
+       backend/, no encuentra el archivo y todas estas mutaciones mueren con un
+       ENOENT que no dice nada del check que se queria probar.
+
+       Lo que NO esta en esta seccion y por que: el aviso de que la pagina tiene
+       que cargar auth-check.js en el <head> no es un check de facturacion, es
+       un check de tema y de assets, y vive en ver-estilo-y-tema.js, que ya lo
+       prueba. Poner una copia aca seria el peor de los casos conocidos: dos checks
+       del mismo texto en dos archivos, y el dia que uno cambia el otro sigue
+       dando verde.
+
+       Las de arriba mutan el backend y las rechazan las guardas. Estas de
+       abajo mutan el NAVEGADOR, y ese es el lado que no tiene guardas: una
+       columna mal escrita en el `.js` del navegador no da error de sintaxis, no
+       da error de ejecucion y no rompe la pagina. Da `undefined`, se ve la
+       palabra "undefined" en una tabla, y el boton de guardar sigue andando.
+       Por eso hay checks que comparan el navegador contra el esquema y contra
+       las rutas, y por eso estos controls tienen que existir: sin esta seccion,
+       los checks nuevos serian los unicos del archivo que nunca se probaron. */
+    {
+        nombre: 'la pantalla lee una columna de facturas que no existe',
+        porQue: 'el caso que ya se perdio una vez con las etiquetas (p.ubicacion). En el servidor es un 500, y en el navegador es peor porque no es nada: se ve undefined en el papel que se le entrega al cliente',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'pesosF(f.iva_monto)',
+                'pesosF(f.iva_monto_calculado)');
+        },
+        espera: 'todas las columnas que la pantalla lee de facturas existen'
+    },
+    {
+        nombre: 'la pantalla lee una columna de items que no existe',
+        porQue: 'igual que el anterior pero del otro lado de la tabla. Los items se imprimen en una grilla donde una celda vacia se disimula entre otras vacias, y nadie se entera hasta que el papel ya esta impreso',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'escapeHtml(it.descripcion)',
+                'escapeHtml(it.descripcion_texto)');
+        },
+        espera: 'todas las columnas que la pantalla lee de factura_items existen'
+    },
+    {
+        nombre: 'la pantalla lee una columna de empresa que no existe',
+        porQue: 'esta ni esta en el dump del tenant: la empresa vive en el esquema CENTRAL, que esta en otro archivo. Un extractor que busca el alias en el archivo equivocado no encuentra nada, y "no encontrado" se leeria como "columna inexistente". Con esto se ve que el check de la central tambien muerde',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'empresa.color_primario',
+                'empresa.color_principal');
+        },
+        espera: 'todas las columnas de empresa que lee la hoja existen en la central'
+    },
+    {
+        nombre: 'la pantalla llama a una ruta que el servidor no expone',
+        porQue: 'sale un 404, y el mensaje que ve el usuario dice que no se pudo conectar con el servidor. La conexion esta bien: la ruta no existe. Un 404 disfrazado de problema de red hace perder horas',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'apiFetch(`/api/facturas/${id}/comprobante`)',
+                'apiFetch(`/api/facturas/${id}/comprobante-pdf`)');
+        },
+        espera: 'la pantalla llama get /api/facturas/:p/comprobante-pdf, y esa ruta existe'
+    },
+    {
+        nombre: 'la pantalla llama con un metodo que el servidor no declara',
+        porQue: 'el mismo 404 del caso anterior pero por el otro lado: la ruta existe y no con ese metodo. Salen dos errores identicos para dos errores distintos, y el mensaje no ayuda a distinguirlos. Se usa PATCH y no GET a proposito: GET /api/facturas/:id SI existe, asi que cambiar DELETE por GET deja una llamada perfectamente valida y el check no tiene nada que reprochar',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                "apiFetch(`/api/facturas/${id}`, { method: 'DELETE' })",
+                "apiFetch(`/api/facturas/${id}`, { method: 'PATCH' })");
+        },
+        espera: 'la pantalla llama patch /api/facturas/:p, y esa ruta existe'
+    },
+    {
+        nombre: 'una ruta de factura queda sin consumidor en el navegador',
+        porQue: 'al reves del anterior: el servidor expone un endpoint y no hay ninguna pantalla que lo alcance. Queda muerto sin que nada lo diga. Detectar esto es lo unico que impide que las rutas sin usar se acumulen en silencio',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                '`/api/facturas/${f.id}/emitir`',
+                '`/api/facturas/${f.id}/emitirV2`');
+        },
+        espera: 'toda ruta de factura se llega desde alguna pantalla'
+    },
+    {
+        nombre: 'la pantalla ofrece una alicuota que el servidor no acepta',
+        porQue: 'la pantalla deja armar y guardar la factura, y el servidor la rechaza con un 400 que no explica nada. El usuario completo todo, aprieta guardar, y pierde el trabajo',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'const ALICUOTAS = [21, 10.5, 0];',
+                'const ALICUOTAS = [21, 10.5, 0, 27];');
+        },
+        espera: 'las alicuotas del navegador son las mismas que las del servidor'
+    },
+    {
+        nombre: 'la pantalla deja de ofrecer una alicuota que el servidor acepta',
+        porQue: 'al reves, y peor para el negocio: el servidor la acepta, la pantalla no la ofrece, y una venta que corresponde a esa alicuota no se puede cargar',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'const ALICUOTAS = [21, 10.5, 0];',
+                'const ALICUOTAS = [21, 0];');
+        },
+        espera: 'las alicuotas del navegador son las mismas que las del servidor'
+    },
+    {
+        nombre: 'la pantalla escribe las opciones de IVA a mano',
+        porQue: 'la lista de alicuotas deja de mandar: el servidor le agrega una y la pantalla no la muestra. El check de igualdad entre las dos listas sigue dando OK, porque las dos siguen iguales: lo que cambio es de donde salen las opciones',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'ALICUOTAS.map((a)',
+                '[21, 10.5, 0].map((a)');
+        },
+        espera: 'las opciones de IVA se generan recorriendo ALICUOTAS'
+    },
+    {
+        nombre: 'la pantalla se queda sin un estado del servidor',
+        porQue: 'el servidor suma un estado y la etiqueta sale pelada, sin fondo, en el medio del listado. Ademas el filtro no lo ofrece, asi que no se puede ni buscar. Ninguno de los dos falla: se ve feo y no se encuentra',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                "    ANULADA: 'Anulada'",
+                "    ANULADA_VIEJA: 'Anulada'");
+        },
+        espera: 'los estados del navegador son los mismos que los del servidor'
+    },
+    {
+        nombre: 'la clase CSS de un estado desaparece de las hojas que carga la pagina',
+        porQue: 'la etiqueta sale pelada en el listado. Y el error de buscar solo en facturacion.css es real: .p-estado-borrador vive en presupuestos.css, que esta pagina carga justamente para no duplicarla',
+        hacer() {
+            reemplazar('../frontend/facturacion.css',
+                '.p-estado-emitida',
+                '.p-estado-emitidax');
+        },
+        espera: 'existe la clase .p-estado-emitida'
+    },
+    {
+        nombre: 'la hoja imprimible deja de decir que no es un comprobante fiscal',
+        porQue: 'el papel que se imprime y se le entrega al cliente sale como si fuera una factura mas, sin el aviso. Y esto es lo unico que separa un comprobante interno de una factura: si desaparece el aviso, quedan el numero, la forma y el membrete, que es exactamente lo que hace parecer a una factura un papel que no lo es',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'no tiene CAI ni punto de venta y no es un comprobante fiscal.',
+                'tiene CAI y punto de venta.');
+        },
+        espera: 'la hoja imprimible dice que no es un comprobante fiscal'
+    },
+    {
+        nombre: 'la pantalla deja de decirlo, pero el papel sigue',
+        porQue: 'el reves del anterior, y por eso el check mira los dos lugares por separado: el aviso vive en dos archivos, y sacar uno solo deja al cliente con un papel sin aviso mientras el usuario sigue viendo uno que si lo tiene',
+        hacer() {
+            reemplazar('../frontend/facturacion.html',
+                'no son comprobantes fiscales',
+                'son comprobantes fiscales');
+        },
+        espera: 'la pantalla dice que no es un comprobante fiscal'
+    },
+    {
+        nombre: 'el navegador manda los importes que calculo',
+        porQue: 'no es un agujero de seguridad, porque el servidor los vuelve a calcular igual. Es otra cosa: es mandarle una opinion que el servidor no escucha. El dia que cambie el calculo, el navegador queda desfasado en silencio y no hay nadie que lo note',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'items: F.items.map((it) => ({',
+                'total: F.total,\n        items: F.items.map((it) => ({');
+        },
+        espera: 'el cuerpo que se manda NO lleva "total:"'
+    },
+    {
+        nombre: 'la hoja imprimible recalcula los importes en el navegador',
+        porQue: 'imprimiria lo que calculo el navegador y no lo que guardo el servidor. Hoy los dos dan lo mismo, asi que no se ve. Mañana, con un redondeo distinto en cada lado, se ve como un peso que no cierra y es el cliente el que lo pregunta',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'const { factura: f, items, empresa, emitido_por } = F.detalle;',
+                'const { factura: f, items, empresa, emitido_por } = F.detalle;\n    recalcularFactura();');
+        },
+        espera: 'la hoja imprimible NO recalcula los importes'
+    },
+    {
+        nombre: 'facturacion.css se carga antes de presupuestos.css',
+        porQue: 'las reglas propias de esta pagina pisan padding y bordes de celdas, y las comunes los definen despues. Cambiando el orden de los links, la tabla se desalinea y el papel sale raro. El orden de los links ES la dependencia: un check de "estan las dos cargadas" daria OK igual',
+        hacer() {
+            reemplazar('../frontend/facturacion.html',
+                '<link rel="stylesheet" href="presupuestos.css?v=2.5">\n    <link rel="stylesheet" href="facturacion.css?v=2.5">',
+                '<link rel="stylesheet" href="facturacion.css?v=2.5">\n    <link rel="stylesheet" href="presupuestos.css?v=2.5">');
+        },
+        espera: 'facturacion.css se carga DESPUES de presupuestos.css'
+    },
+    {
+        nombre: 'el boton de facturar aparece tambien en un presupuesto que no esta APROBADO',
+        porQue: 'facturar un presupuesto enviado o rechazado saca plata de la caja. Que el boton no dependa del estado es un error de negocio y no de estilo, y es de los que se ven en la pantalla y no en el log',
+        hacer() {
+            reemplazar('../frontend/presupuestos.js',
+                "if (p.estado === 'APROBADO' && tieneModulo('facturacion')) {",
+                "if (tieneModulo('facturacion')) {");
+        },
+        espera: 'el boton Facturar exige presupuesto APROBADO y modulo facturacion'
+    },
+    {
+        nombre: 'el boton de facturar aparece sin el modulo contratado',
+        porQue: 'una empresa que no pago facturacion ve un boton que le abre una pantalla de un modulo que no tiene. El error sale del otro lado: el boton existe y el servidor responde 403 sin explicar que el modulo no esta contratado',
+        hacer() {
+            reemplazar('../frontend/presupuestos.js',
+                "if (p.estado === 'APROBADO' && tieneModulo('facturacion')) {",
+                "if (p.estado === 'APROBADO') {");
+        },
+        espera: 'el boton Facturar exige presupuesto APROBADO y modulo facturacion'
+    },
+    {
+        nombre: 'facturar un presupuesto crea la factura y no deja ver el numero',
+        porQue: 'la factura se crea y el usuario queda en la pantalla de presupuestos buscando un numero que todavia no existe. Nadie ve el error porque no hubo error. Es el peor de los fallos sin ruido, y por eso el check mira que se pase el id de la factura nueva',
+        hacer() {
+            reemplazar('../frontend/presupuestos.js',
+                'facturacion.html?nuevo=',
+                'facturacion.html?listo=');
+        },
+        espera: 'presupuestos.js pasa el id de la factura nueva a facturacion.html'
+    },
+
+    /* --- 8. Lo que el HTML llama contra lo que el JS define -----------------
+       Las dos primeras de esta seccion no son hipotesis: son dos botones que
+       estaban rotos y aparecieron recien en el navegador. `onclick="guardar()"`
+       y `onclick="cerrarDetalle()"` en facturacion.html, con las funciones
+       llamadas `guardarFactura` y `cerrarDetalleFactura` en facturacion.js.
+
+       El boton de guardar no guardaba y el de cerrar el detalle no cerraba, y
+       ningun otro check de este archivo lo notaba: todos miran el `.js`, y el
+       `.js` estaba impecable. Por eso estas dos mutaciones atacan los dos
+       lados, y no son el mismo error. */
+    {
+        nombre: 'un boton llama a una funcion que no existe',
+        porQue: 'es el error tal cual salio: el HTML quedo con el nombre de la pagina de al lado y el JS con el nombre propio. Clic, nada, y un ReferenceError en la consola que el usuario no ve porque no abre la consola',
+        hacer() {
+            reemplazar('../frontend/facturacion.html',
+                'onclick="guardarFactura()"',
+                'onclick="guardar()"');
+        },
+        espera: 'las 6 funciones que el HTML llama existen en facturacion.js o auth-check.js'
+    },
+    {
+        nombre: 'la funcion que llama un boton cambia de nombre',
+        porQue: 'el reves, y por eso tambien tiene que morder: renombrar la funcion del JS es el cambio mas natural que hay, porque el HTML no se toca y nada se ve. Con esto se ve que el check no es solo una busqueda de texto en el HTML',
+        hacer() {
+            reemplazar('../frontend/facturacion.js',
+                'async function guardarFactura() {',
+                'async function guardarFacturaV2() {');
+        },
+        espera: 'las 6 funciones que el HTML llama existen en facturacion.js o auth-check.js'
+    },
+    {
+        nombre: 'un boton que cerraba el detalle queda sin funcion',
+        porQue: 'la "X" del comprobante: un boton sin accion y ninguna consecuencia visible salvo que el papel no se cierra. Es el fallo con menos ruido de los dos',
+        hacer() {
+            reemplazar('../frontend/facturacion.html',
+                'onclick="cerrarDetalleFactura()"',
+                'onclick="cerrarDetalle()"');
+        },
+        espera: 'las 6 funciones que el HTML llama existen en facturacion.js o auth-check.js'
+    },
+    {
+        nombre: 'el boton de tema queda sin la funcion que cambia el tema',
+        porQue: 'esta vivita esta en auth-check.js, no en facturacion.js, y se cuelga de window. Un extractor de funciones que solo mira lo que empieza en el principio de la linea no la ve, y el check accuse al boton que esta bien en vez de acusarse a si mismo',
+        hacer() {
+            reemplazar('../frontend/auth-check.js',
+                'window.cambiarTemaManualmente = function cambiarTemaManualmente() {',
+                'window.cambiarTema = function cambiarTemaManualmente() {');
+        },
+        espera: 'las 6 funciones que el HTML llama existen en facturacion.js o auth-check.js'
     }
 ];
 
