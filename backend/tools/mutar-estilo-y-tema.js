@@ -230,8 +230,13 @@ const MUTACIONES = [
             const original = fs.readFileSync(ruta, 'utf8');
             const eol = finDeLineaDe(original);
             const norm = aLf(original);
-            const linea = '<script src="auth-check.js?v=2.4"></script>\n';
-            if (!norm.includes(linea)) throw new Error('no se encuentra el <script> de auth-check.js en el <head> de presupuestos.html');
+            /* El `?v=` NO va escrito en el ancla. Los assets se versionan (hoy
+             * 2.5) y el numero sube con cada tanda de cambios de apariencia. Si
+             * queda aca, el proximo `?v=2.6` rompe esta mutacion y el sintoma
+             * parece "el arnes se rompio", cuando lo unico que cambio fue el
+             * numero de cache. Ya paso: el ancla decia 2.4 y quedo vieja. */
+            const linea = /<script src="auth-check\.js\?v=[0-9.]+"><\/script>\n/;
+            if (!linea.test(norm)) throw new Error('no se encuentra el <script> de auth-check.js en el <head> de presupuestos.html');
             if (!norm.includes('</body>')) throw new Error('no se encuentra </body> en presupuestos.html');
             escribir('presupuestos.html', norm.replace(linea, '').replace('</body>', '<script src="auth-check.js?v=0"></script>\n</body>').replace(/\n/g, eol));
         },

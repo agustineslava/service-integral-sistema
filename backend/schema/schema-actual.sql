@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- Esquema de: ServiceIntegralsistema
 -- Servidor:   MySQL 9.5.0
--- Generado:   2/10/2026, 07:30:29
+-- Generado:   2/10/2026, 09:02:54
 --
 -- FUENTE DE VERDAD del esquema. Reemplaza al esquema que se creaba a mano
 -- en MySQL Workbench sin versionar.
@@ -55,6 +55,66 @@ CREATE TABLE `etiquetas_qr` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 ALTER TABLE `etiquetas_qr` ADD CONSTRAINT `fk_eq_producto` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE;
+
+-- ---------------------------------------------------------------------------
+-- Tabla: factura_items   (11 columnas, 3 indices)
+-- ---------------------------------------------------------------------------
+CREATE TABLE `factura_items` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `factura_id` int NOT NULL,
+  `producto_id` int NULL COMMENT 'NULL si el renglon no sale del catalogo',
+  `descripcion` varchar(200) NOT NULL,
+  `cantidad` decimal(12,3) NOT NULL DEFAULT '1.000',
+  `precio_unitario` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `descuento` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `iva_porcentaje` decimal(5,2) NOT NULL DEFAULT '21.00',
+  `subtotal` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `orden` smallint NOT NULL DEFAULT '0',
+  `creado_en` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_fi_factura` (`factura_id`) USING BTREE,
+  KEY `idx_fi_producto` (`producto_id`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+ALTER TABLE `factura_items` ADD CONSTRAINT `fk_fi_factura` FOREIGN KEY (`factura_id`) REFERENCES `facturas` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE;
+ALTER TABLE `factura_items` ADD CONSTRAINT `fk_fi_producto` FOREIGN KEY (`producto_id`) REFERENCES `productos` (`id`) ON UPDATE NO ACTION ON DELETE SET NULL;
+
+-- ---------------------------------------------------------------------------
+-- Tabla: facturas   (22 columnas, 6 indices)
+-- ---------------------------------------------------------------------------
+CREATE TABLE `facturas` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `numero` int NULL COMMENT 'Correlativo por empresa. NULL hasta que se emite.',
+  `fecha` date NOT NULL COMMENT 'Fecha de emision (comprobante)',
+  `cliente_id` int NULL COMMENT 'FK a clientes.id. Solo referencia.',
+  `cliente_nombre` varchar(200) NOT NULL,
+  `cliente_doc` varchar(20) NULL,
+  `cliente_telefono` varchar(30) NULL,
+  `cliente_email` varchar(150) NULL,
+  `cliente_direccion` varchar(255) NULL,
+  `presupuesto_id` int NULL COMMENT 'Presupuesto del que salio, si salio de uno',
+  `subtotal` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `descuento` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `iva_monto` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `total` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `estado` enum('BORRADOR','EMITIDA','PAGADA','ANULADA') NOT NULL DEFAULT 'BORRADOR',
+  `forma_pago` varchar(40) NULL COMMENT 'Efectivo, Transferencia, Tarjeta, Cuenta corriente...',
+  `fecha_pago` datetime NULL COMMENT 'Se llena al marcar como pagada',
+  `stock_descontado` tinyint(1) NOT NULL DEFAULT '0',
+  `notas` text NULL,
+  `usuario_nombre` varchar(100) NULL COMMENT 'Quien la emitio (snapshot)',
+  `creado_en` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `actualizado_en` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_fact_cliente` (`cliente_id`) USING BTREE,
+  KEY `idx_fact_estado` (`estado`) USING BTREE,
+  KEY `idx_fact_fecha` (`fecha`) USING BTREE,
+  KEY `idx_fact_presupuesto` (`presupuesto_id`) USING BTREE,
+  UNIQUE KEY `uq_fact_numero` (`numero`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+ALTER TABLE `facturas` ADD CONSTRAINT `fk_fact_cliente` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON UPDATE NO ACTION ON DELETE SET NULL;
+ALTER TABLE `facturas` ADD CONSTRAINT `fk_fact_presupuesto` FOREIGN KEY (`presupuesto_id`) REFERENCES `presupuestos` (`id`) ON UPDATE NO ACTION ON DELETE SET NULL;
 
 -- ---------------------------------------------------------------------------
 -- Tabla: movimientos_stock   (9 columnas, 2 indices)
@@ -172,7 +232,7 @@ CREATE TABLE `productos` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- ---------------------------------------------------------------------------
--- Tabla: reparaciones   (22 columnas, 2 indices)
+-- Tabla: reparaciones   (23 columnas, 2 indices)
 -- ---------------------------------------------------------------------------
 CREATE TABLE `reparaciones` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -190,6 +250,7 @@ CREATE TABLE `reparaciones` (
   `costo_mano_obra` decimal(10,2) NULL DEFAULT '0.00',
   `costo_repuestos` decimal(10,2) NULL DEFAULT '0.00',
   `total` decimal(10,2) NULL DEFAULT '0.00',
+  `precio_cobrado` decimal(12,2) NULL COMMENT 'Cuanto se le cobro al cliente. NULL = no se cargo todavia.',
   `estado` enum('Pendiente','En Reparacion','Esperando Repuesto','Listo','Entregado','Cancelado') NULL DEFAULT 'Pendiente',
   `stock_descontado` tinyint(1) NULL DEFAULT '0',
   `tecnico_asignado` varchar(100) NULL,

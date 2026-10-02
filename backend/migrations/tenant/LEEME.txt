@@ -26,6 +26,40 @@ Reglas:
   4. Las migraciones no llevan USE, ni CREATE DATABASE, ni DROP DATABASE.
      El motor ya está conectado a la base correcta.
 
+  5. TODA MIGRACIÓN TIENE QUE SER REAPLICABLE.
+     Corrida sobre un esquema que ya la tiene, no cambia nada.
+
+     Por qué: la base de una empresa nueva se arma en dos pasos, en este orden.
+
+         1. se carga `schema/schema-actual.sql`
+         2. DESPUÉS se corre esta cadena de migraciones encima
+
+     `schema-actual.sql` es un volcado del esquema ACTUAL — tiene las columnas
+     nuevas porque es el volcado de una base que ya está migrada. Así que la
+     cadena se corre SOBRE un esquema que ya la tiene. Si una migración no
+     tolera eso, el alta de la empresa muere en el paso 2 con un error que no
+     dice nada de la migración: `Duplicate column name 'precio_cobrado'`, o
+     `Table 'facturas' already exists`.
+
+     En la práctica:
+
+         BIEN:  CREATE TABLE IF NOT EXISTS ...
+         BIEN:  un ALTER guardado con un IF sobre information_schema, armado
+                con SQL dinámico (MySQL no tiene ADD COLUMN IF NOT EXISTS;
+                MariaDB sí)
+         MAL:   ALTER TABLE ... ADD COLUMN a secas
+         MAL:   DROP COLUMN a secas
+         MAL:   cualquier cosa que dé por hecho que el esquema está "virgen"
+
+     El que lo encuentra no es el motor: el motor tiene un ledger y se saltea lo
+     ya aplicado, así que contra una base que ya está al día nunca ve el
+     problema. Lo encuentra `npm run f4:verificar`, que arma una base de empresa
+     desde cero exactamente como lo hace el alta. Ese verificador es la prueba de
+     que el camino de alta funciona, y por eso corre antes de cada commit.
+
+     La 006 fue la primera migración con un ALTER y ya costó una: toda empresa
+     nueva se habría rechazado al registrarse.
+
 Cómo se aplican:
 
     npm run migrate -- --tenant ServiceIntegralsistema --dry-run
@@ -36,6 +70,9 @@ Cómo se aplican:
     npm run migrate -- --fleet --dry-run
     npm run migrate -- --fleet
 
-Este directorio está vacío a propósito: todavía no hay cambios de esquema
-de empresa que aplicar. La carpeta existe para que el motor de migraciones
-esté probado y listo antes de necesitarlo.
+Este directorio tiene los cambios de esquema que se aplican a la base de CADA
+empresa: 004 presupuestos, 005 etiquetas QR, 006 facturación interna.
+
+Antes de la 004 el esquema base venía (y sigue viniendo) de
+`schema/schema-actual.sql`, que es también lo que se carga al dar de alta una
+empresa. Por eso la regla 5 importa tanto.

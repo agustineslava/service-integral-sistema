@@ -2146,14 +2146,21 @@ const PRESUPUESTO_EDITABLE = ['BORRADOR', 'ENVIADO'];
  * Recibe el `query` con promesas de la transaccion, no la conexion cruda: la
  * conexion de mysql2 sin `mysql2/promise` no devuelve promesas y `await` sobre
  * ella no hace nada.
+ *
+ * El nombre de la correlativa va como parametro y no escrito en el cuerpo: cada
+ * documento que numerar (presupuesto, factura) usa su propia fila de
+ * `secuencias`, asi que los dos numeros avanzan por separado y ninguno pisa al
+ * otro. La fila se crea sola en el primer uso.
  */
-async function siguienteNumero(query) {
+async function siguienteNumero(query, nombre = 'presupuesto') {
     await query(
-        `INSERT INTO \`secuencias\` (nombre, ultimo) VALUES ('presupuesto', 1)
-           ON DUPLICATE KEY UPDATE ultimo = ultimo + 1`
+        `INSERT INTO \`secuencias\` (nombre, ultimo) VALUES (?, 1)
+           ON DUPLICATE KEY UPDATE ultimo = ultimo + 1`,
+        [nombre]
     );
     const [filas] = await query(
-        `SELECT ultimo FROM \`secuencias\` WHERE nombre = 'presupuesto'`
+        'SELECT ultimo FROM `secuencias` WHERE nombre = ?',
+        [nombre]
     );
     return filas[0].ultimo;
 }
@@ -2538,6 +2545,919 @@ app.delete('/api/presupuestos/:id', verificarToken, requiereModulo('presupuestos
         res.json({ mensaje: 'Presupuesto eliminado' });
     } catch (err) {
         console.error('Error al eliminar presupuesto:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+/* ==========================================================================
+   13.1 FACTURACIÓN INTERNA  (modulo vendible `facturacion`)
+   --------------------------------------------------------------------------
+   ESTO NO ES FACTURACIÓN ELECTRÓNICA. Y la diferencia no es de marketing:
+   lo que sale de acá es un comprobante interno con numeración correlativa por
+   empresa. No se emite ante ARCA/AFIP, no tiene CAI ni punto de venta, y por
+   lo tanto NO SIRVE como comprobante fiscal. La facturación electrónica es otra
+   etapa, con sus propias credenciales y sus plazos. Está escrito acá para que
+   nadie lo confunda después.
+
+   Por qué el número se saca AL EMITIR y no al crear el borrador
+   ------------------------------------------------------------------
+   El número de un documento identifica ese documento. Si el borrador lo tuviera,
+   cada borrador que nunca se emite quemaría un número y dejaría un hueco en la
+   correlativa — y en una numeración, un hueco es un número que alguien puede
+   estar usando y no se sabe de qué. Por eso `facturas.numero` es NULL mientras
+   el documento es borrador. `UNIQUE` sigue garantizando que dos facturas
+   emitidas no compartan número: MySQL admite varios NULL en un índice UNIQUE.
+
+   Por qué el IVA es POR RENGLÓN
+   ------------------------------------------------------------------
+   En Argentina la alícuota depende del tipo de cosa, y en un taller conviven
+   repuestos y mano de obra con alícuotas distintas. Poner un 21% único para
+   toda la factura estaría mal en cuanto se mezclen. Por eso cada renglón trae
+   el suyo, y el total es la suma de los IVA de cada renglón.
+
+   Las alícuotas admitidas son 0, 10.50 y 21.00, y no "cualquier número entre 0
+   y 100". Aceptar cualquier valor parece más flexible y en la práctica es un
+   error esperando: alguien escribe 21,5 o 0.21 y la factura sale con el IVA
+   callado. Tres valores, uno de cada clase, es lo que Argentina tiene.
+
+   Por qué la plata es DECIMAL y la aritmética es de enteros de centavo
+   ------------------------------------------------------------------
+   0.1 + 0.2 = 0.30000000000000004 en IEEE-754, y una factura que no cuadra es
+   una factura que nadie firma. Los importes son DECIMAL(12,2) en MySQL y en JS
+   se redondean a dos decimales con `a2()` en cada paso, nunca se acumula el
+   error. La fórmula es una sola y está escrita en la migración y acá:
+
+       total = subtotal - descuento + iva_monto
+
+   `subtotal` es BRUTO (Σ cantidad × precio, sin descontar) y `descuento` es la
+   suma de los descuentos por renglón. Igual que en presupuestos.
+
+   Por qué el descuento de stock es TODO O NADA
+   ------------------------------------------------------------------
+   Emitir descuenta stock, y una factura a medio descontar es peor que no
+   emitir: el depósito queda mal y no hay forma de saber cuánto. Así que antes
+   de tocar un solo producto se verifica TODOS los renglones, y si a uno le
+   falta stock no se emite nada y se dice cuál. Todo adentro de una transacción:
+   o salen el número, el estado y todos los movimientos, o no sale nada.
+
+   Y `stock_descontado` es lo que impide que el descuento pase dos veces: si se
+   reintenta la emisión de una factura ya emitida, no vuelve a descontar.
+
+   Por qué el stock se controla en unidades enteras
+   ------------------------------------------------------------------
+   `productos.stock` es INT y `movimientos_stock.cantidad_afectada` también. Un
+   renglón puede llevar cantidad fraccionaria (1,5 h de mano de obra, que es
+   normal), pero si además está atado a un producto, esa cantidad no se puede
+   escribir en el depósito. Redondear en silencio convertiría una venta de 2,5
+   en una venta de 2 sin que nadie se entere, que es exactamente el tipo de
+   error de inventario que después nadie puede reconstruir. Por eso la emisión
+   RECHAZA un renglón con producto y cantidad fraccionaria, y el mensaje dice
+   qué hacer.
+
+   Quién puede qué
+   ------------------------------------------------------------------
+      ver / crear / editar borrador   cualquiera con el módulo
+      editar                          solo mientras sea BORRADOR
+      borrar                          solo ADMIN, y solo BORRADOR
+      emitir / anular                 solo ADMIN  (son decisiones de negocio)
+      marcar pagada                   cualquiera con el módulo
+
+   Una factura EMITIDA no se edita ni se borra, nunca: conserva el número para
+   siempre. Si hay que corregirla se anula y se emite otra, que es lo que pasa
+   con cualquier documento que ya salió del taller. Lo mismo que en presupuestos,
+   donde solo se borra en BORRADOR para que la correlativa siga siendo
+   correlativa.
+   ========================================================================== */
+
+/** Los cuatro estados de una factura. El ENUM de MySQL tiene los mismos. */
+const ESTADO_FACTURA = {
+    BORRADOR: 'borrador',
+    EMITIDA: 'emitida',
+    PAGADA: 'pagada',
+    ANULADA: 'anulada'
+};
+
+/**
+ * Alícuotas que Argentina usa para esto. Son tres, no un rango: cada una es
+ * una categoría de mercadería distinta, y el número tiene que ser UNO de estos
+ * tres o la factura está mal.
+ */
+const ALICUOTAS_IVA = [0, 10.5, 21];
+
+/**
+ * Valida y calcula una factura. Devuelve los renglones ya con su subtotal, y los
+ * cuatro importes de la cabecera. Si algo no cierra, no hay siguiente paso.
+ *
+ * Devuelve TODOS los errores juntos, no solo el primero: si una factura de 12
+ * renglones tiene tres con la IVA mal, el usuario quiere ver los tres y no
+ * arreglar uno, volver, ver el siguiente error, y arreglar otro.
+ */
+function prepararFactura(body) {
+    const errores = [];
+    const texto = (v) => (v === undefined || v === null ? '' : String(v).trim());
+
+    const cliente_nombre = texto(body.cliente_nombre).slice(0, 200);
+    if (!cliente_nombre) errores.push('El nombre del cliente es obligatorio.');
+
+    const cliente_id = body.cliente_id ? Number(body.cliente_id) : null;
+    if (cliente_id !== null && !Number.isInteger(cliente_id)) {
+        errores.push('El cliente no es válido.');
+    }
+
+    // La fecha de emisión no puede ser una fecha que no existe (31 de febrero
+    // entra por el regex y MySQL la rechaza con un error de columna) ni una de
+    // acá que no llegó todavía, que en un comprobante es un documento fechado
+    // en el futuro.
+    let fecha = texto(body.fecha).slice(0, 10);
+    if (!fecha) {
+        fecha = new Date().toISOString().slice(0, 10);
+    } else if (!fechaReal(fecha)) {
+        errores.push('La fecha no es una fecha válida (AAAA-MM-DD).');
+    }
+
+    const bruto = Array.isArray(body.items) ? body.items : [];
+    if (bruto.length === 0) errores.push('La factura tiene que tener al menos un ítem.');
+    if (bruto.length > 200) errores.push('Una factura no puede tener más de 200 ítems.');
+
+    let subtotal = 0;
+    let descuento = 0;
+    let iva_monto = 0;
+
+    const items = bruto.map((it, i) => {
+        const descripcion = texto(it.descripcion).slice(0, 200);
+        const cantidad = Number(it.cantidad);
+        const precio_unitario = a2(it.precio_unitario);
+        const descuentoItem = a2(it.descuento);
+        const producto_id = it.producto_id ? Number(it.producto_id) : null;
+        const iva_porcentaje = Number(it.iva_porcentaje);
+        const n = i + 1;
+
+        if (!descripcion) errores.push(`El ítem ${n} necesita una descripción.`);
+        if (!Number.isFinite(cantidad) || cantidad <= 0) {
+            errores.push(`La cantidad del ítem ${n} tiene que ser un número mayor que 0.`);
+        }
+        if (cantidad > 100000) errores.push(`La cantidad del ítem ${n} es absurda.`);
+
+        if (!Number.isFinite(precio_unitario) || precio_unitario < 0) {
+            errores.push(`El precio del ítem ${n} tiene que ser un número mayor o igual a 0.`);
+        }
+        if (!Number.isFinite(descuentoItem) || descuentoItem < 0) {
+            errores.push(`El descuento del ítem ${n} tiene que ser un número mayor o igual a 0.`);
+        }
+        if (producto_id !== null && !Number.isInteger(producto_id)) {
+            errores.push(`El producto del ítem ${n} no es válido.`);
+        }
+
+        // La alícuota tiene que ser UNA de las tres, no "parecida a una".
+        // Comparar con `includes` y no con un rango: 20.9 casi es 21, y casi
+        // no sirve para una factura.
+        if (!Number.isFinite(iva_porcentaje) || !ALICUOTAS_IVA.includes(iva_porcentaje)) {
+            errores.push(
+                `El IVA del ítem ${n} tiene que ser ${ALICUOTAS_IVA.join(', ')} ` +
+                '(uno de esos tres, en punto).'
+            );
+        }
+
+        const cant = Number.isFinite(cantidad) ? cantidad : 0;
+        const prec = Number.isFinite(precio_unitario) ? precio_unitario : 0;
+        const desc = Number.isFinite(descuentoItem) ? descuentoItem : 0;
+
+        const brutoItem = a2(cant * prec);
+
+        // Un descuento mayor que el propio renglón daría una factura con
+        // renglones negativos y un total que no es el importe que hay que cobrar.
+        if (desc > brutoItem) {
+            errores.push(
+                `El descuento del ítem ${n} (${desc}) es mayor que su propio importe (${brutoItem}).`
+            );
+        }
+
+        const neto = a2(brutoItem - desc);
+        const alicuota = ALICUOTAS_IVA.includes(iva_porcentaje) ? iva_porcentaje : 0;
+        const ivaItem = a2(neto * alicuota / 100);
+
+        subtotal = a2(subtotal + brutoItem);
+        descuento = a2(descuento + desc);
+        iva_monto = a2(iva_monto + ivaItem);
+
+        return {
+            descripcion,
+            cantidad: cant,
+            precio_unitario: prec,
+            descuento: desc,
+            iva_porcentaje: alicuota,
+            producto_id,
+            orden: i,
+            subtotal: brutoItem,
+            iva_monto: ivaItem
+        };
+    });
+
+    // El total se arma con la misma fórmula de la migración. Que esté escrita
+    // en los dos lugares es a propósito: son dos sistemas distintos —el que
+    // calcula y el que documenta— y el verificador compara las dos para que si
+    // mañana cambia una, avise que la otra quedó vieja.
+    const total = a2(subtotal - descuento + iva_monto);
+
+    if (errores.length) return { valido: false, error: errores[0], errores };
+
+    return {
+        valido: true,
+        datos: {
+            cliente_id,
+            cliente_nombre,
+            cliente_doc: texto(body.cliente_doc).slice(0, 20) || null,
+            cliente_telefono: texto(body.cliente_telefono).slice(0, 30) || null,
+            cliente_email: texto(body.cliente_email).slice(0, 150) || null,
+            cliente_direccion: texto(body.cliente_direccion).slice(0, 255) || null,
+            presupuesto_id: body.presupuesto_id ? Number(body.presupuesto_id) : null,
+            fecha,
+            notas: texto(body.notas).slice(0, 2000) || null,
+            forma_pago: texto(body.forma_pago).slice(0, 40) || null,
+            subtotal,
+            descuento,
+            iva_monto,
+            total,
+            items
+        }
+    };
+}
+
+/**
+ * Lee la cantidad de un renglón y la pasa a NÚMERO.
+ *
+ * Por qué hace falta: `factura_items.cantidad` es DECIMAL(12,3), y mysql2
+ * devuelve los DECIMAL como texto. Un renglón de 2 unidades no llega como `2`
+ * sino como `"2.000"` — con tres decimales de relleno. Con la cadena,
+ * `Number.isInteger("2.000")` da `false`, `stock < "2.000"` compara un entero
+ * contra una cadena, y toda factura con producto se rechaza al emitir con un
+ * mensaje que dice que 2 unidades no son enteras.
+ *
+ * Esto NO lo detectó el verificador ni el arnés de mutaciones: los dos leen el
+ * código y el esquema, y ahí los dos dicen que `cantidad` es un número. El tipo
+ * que MySQL devuelve es lo único que se ve corriendo la consulta de verdad —
+ * que es lo que hace `tools/probar-facturacion-vivo.js`.
+ *
+ * Devuelve el número, o `null` si no es una cantidad usable.
+ */
+function cantidadDeRenglon(it) {
+    const n = Number(it.cantidad);
+    return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Baja el stock de TODOS los renglones con producto, o no baja ninguno.
+ *
+ * Primero mira TODOS y después toca el primero. Es al revés de lo intuitivo y
+ * es a propósito: si se descontara de a uno y en el cuarto faltara stock, el
+ * error se descubre con tres productos ya descontados y un `movimientos_stock`
+ * que dice 3 ventas donde hubo 1. Con la transacción de arriba, ese estado no
+ * llega a existir; sin ella, tampoco pero por otra razón.
+ *
+ * Manda `query` de la transacción (promesas), no `db`. Recibe el nombre de la
+ * factura solo para el motivo del movimiento, que es lo que después lee el
+ * humano que consulta el depósito.
+ */
+async function descontarStockFactura(query, items, motivo) {
+    // 1. Verificar todo antes de tocar nada.
+    const faltantes = [];
+    const aBajar = [];
+
+    for (const it of items) {
+        if (!it.producto_id) continue;
+
+        const cantidad = cantidadDeRenglon(it);
+        if (cantidad === null || cantidad <= 0) continue;
+
+        // `productos.stock` y `movimientos_stock.cantidad_afectada` son INT: una
+        // cantidad fraccionaria no se puede escribir. Se rechaza acá y no se
+        // redondea, porque redondear en silencio convierte una venta de 2,5 en
+        // una de 2 sin que nadie lo vea.
+        if (!Number.isInteger(cantidad)) {
+            const e = new Error(
+                `La cantidad de "${it.descripcion}" es ${cantidad} y el stock se controla ` +
+                'en unidades enteras. Poné la cantidad en números enteros, o sacale el ' +
+                'producto y cargalo como mano de obra (sin producto no se descuenta depósito).'
+            );
+            e.estadoHttp = 400;
+            throw e;
+        }
+
+        const [p] = await query(
+            'SELECT nombre, stock FROM productos WHERE id = ?',
+            [it.producto_id]
+        );
+        if (!p.length) {
+            const e = new Error(
+                `"${it.descripcion}" apunta al producto ${it.producto_id}, que no existe. ` +
+                'Sacale el producto del renglón o elegí uno del catálogo.'
+            );
+            e.estadoHttp = 400;
+            throw e;
+        }
+
+        const stock = Number(p[0].stock) || 0;
+        if (stock < cantidad) {
+            faltantes.push(`${p[0].nombre}: pide ${cantidad} y hay ${stock}`);
+        } else {
+            aBajar.push({ producto_id: it.producto_id, nombre: p[0].nombre, cantidad });
+        }
+    }
+
+    if (faltantes.length) {
+        const e = new Error(
+            'No hay stock suficiente para emitir la factura. Faltan:\n- ' + faltantes.join('\n- ')
+        );
+        e.estadoHttp = 400;
+        throw e;
+    }
+
+    // 2. Ahora sí, todos o ninguno.
+    for (const b of aBajar) {
+        await query('UPDATE productos SET stock = stock - ? WHERE id = ?', [b.cantidad, b.producto_id]);
+        await query(
+            `INSERT INTO movimientos_stock
+                (producto_id, producto_nombre, usuario_nombre, tipo, cantidad_afectada, stock_resultante, motivo)
+             VALUES (?, ?, ?, 'VENTA', ?, (SELECT stock FROM productos WHERE id = ?), ?)`,
+            [b.producto_id, b.nombre, 'Sistema', b.cantidad, b.producto_id, motivo]
+        );
+    }
+
+    return aBajar.length;
+}
+
+/** Devuelve el stock que la factura sacó del depósito, para devolverlo al anular. */
+async function devolverStockFactura(query, items, motivo) {
+    for (const it of items) {
+        if (!it.producto_id) continue;
+
+        // La cantidad viene de la base como texto (DECIMAL). Sin convertirla, el
+        // `+ ?` de arriba sumaría "2.000" y el depósito quedaría con un valor
+        // que no es un número, y el `Number.isInteger` de acá no lo vería.
+        const cantidad = cantidadDeRenglon(it);
+        if (cantidad === null || cantidad <= 0 || !Number.isInteger(cantidad)) continue;
+
+        await query('UPDATE productos SET stock = stock + ? WHERE id = ?', [cantidad, it.producto_id]);
+        await query(
+            `INSERT INTO movimientos_stock
+                (producto_id, producto_nombre, usuario_nombre, tipo, cantidad_afectada, stock_resultante, motivo)
+             VALUES (?, ?, ?, 'AJUSTE', ?, (SELECT stock FROM productos WHERE id = ?), ?)`,
+            [it.producto_id, it.descripcion.slice(0, 150), 'Sistema', cantidad, it.producto_id, motivo]
+        );
+    }
+}
+
+// --- Listado ----------------------------------------------------------------
+app.get('/api/facturas', verificarToken, requiereModulo('facturacion'), async (req, res) => {
+    try {
+        const condiciones = [];
+        const valores = [];
+
+        if (req.query.estado) {
+            const estados = String(req.query.estado).split(',').map((e) => e.trim().toUpperCase());
+            const validos = estados.filter((e) => ESTADO_FACTURA[e]);
+            if (validos.length) {
+                condiciones.push(`estado IN (${validos.map(() => '?').join(',')})`);
+                valores.push(...validos);
+            }
+        }
+        if (req.query.cliente_id) {
+            condiciones.push('cliente_id = ?');
+            valores.push(Number(req.query.cliente_id) || 0);
+        }
+        if (req.query.desde) {
+            if (fechaReal(String(req.query.desde))) {
+                condiciones.push('fecha >= ?');
+                valores.push(String(req.query.desde));
+            }
+        }
+        if (req.query.hasta) {
+            if (fechaReal(String(req.query.hasta))) {
+                condiciones.push('fecha <= ?');
+                valores.push(String(req.query.hasta));
+            }
+        }
+        if (req.query.q) {
+            condiciones.push('(cliente_nombre LIKE ? OR cliente_doc LIKE ? OR CAST(numero AS CHAR) = ?)');
+            const q = String(req.query.q).trim().slice(0, 60);
+            valores.push(`%${escaparLike(q)}%`, `%${escaparLike(q)}%`, q.replace(/\D/g, ''));
+        }
+
+        const donde = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+
+        // `COALESCE(numero, 0) DESC` y no `numero DESC`: los borradores tienen
+        // numero NULL, y en MySQL `ORDER BY numero DESC` pone los NULL
+        // PRIMERO, así que arriba de la lista aparecerían todos los borradores
+        // sin número y las facturas emitidas —las que importan— al fondo.
+        const [filas] = await db.promise().query(
+            `SELECT id, numero, fecha, cliente_id, cliente_nombre, cliente_doc, estado,
+                    subtotal, descuento, iva_monto, total, forma_pago, fecha_pago, usuario_nombre
+               FROM facturas
+               ${donde}
+              ORDER BY COALESCE(numero, 0) DESC, id DESC
+              LIMIT 300`,
+            valores
+        );
+
+        res.json(filas);
+    } catch (err) {
+        console.error('Error al listar facturas:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// --- Detalle ----------------------------------------------------------------
+app.get('/api/facturas/:id', verificarToken, requiereModulo('facturacion'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Factura inválida' });
+
+    try {
+        const [f] = await db.promise().query('SELECT * FROM facturas WHERE id = ?', [id]);
+        if (!f.length) return res.status(404).json({ error: 'Factura no encontrada' });
+
+        const [items] = await db.promise().query(
+            `SELECT id, producto_id, descripcion, cantidad, precio_unitario,
+                    descuento, iva_porcentaje, subtotal, orden
+               FROM factura_items WHERE factura_id = ? ORDER BY orden, id`,
+            [id]
+        );
+
+        res.json({ ...f[0], items });
+    } catch (err) {
+        console.error('Error al obtener factura:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+/**
+ * El comprobante: factura + renglones + los datos de la empresa con los que se
+ * imprime. Una sola respuesta, igual que el presupuesto, para que la hoja de
+ * impresión no mezcle dos fuentes ni dependa de lo que quedó en el navegador.
+ */
+app.get('/api/facturas/:id/comprobante', verificarToken, requiereModulo('facturacion'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Factura inválida' });
+
+    try {
+        const [f] = await db.promise().query('SELECT * FROM facturas WHERE id = ?', [id]);
+        if (!f.length) return res.status(404).json({ error: 'Factura no encontrada' });
+
+        const [items] = await db.promise().query(
+            `SELECT descripcion, cantidad, precio_unitario, descuento, iva_porcentaje, subtotal
+               FROM factura_items WHERE factura_id = ? ORDER BY orden, id`,
+            [id]
+        );
+
+        res.json({
+            factura: f[0],
+            items,
+            empresa: datosDeMarca(req.empresa),
+            // Para el pie del comprobante, sin exponer datos del usuario.
+            emitido_por: f[0].usuario_nombre
+        });
+    } catch (err) {
+        console.error('Error al armar el comprobante:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// --- Alta -------------------------------------------------------------------
+app.post('/api/facturas', verificarToken, requiereModulo('facturacion'), async (req, res) => {
+    const prep = prepararFactura(req.body);
+    if (!prep.valido) return res.status(400).json({ error: prep.error, errores: prep.errores });
+
+    const d = prep.datos;
+    try {
+        // Se crea SIEMPRE como BORRADOR y con numero NULL. El numero lo saca
+        // `emitir`, no este endpoint: por eso acá no se llama a
+        // `siguienteNumero`.
+        const id = await tenant.transaccion(async ({ query }) => {
+            const [r] = await query(
+                `INSERT INTO facturas
+                    (numero, fecha, cliente_id, cliente_nombre, cliente_doc, cliente_telefono,
+                     cliente_email, cliente_direccion, presupuesto_id, subtotal, descuento,
+                     iva_monto, total, estado, notas, usuario_nombre)
+                 VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'BORRADOR', ?, ?)`,
+                [d.fecha, d.cliente_id, d.cliente_nombre, d.cliente_doc, d.cliente_telefono,
+                    d.cliente_email, d.cliente_direccion, d.presupuesto_id, d.subtotal, d.descuento,
+                    d.iva_monto, d.total, d.notas, req.usuario.nombre]
+            );
+            const facturaId = r.insertId;
+
+            const valoresItems = d.items.map((it) => [
+                facturaId, it.producto_id, it.descripcion, it.cantidad,
+                it.precio_unitario, it.descuento, it.iva_porcentaje, it.subtotal, it.orden
+            ]);
+            if (valoresItems.length) {
+                await query(
+                    `INSERT INTO factura_items
+                        (factura_id, producto_id, descripcion, cantidad, precio_unitario,
+                         descuento, iva_porcentaje, subtotal, orden)
+                     VALUES ?`,
+                    [valoresItems]
+                );
+            }
+            return facturaId;
+        });
+
+        res.status(201).json({
+            mensaje: 'Factura creada como borrador',
+            id,
+            estado: 'BORRADOR',
+            total: d.total
+        });
+    } catch (err) {
+        console.error('Error al crear factura:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// --- Modificación -----------------------------------------------------------
+app.put('/api/facturas/:id', verificarToken, requiereModulo('facturacion'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Factura inválida' });
+
+    const prep = prepararFactura(req.body);
+    if (!prep.valido) return res.status(400).json({ error: prep.error, errores: prep.errores });
+    const d = prep.datos;
+
+    try {
+        await tenant.transaccion(async ({ query }) => {
+            const [actual] = await query('SELECT estado FROM facturas WHERE id = ?', [id]);
+            if (!actual.length) {
+                const e = new Error('Factura no encontrada');
+                e.estadoHttp = 404;
+                throw e;
+            }
+            // Solo BORRADOR. Una factura emitida o pagada ya salió del taller:
+            // cambiarla por la puerta de atrás rompe el número que el cliente
+            // tiene y el depósito que ya se movió. Se anula y se emite otra.
+            if (actual[0].estado !== 'BORRADOR') {
+                const e = new Error(
+                    `Una factura ${ESTADO_FACTURA[actual[0].estado]} no se puede modificar. ` +
+                    'Anulala y emití una nueva.'
+                );
+                e.estadoHttp = 400;
+                throw e;
+            }
+
+            await query(
+                `UPDATE facturas
+                    SET fecha = ?, cliente_id = ?, cliente_nombre = ?, cliente_doc = ?,
+                        cliente_telefono = ?, cliente_email = ?, cliente_direccion = ?,
+                        subtotal = ?, descuento = ?, iva_monto = ?, total = ?,
+                        notas = ?, forma_pago = ?
+                  WHERE id = ?`,
+                [d.fecha, d.cliente_id, d.cliente_nombre, d.cliente_doc, d.cliente_telefono,
+                    d.cliente_email, d.cliente_direccion, d.subtotal, d.descuento, d.iva_monto,
+                    d.total, d.notas, d.forma_pago, id]
+            );
+
+            await query('DELETE FROM factura_items WHERE factura_id = ?', [id]);
+            const valoresItems = d.items.map((it) => [
+                id, it.producto_id, it.descripcion, it.cantidad, it.precio_unitario,
+                it.descuento, it.iva_porcentaje, it.subtotal, it.orden
+            ]);
+            if (valoresItems.length) {
+                await query(
+                    `INSERT INTO factura_items
+                        (factura_id, producto_id, descripcion, cantidad, precio_unitario,
+                         descuento, iva_porcentaje, subtotal, orden)
+                     VALUES ?`,
+                    [valoresItems]
+                );
+            }
+        });
+
+        res.json({ mensaje: 'Factura actualizada', id, total: d.total });
+    } catch (err) {
+        console.error('Error al actualizar factura:', err);
+        res.status(err.estadoHttp || 500).json({ error: err.message || 'Error interno del servidor' });
+    }
+});
+
+// --- Emitir -----------------------------------------------------------------
+/**
+ * Recibe el número y descuenta el stock. Es una decisión de negocio —el
+ * documento pasa a existir y el depósito se mueve— así que es solo ADMIN.
+ *
+ * Todo en una transacción, y en este orden: se verifica el stock, se saca el
+ * número, se descuenta, se marca. Si algo falla después del número, la
+ * transacción deshace el número junto con todo lo demás: la correlativa no
+ * avanza por facturas que nunca salieron.
+ */
+app.post('/api/facturas/:id/emitir', verificarToken, requiereModulo('facturacion'), requiereAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Factura inválida' });
+
+    try {
+        const resultado = await tenant.transaccion(async ({ query }) => {
+            const [f] = await query('SELECT * FROM facturas WHERE id = ?', [id]);
+            if (!f.length) {
+                const e = new Error('Factura no encontrada');
+                e.estadoHttp = 404;
+                throw e;
+            }
+            const factura = f[0];
+
+            if (factura.estado === 'ANULADA') {
+                const e = new Error('Una factura anulada no se puede volver a emitir.');
+                e.estadoHttp = 400;
+                throw e;
+            }
+            // Reemitir una ya emitida no vuelve a descontar stock: el chequeo
+            // de `stock_descontado` está adentro de `descontarStockFactura` por
+            // lo que hace el que llama, no por lo que hace la función.
+            if (factura.estado === 'EMITIDA' || factura.estado === 'PAGADA') {
+                return { yaEmitida: true, numero: factura.numero };
+            }
+
+            const [items] = await query(
+                'SELECT producto_id, descripcion, cantidad FROM factura_items WHERE factura_id = ? ORDER BY orden, id',
+                [id]
+            );
+            if (!items.length) {
+                const e = new Error('La factura no tiene ítems: no hay nada que emitir.');
+                e.estadoHttp = 400;
+                throw e;
+            }
+
+            // El número va DESPUÉS de verificar el stock. Al revés, una emisión
+            // que no sale por falta de stock quema un número de la correlativa.
+            const numero = await siguienteNumero(query, 'factura');
+
+            if (factura.stock_descontado === 0) {
+                await descontarStockFactura(query, items, `Factura N° ${numero}`);
+            }
+
+            await query(
+                `UPDATE facturas SET numero = ?, estado = 'EMITIDA', stock_descontado = 1 WHERE id = ?`,
+                [numero, id]
+            );
+
+            return { yaEmitida: false, numero, total: Number(factura.total) };
+        });
+
+        if (resultado.yaEmitida) {
+            return res.json({
+                mensaje: `La factura N° ${resultado.numero} ya estaba emitida.`,
+                numero: resultado.numero,
+                estado: 'EMITIDA'
+            });
+        }
+
+        console.log(`  Factura N° ${resultado.numero} emitida (${req.usuario.nombre})`);
+        res.json({
+            mensaje: `Factura N° ${resultado.numero} emitida`,
+            numero: resultado.numero,
+            estado: 'EMITIDA',
+            total: resultado.total
+        });
+    } catch (err) {
+        console.error('Error al emitir factura:', err);
+        res.status(err.estadoHttp || 500).json({ error: err.message || 'Error interno del servidor' });
+    }
+});
+
+// --- Anular -----------------------------------------------------------------
+/**
+ * Devuelve el stock que se sacó al emitir. El número NO se borra y NO se
+ * vuelve a usar: una factura anulada es un número que existió, y la correlativa
+ * tiene que seguir mostrando ese hueco. Por eso anular es una anotación, no un
+ * borrado.
+ */
+app.post('/api/facturas/:id/anular', verificarToken, requiereModulo('facturacion'), requiereAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Factura inválida' });
+
+    const motivo = String((req.body && req.body.motivo) || '').trim().slice(0, 200);
+
+    try {
+        await tenant.transaccion(async ({ query }) => {
+            const [f] = await query('SELECT * FROM facturas WHERE id = ?', [id]);
+            if (!f.length) {
+                const e = new Error('Factura no encontrada');
+                e.estadoHttp = 404;
+                throw e;
+            }
+            const factura = f[0];
+
+            if (factura.estado === 'ANULADA') {
+                const e = new Error('La factura ya estaba anulada.');
+                e.estadoHttp = 400;
+                throw e;
+            }
+            // Anular un BORRADOR es borrarlo, y para eso está DELETE. Si no se
+            // aceptara acá, "anular" y "borrar" serían la misma palabra para
+            // dos cosas distintas.
+            if (factura.estado === 'BORRADOR') {
+                const e = new Error(
+                    'Esta factura es un borrador y nunca se emitió: no hay nada que anular ni ' +
+                    'stock que devolver. Borrala si querés deshacerla.'
+                );
+                e.estadoHttp = 400;
+                throw e;
+            }
+
+            // El `stock_descontado` va acá porque es lo que impide devolver dos
+            // veces el mismo stock: anular una factura ya anulada se corta
+            // arriba, y una re-emitida ya lo trae en 1.
+            if (factura.stock_descontado === 1) {
+                const [items] = await query(
+                    'SELECT producto_id, descripcion, cantidad FROM factura_items WHERE factura_id = ? ORDER BY orden, id',
+                    [id]
+                );
+                await devolverStockFactura(
+                    query,
+                    items,
+                    `Anulación de factura N° ${factura.numero}${motivo ? ': ' + motivo : ''}`
+                );
+            }
+
+            await query(
+                `UPDATE facturas SET estado = 'ANULADA', stock_descontado = 0 WHERE id = ?`,
+                [id]
+            );
+        });
+
+        console.log(`  Factura #${id} anulada (${req.usuario.nombre})${motivo ? ': ' + motivo : ''}`);
+        res.json({ mensaje: 'Factura anulada. El stock volvió al depósito.' });
+    } catch (err) {
+        console.error('Error al anular factura:', err);
+        res.status(err.estadoHttp || 500).json({ error: err.message || 'Error interno del servidor' });
+    }
+});
+
+// --- Marcar pagada ----------------------------------------------------------
+app.post('/api/facturas/:id/pagar', verificarToken, requiereModulo('facturacion'), async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Factura inválida' });
+
+    const forma_pago = String((req.body && req.body.forma_pago) || '').trim().slice(0, 40);
+
+    try {
+        const [f] = await db.promise().query('SELECT * FROM facturas WHERE id = ?', [id]);
+        if (!f.length) return res.status(404).json({ error: 'Factura no encontrada' });
+
+        if (f[0].estado === 'BORRADOR') {
+            return res.status(400).json({ error: 'Una factura en borrador no se puede marcar como pagada: primero hay que emitirla.' });
+        }
+        if (f[0].estado === 'ANULADA') {
+            return res.status(400).json({ error: 'Una factura anulada no se puede marcar como pagada.' });
+        }
+        if (f[0].estado === 'PAGADA') {
+            return res.json({ mensaje: 'La factura ya estaba pagada.', estado: 'PAGADA' });
+        }
+
+        await db.query(
+            `UPDATE facturas SET estado = 'PAGADA', forma_pago = ?, fecha_pago = NOW() WHERE id = ?`,
+            [forma_pago || f[0].forma_pago || null, id]
+        );
+
+        res.json({ mensaje: 'Factura marcada como pagada.', estado: 'PAGADA' });
+    } catch (err) {
+        console.error('Error al marcar la factura como pagada:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// --- Baja -------------------------------------------------------------------
+app.delete('/api/facturas/:id', verificarToken, requiereModulo('facturacion'), requiereAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Factura inválida' });
+
+    try {
+        const [actual] = await db.promise().query('SELECT numero, estado FROM facturas WHERE id = ?', [id]);
+        if (!actual.length) return res.status(404).json({ error: 'Factura no encontrada' });
+
+        // Igual que en presupuestos: solo se borra lo que nunca salió. Una
+        // factura emitida tiene número, y ese número no se devuelve.
+        if (actual[0].estado !== 'BORRADOR') {
+            return res.status(400).json({
+                error: `Solo se borran facturas en BORRADOR. Esta está ${ESTADO_FACTURA[actual[0].estado]}: ` +
+                'anulala si querés que deje de contar.'
+            });
+        }
+
+        // Los renglones se van por ON DELETE CASCADE.
+        await db.query('DELETE FROM facturas WHERE id = ?', [id]);
+        console.log(`  Factura (borrador) #${id} eliminada (${req.usuario.nombre})`);
+        res.json({ mensaje: 'Factura eliminada' });
+    } catch (err) {
+        console.error('Error al eliminar factura:', err);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// --- Desde un presupuesto ----------------------------------------------------
+/**
+ * Arma un BORRADOR copiando un presupuesto APROBADO. No emite: queda como
+ * borrador, con numero NULL, para que el usuario lo revise y lo emita como
+ * cualquier otra.
+ *
+ * Se registra literal y no con un JOIN a presupuestos_items porque la factura
+ * tiene una columna que el presupuesto no tiene: `iva_porcentaje`. El default
+ * es 21, que es lo correcto para repuestos, y se deja editable renglón por
+ * renglón en la pantalla.
+ *
+ * Esta ruta queda registrada DESPUÉS de `/api/facturas/:id/emitir` y de las
+ * otras con `:id`, y funciona igual. No es casualidad ni fe: Express no puede
+ * confundirlas porque los patrones tienen distinta cantidad de segmentos y
+ * además el segmento en conflicto es un literal, no un parámetro. Ante
+ * `/api/facturas/desde-presupuesto/82`, `:id` se comería "desde-presupuesto"
+ * pero el siguiente segmento del patrón es la palabra fija "emitir", y ahí ya
+ * no calza con "82".
+ *
+ * No se da por hecho: la sección 6 del verificador de este módulo levanta una
+ * app de Express con este mismo orden de registro y manda las cuatro URLs, y
+ * falla si alguna se despacha donde no toca. Si alguien agrega más adelante una
+ * ruta con dos parámetros y un `:id` en el medio, el chequeo sigue valiendo.
+ */
+app.post('/api/facturas/desde-presupuesto/:presupuestoId', verificarToken, requiereModulo('facturacion'), async (req, res) => {
+    const pid = Number(req.params.presupuestoId);
+    if (!Number.isInteger(pid)) return res.status(400).json({ error: 'Presupuesto inválido' });
+
+    try {
+        const [p] = await db.promise().query(
+            `SELECT id, numero, cliente_id, cliente_nombre, cliente_doc, cliente_telefono,
+                    cliente_email, cliente_direccion, estado, notas
+               FROM presupuestos WHERE id = ?`,
+            [pid]
+        );
+        if (!p.length) return res.status(404).json({ error: 'Presupuesto no encontrado' });
+
+        // Solo de uno APROBADO. Facturar un presupuesto que el cliente rechazó
+        // es un error que se evita acá y no en la pantalla.
+        if (p[0].estado !== 'APROBADO') {
+            return res.status(400).json({
+                error: `Solo se factura un presupuesto APROBADO. Este está ${ETIQUETA_ESTADO[p[0].estado]}.`
+            });
+        }
+
+        const [items] = await db.promise().query(
+            `SELECT producto_id, descripcion, cantidad, precio_unitario
+               FROM presupuesto_items WHERE presupuesto_id = ? ORDER BY orden, id`,
+            [pid]
+        );
+        if (!items.length) {
+            return res.status(400).json({ error: 'El presupuesto no tiene ítems.' });
+        }
+
+        // Se pasa por el MISMO validador que el alta manual. Una factura no
+        // entra por una puerta más (-) que la otra: si el presupuesto tuviera
+        // una cantidad en 0, acá tiene que rechazarse con el mismo mensaje que
+        // si la escribió una persona.
+        const prep = prepararFactura({
+            fecha: new Date().toISOString().slice(0, 10),
+            cliente_id: p[0].cliente_id,
+            cliente_nombre: p[0].cliente_nombre,
+            cliente_doc: p[0].cliente_doc,
+            cliente_telefono: p[0].cliente_telefono,
+            cliente_email: p[0].cliente_email,
+            cliente_direccion: p[0].cliente_direccion,
+            presupuesto_id: p[0].id,
+            notas: p[0].notas,
+            items: items.map((it) => ({ ...it, descuento: 0, iva_porcentaje: 21 }))
+        });
+        if (!prep.valido) return res.status(400).json({ error: prep.error, errores: prep.errores });
+
+        const d = prep.datos;
+        const id = await tenant.transaccion(async ({ query }) => {
+            const [r] = await query(
+                `INSERT INTO facturas
+                    (numero, fecha, cliente_id, cliente_nombre, cliente_doc, cliente_telefono,
+                     cliente_email, cliente_direccion, presupuesto_id, subtotal, descuento,
+                     iva_monto, total, estado, notas, usuario_nombre)
+                 VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'BORRADOR', ?, ?)`,
+                [d.fecha, d.cliente_id, d.cliente_nombre, d.cliente_doc, d.cliente_telefono,
+                    d.cliente_email, d.cliente_direccion, d.presupuesto_id, d.subtotal, d.descuento,
+                    d.iva_monto, d.total, d.notas, req.usuario.nombre]
+            );
+            const facturaId = r.insertId;
+            const valoresItems = d.items.map((it) => [
+                facturaId, it.producto_id, it.descripcion, it.cantidad,
+                it.precio_unitario, it.descuento, it.iva_porcentaje, it.subtotal, it.orden
+            ]);
+            if (valoresItems.length) {
+                await query(
+                    `INSERT INTO factura_items
+                        (factura_id, producto_id, descripcion, cantidad, precio_unitario,
+                         descuento, iva_porcentaje, subtotal, orden)
+                     VALUES ?`,
+                    [valoresItems]
+                );
+            }
+            return facturaId;
+        });
+
+        res.status(201).json({
+            mensaje: `Borrador creado desde el presupuesto N° ${p[0].numero}`,
+            id,
+            estado: 'BORRADOR',
+            total: d.total
+        });
+    } catch (err) {
+        console.error('Error al crear la factura desde el presupuesto:', err);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
