@@ -319,22 +319,89 @@ function aplicarModoSoloConsulta() {
 }
 
 // --- TEMA CLARO / OSCURO ---
-// Esta funcion estaba copiada en app.js, pedidos.js y reparaciones.js, y NO
-// estaba en clientes.js: el boton de tema de la pagina de Clientes llamaba a
-// una funcion que no existia y tiraba ReferenceError en la consola, asi que el
-// boton no hacia nada. Va aca porque auth-check.js lo cargan todas las paginas:
-// si queda en el script de cada pantalla, la proxima pantalla nueva repite el
-// mismo error. La clave de localStorage no se cambia, es la de siempre.
-function cambiarTemaManualmente() {
-    const cuerpo = document.body;
-    if (cuerpo.classList.contains('tema-claro')) {
-        cuerpo.classList.remove('tema-claro');
-        localStorage.setItem('tema-preferido', 'oscuro');
-    } else {
-        cuerpo.classList.add('tema-claro');
-        localStorage.setItem('tema-preferido', 'claro');
+// LA UNICA COPIA. ESTA.
+//
+// Antes cada página tenía la suya en su propio script: app.js, pedidos.js,
+// reparaciones.js y admin.js. Y cada copia era distinta:
+//
+//   - clientes.js y presupuestos.js NO TENIAN NINGUNA. El botón de tema de esas
+//     dos pantallas no cambiaba nada y la preferencia guardada se ignoraba al
+//     abrirlas: se veía siempre oscuro. Es el síntoma que reportó el usuario,
+//     "el sistema no carga bien los temas una vez que pasa de pestaña en
+//     pestaña".
+//   - reparaciones.js y admin.js sólo agregaban la clase, nunca la sacaban.
+//   - ninguna escuchaba el evento `storage`, así que dos pestañas abiertas del
+//     mismo sistema no se ponían de acuerdo: en una se cambiaba el tema y la
+//     otra se quedaba como estaba hasta que se recargara.
+//
+// Y faltaba la otra mitad: en la hoja de estilos SÓLO existía `tema-claro`,
+// no `tema-oscuro`. Elegir oscuro no cambiaba ni una variable, y en una PC
+// configurada en claro eso significaba que el botón no hacía absolutamente nada.
+//
+// POR QUÉ ESTE BLOQUE ESTÁ ARRIBA DE TODO Y NO EN EL `DOMContentLoaded`
+//
+// Porque el tema tiene que estar puesto ANTES del primer pintado, o se ve el
+// tema equivocado un instante. `auth-check.js` es un script bloqueante del
+// `<head>` (la única excepción es login.html, que es neutra a propósito), así
+// que lo que hay abajo corre antes de que el navegador pinte nada. Por eso la
+// clase va en `document.documentElement` y no en `document.body`: el `<body>`
+// todavía no existe en este punto, y `<html>` es `:root`, que es donde el CSS
+// la espera.
+//
+// Si se agrega una página nueva, tiene que cargar `auth-check.js` en el
+// `<head>` y no volver a poner un bloque de tema en su propio script.
+(function temaClaroOscuro() {
+    const CLAVE = 'tema-preferido';
+    const raiz = document.documentElement;
+    const sistemaClaro = window.matchMedia('(prefers-color-scheme: light)');
+
+    /** Lo que eligió la persona, o `null` si nunca eligió nada. */
+    function preferencia() {
+        const v = localStorage.getItem(CLAVE);
+        return (v === 'claro' || v === 'oscuro') ? v : null;
     }
-}
+
+    /** El tema que realmente se muestra: la elección, o el del sistema. */
+    function temaActivo() {
+        return preferencia() || (sistemaClaro.matches ? 'claro' : 'oscuro');
+    }
+
+    /**
+     * Pone la clase. Siempre una de las dos, nunca ninguna: hay reglas que son
+     * sólo del tema oscuro escritas como `html.tema-oscuro ...` y necesitan
+     * poder confiar en que la clase está.
+     */
+    function aplicarTema() {
+        const tema = temaActivo();
+        raiz.classList.toggle('tema-claro', tema === 'claro');
+        raiz.classList.toggle('tema-oscuro', tema === 'oscuro');
+        return tema;
+    }
+
+    /** El botón del tema. Da lo mismo el tema dos veces, porque es un volteo. */
+    window.cambiarTemaManualmente = function cambiarTemaManualmente() {
+        localStorage.setItem(CLAVE, temaActivo() === 'claro' ? 'oscuro' : 'claro');
+        aplicarTema();
+    };
+
+    // Se expone por si alguna página necesita forzarlo. No debería: si algo
+    // depende de repintar el tema, ese algo está usando la clase directo.
+    window.aplicarTema = aplicarTema;
+
+    aplicarTema();
+
+    // Otra pestaña del mismo origen cambió la preferencia. Sin esto, la que
+    // está abierta al lado queda con el tema viejo hasta que se recargue.
+    window.addEventListener('storage', (ev) => {
+        if (ev.key === CLAVE || ev.key === null) aplicarTema();
+    });
+
+    // La persona cambió el tema de la PC y nunca eligió uno en el sistema: se
+    // sigue al sistema. Si ya eligió, su elección manda y no se toca nada.
+    const alCambiarElSistema = () => { if (!preferencia()) aplicarTema(); };
+    if (sistemaClaro.addEventListener) sistemaClaro.addEventListener('change', alCambiarElSistema);
+    else sistemaClaro.addListener(alCambiarElSistema);
+})();
 
 // --- FUNCIONES GLOBALES ---
 
@@ -445,7 +512,10 @@ function actualizarContadorUsuarios(usados) {
             : '';
     }
     if (completo) {
-        contador.style.color = 'var(--color-warning, #b8860b)';
+        // Sin el `#b8860b` de respaldo: `--color-warning` está declarada en los
+        // dos temas, así que el dorado sale siempre del tema y no de un color
+        // fijo que en tema claro no se lee.
+        contador.style.color = 'var(--color-warning)';
         let aviso = document.getElementById('aviso-limite-usuarios');
         if (!aviso) {
             aviso = document.createElement('p');

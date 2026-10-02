@@ -95,6 +95,18 @@ async function cargarListado() {
     }
 }
 
+/*
+ * LISTADO
+ *
+ * El botón "Ver" lleva `btn-info` y no sólo `btn-tabla`. `.btn-tabla` pone
+ * `color: white` y ningún `background`, así que sin la clase de color el botón
+ * salía con el fondo gris del navegador y texto blanco: en tema oscuro no se
+ * leía nada. Es la misma clase que usa "Ver Ficha" en la página de clientes.
+ *
+ * El documento del cliente va con `--text-muted`, no con `--text-secondary`:
+ * esa variable no existe y su valor de respaldo nunca se usaba, así que salía
+ * negro sobre el fondo oscuro.
+ */
 function dibujarListado(lista) {
     const cuerpo = $('tabla-presupuestos');
 
@@ -110,7 +122,7 @@ function dibujarListado(lista) {
             <td style="text-align:center; font-weight:bold;">${p.numero}</td>
             <td>
                 ${escapeHtml(p.cliente_nombre)}
-                ${p.cliente_doc ? `<br><small style="color:var(--text-secondary,#777)">${escapeHtml(p.cliente_doc)}</small>` : ''}
+                ${p.cliente_doc ? `<br><small style="color:var(--text-muted)">${escapeHtml(p.cliente_doc)}</small>` : ''}
             </td>
             <td><span class="p-estado p-estado-${p.estado.toLowerCase()}">${ETIQUETAS[p.estado] || p.estado}</span></td>
             <td style="text-align:right;">${pesos(p.subtotal)}</td>
@@ -118,7 +130,7 @@ function dibujarListado(lista) {
             <td style="text-align:right; font-weight:bold;">${pesos(p.total)}</td>
             <td>${fecha(p.creado_en)}</td>
             <td style="text-align:center; white-space:nowrap;">
-                <button class="btn-tabla" onclick="abrirDetalle(${p.id})">Ver</button>
+                <button class="btn-tabla btn-info" onclick="abrirDetalle(${p.id})">Ver</button>
             </td>
         </tr>
     `).join('');

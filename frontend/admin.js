@@ -28,15 +28,12 @@
 // --- Arranque -------------------------------------------------------------
 
 /**
- * El tema elegido se guarda en localStorage y cada pantalla lo aplica al
- * cargar. `cambiarTemaManualmente` vive en `auth-check.js` y solo cambia la
- * clase del `body`; el que la pone al abrir la página es este bloque.
+ * El tema NO se aplica desde acá. Lo aplica el bloque de tema de
+ * `auth-check.js`, que este archivo carga en el `<head>` antes de que se
+ * pinte nada. Antes esta página tenía su propia copia (que sólo agregaba la
+ * clase y nunca la sacaba) y `ajustarIconoTema`, que ponía el ícono al revés
+ * que el CSS. Las dos cosas se fueron con el bloque de auth-check.js.
  */
-(function aplicarTemaGuardado() {
-    if (localStorage.getItem('tema-preferido') === 'claro') {
-        document.body.classList.add('tema-claro');
-    }
-})();
 
 /** Estado en memoria de la pantalla. */
 const admin = {
@@ -269,9 +266,10 @@ function mostrarError(idCaja, mensaje) {
 // ==========================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // El botón de tema de esta página es del panel, no de la empresa: el
-    // logo del cliente no va acá. Se ajusta el ícono al tema que quedó.
-    ajustarIconoTema();
+    // El ícono del botón de tema lo pone el CSS según `html.tema-claro`, así
+    // que acá no hay que hacer nada. Antes esta línea llamaba a
+    // `ajustarIconoTema()`, que hacía lo contrario con estilos en línea y por
+    // eso el ícono de esta página era el contrario al de las otras cinco.
 
     // Las muescas de color van alrededor de los campos de color del alta.
     envolverCamposColor();
@@ -285,14 +283,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     await cargarAuditoria();
 });
 
-/** Que el ícono del botón de tema corresponda al tema activo. */
-function ajustarIconoTema() {
-    const claro = document.body.classList.contains('tema-claro');
-    const sol = document.querySelector('#btn-tema .icono-sol');
-    const luna = document.querySelector('#btn-tema .icono-luna');
-    if (sol) sol.style.display = claro ? 'block' : 'none';
-    if (luna) luna.style.display = claro ? 'none' : 'block';
-}
+/**
+ * Que el ícono del botón de tema corresponda al tema activo.
+ *
+ * BORRADA A PROPÓSITO. El ícono lo decide el CSS (`html.tema-claro
+ * .btn-alternar-tema .icono-*` en style.css) y muestra a qué tema se pasa al
+ * hacer clic. Esta función hacía lo contrario con estilos en línea: en tema
+ * oscuro ponía la luna. Como el estilo en línea le gana a la hoja de estilos,
+ * en el panel del SuperAdmin el ícono era el contrario del de las otras cinco
+ * páginas para el mismo estado. Si alguna vez hay que volver a tocar el ícono
+ * desde JS, es en style.css.
+ */
 
 // ==========================================================================
 // Catálogos (planes y módulos)

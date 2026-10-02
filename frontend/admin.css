@@ -88,8 +88,8 @@
 .admin-estado-SUSPENDIDO { background: rgba(255, 198, 0, 0.15); color: #b58900; border-color: rgba(255, 198, 0, 0.45); }
 .admin-estado-BAJA   { background: rgba(220, 53, 69, 0.15); color: #dc3545; border-color: rgba(220, 53, 69, 0.4); }
 
-body.tema-claro .admin-estado-SUSPENDIDO { color: #8a6d00; }
-body.tema-claro .admin-estado-BAJA { color: #a71d2a; }
+html.tema-claro .admin-estado-SUSPENDIDO { color: #8a6d00; }
+html.tema-claro .admin-estado-BAJA { color: #a71d2a; }
 
 /* --- Módulos comoInterruptores ------------------------------------------ */
 .admin-modulos {
@@ -331,7 +331,7 @@ body.tema-claro .admin-estado-BAJA { color: #a71d2a; }
     color: #b58900;
 }
 
-body.tema-claro .admin-tag-rol.TECNICO { color: #8a6d00; }
+html.tema-claro .admin-tag-rol.TECNICO { color: #8a6d00; }
 
 /* --- Acciones por usuario (Entrar como / Clave temporal) ------------------ */
 .admin-usuario-acciones {

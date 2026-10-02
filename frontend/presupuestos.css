@@ -71,9 +71,18 @@
 .p-resultado:last-child { border-bottom: none; }
 .p-resultado:hover { background: rgba(0, 123, 255, 0.10); }
 
+/*
+ * `--text-muted` y no `--text-secondary`.
+ *
+ * Aquí y en `.p-vacio` estaba `var(--text-secondary, #777)`. La variable
+ * `--text-secondary` existía y valía `#000000` (negro), así que el `#777` de
+ * respaldo nunca se usaba y el texto salía negro: el teléfono y la dirección
+ * del cliente en el buscador, y el documento en la tabla, se veían negros
+ * sobre el fondo oscuro. `--text-muted` sí está redefinida en los dos temas.
+ */
 .p-resultado small {
     display: block;
-    color: var(--text-secondary, #777);
+    color: var(--text-muted);
     font-size: 0.78rem;
 }
 
@@ -116,20 +125,40 @@
 .p-tabla-items thead th:first-child { border-radius: 8px 0 0 8px; }
 .p-tabla-items thead th:last-child { border-radius: 0 8px 8px 0; }
 
+/*
+ * POR QUÉ LAS CELDAS NO SE PINTAN
+ *
+ * Antes cada `td` llevaba `background-color: var(--bg-body)` y las de los
+ * extremos `border-radius`. Eso dibujaba una barra oscura con las esquinas
+ * redondeadas POR DEBAJO de los inputs, y como los inputs no ocupan toda la
+ * celda, la barra asomaba: 10px pelados a la izquierda de la caja de
+ * "Descripción", más lo que sobrara a la derecha. Lo que se veía era un
+ * recuadro partido, corrido con respecto de los inputs de al lado. Eso es lo
+ * que estaba "desfasado".
+ *
+ * El input ya es una caja con fondo, borde y radio propios (viene de la regla
+ * global de style.css), así que la celda no tiene que volver a dibujar una.
+ * Ahora la celda no pinta nada y sólo reparte el espacio.
+ */
 .p-tabla-items tbody td {
-    padding: 0;
+    /*
+     * El padding tiene que ser el mismo que el de los `th` de arriba (`8px
+     * 10px`, o sea 10px a cada lado) para que cada input empiece debajo del
+     * texto de su columna. Antes sólo la primera celda tenía `padding-left`,
+     * y las otras cuatro tenían 0: sus inputs arrancaban 10px a la izquierda
+     * del rótulo, y la de descripción arrancaba 10px a la derecha del suyo.
+     * Ninguna de las dos cosas cuadraba.
+     */
+    padding: 0 10px;
     vertical-align: middle;
     border: none;
-    background-color: var(--bg-body);
+    background: none;
 }
 
-.p-tabla-items tbody td:first-child {
-    border-radius: 8px 0 0 8px;
-    padding-left: 10px;
-}
+/* La última celda es la de la X, que es un botón de 30px y no un input que
+   deba alinearse con un rótulo: no hace falta dejarle aire a la derecha. */
 .p-tabla-items tbody td:last-child {
-    border-radius: 0 8px 8px 0;
-    padding-right: 6px;
+    padding-right: 0;
 }
 
 /* Se queda con el alto y el padding de la regla global; sólo se estira. */
@@ -139,12 +168,15 @@
 
 .p-tabla-items input[type="number"] { text-align: right; }
 
+/* El `padding-right` es el mismo que el de la celda (10px), para que el
+   subtotal termine a la misma altura que el rótulo "Subtotal" de arriba, que
+   también tiene 10px de aire. Antes eram 6px y quedaban 4px desalineados. */
 .p-subtotal-calc {
     display: block;
     text-align: right;
     font-weight: bold;
     font-variant-numeric: tabular-nums;
-    padding-right: 6px;
+    padding-right: 10px;
     font-size: 0.9rem;
 }
 
@@ -476,7 +508,7 @@
 .p-vacio {
     text-align: center;
     padding: 26px 10px;
-    color: var(--text-secondary, #777);
+    color: var(--text-muted);
     font-size: 0.92rem;
 }
 

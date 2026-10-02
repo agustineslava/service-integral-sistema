@@ -8,9 +8,24 @@
     --bg-preview: #121416;
     --border-color: #343a40;      /* Bordes sutiles oscuros */
     --text-main: #f8f9fa;         /* Texto principal de alto contraste (casi blanco) */
-    --text-muted: #adb5bd; 
-    --text-secondary: #000000;    /* Texto secundario o descriptivo en gris claro */
-    
+    --text-muted: #adb5bd;        /* Texto secundario o descriptivo en gris claro */
+
+    /*
+     * NO existe `--text-secondary`.
+     *
+     * Estaba declarada acá como `#000000` (negro PURO, pese al comentario que
+     * decía "gris claro") y no se redefinía ni en el tema claro ni en
+     * `body.tema-claro`. Como la variable existía, los tres usos que hacían
+     * `var(--text-secondary, #777)` tomaban el negro y el `#777` de respaldo
+     * nunca se usaba: en Presupuestos el documento del cliente y el teléfono del
+     * buscador salían negros sobre fondo oscuro, ilegibles.
+     *
+     * Los tres usos quedaron apuntando a `--text-muted`, que sí está redefinida
+     * en los dos temas. Si vuelve a hacer falta un gris secundario, se agrega
+     * una variable NUEVA y se la define en los DOS temas, o el problema vuelve.
+     * `backend/tools/ver-tema-css.js` falla si `--text-secondary` reaparece.
+     */
+
     /* --- COLORES CORPORATIVOS OFICIALES --- */
     --si-blue-vibrant: #009fe3;   /* Azul vibrante de la fachada y logo */
     --si-blue-dark: #0077b5;      /* Azul oscuro para estados hover */
@@ -21,6 +36,13 @@
     --color-danger: #dc3545;      /* Rojo para eliminar, alertas críticas o borrar */
     --color-info: var(--si-blue-vibrant);
     --color-alerta-bg: rgba(255, 198, 0, 0.1); /* Fondo translúcido para stock mínimo */
+    /* Texto de advertencia. Sí cambia con el tema: el mismo dorado sobre el
+       panel oscuro se lee y sobre el blanco no. Antes se usaba
+       `var(--color-warning, #b8860b)` en el contador de usuarios del plan, y
+       como la variable no existía en ningún lado, siempre ganaba el dorado
+       fijo. `--color-warning` también está en los dos temas de abajo, así que
+       ese uso ya no depende del respaldo. */
+    --color-warning: #ffc600;
 
     /* --- SOMBRAS ---
        Antes cada tarjeta repetia un rgba negro fijo (0 12px 32px rgba(0,0,0,.25)).
@@ -30,9 +52,45 @@
     --sombra-tarjeta-hover: 0 6px 14px rgba(0, 0, 0, 0.26), 0 16px 36px rgba(0, 0, 0, 0.24);
 }
 
-/* 🌟 MODO CLARO AUTOMÁTICO (Se activa si el sistema operativo de la PC está en Claro) */
+/* ==========================================================================
+   TEMA CLARO / OSCURO
+   --------------------------------------------------------------------------
+   ACÁ ESTÁ EL CONTRATO DEL TEMA. Leer antes de tocar nada del tema.
+
+   1. La clase va en `<html>` (`document.documentElement`), NO en `<body>`.
+      `<html>` es `:root`, así que ponerla ahí le gana por especificidad
+      (0,1,1) a la regla `:root` del `@media` de abajo (0,0,1). En `<body>`
+      había que pelear contra el `:root` y no se podía.
+
+   2. Hay DOS clases y las dos existen: `html.tema-claro` y `html.tema-oscuro`.
+      Antes sólo existía la de claro. Eso hacía que la preferencia "oscuro"
+      fuera indistinguible de no tener preferencia: el CSS era idéntico, así
+      que en una PC configurada en claro, pedir oscuro no cambiaba NADA.
+
+   3. La clase SIEMPRE está, nunca ninguna de las dos. Hay reglas que son sólo
+      del tema oscuro y se escriben `html.tema-oscuro ...` (antes era
+      `body:not(.tema-claro) ...`). Con las dos clases siempre presentes, "sin
+      clase" no existe y no hay que estar adivinando.
+
+   4. La pone UN solo código: el bloque de tema de `auth-check.js`, que todas
+      las páginas cargan en el `<head>`. Por eso `presupuestos.html` y
+      `clientes.html` mostraban siempre oscuro: no tenían copia del bloque que
+      aplicaba la preferencia. Y por eso el tema se aplicaba después del primer
+      pintado: se veía el tema del sistema y después el elegido.
+
+   5. `color-scheme` le dice al navegador en qué tema dibujar los controles que
+      son suyos y no se pueden estilizar: el desplegable del calendario de los
+      `<input type="date">`, las barras de desplazamiento, el menú de los
+      `<select>` y los tooltips. Sin esto, el calendario se abre claro sobre una
+      página oscura.
+   ========================================================================== */
+
+/* El tema del sistema operativo. Es la red de seguridad para cuando la
+   preferencia guardada no dice nada, y para cuando no hay JavaScript. El
+   script del `<head>` pisa esto con la clase explícita del paso 2. */
 @media (prefers-color-scheme: light) {
     :root {
+        color-scheme: light;
         --bg-body: #f4f7f6;       /* Gris claro limpio */
         --bg-card: #ffffff;       /* Paneles blancos puros */
         --bg-preview: #f1f3f5;
@@ -40,6 +98,10 @@
         --text-main: #2d3134;     /* Gris plomo oscuro del logo de la marca */
         --text-muted: #6c757d;    /* Gris medio para textos secundarios */
         --color-alerta-bg: #fff3cd; /* Fondo clásico amarillento de advertencia */
+        /* Oscuro sobre blanco: el #ffc600 del modo oscuro no se lee en una
+           hoja blanca. Es el mismo dorado quemado que usa `admin.css` para
+           los estados de empresa suspendida. */
+        --color-warning: #8a6d00;
         /* Sombra de tarjeta en claro: difusa y baja. La de modo oscuro no
            serviría acá, se ve como un tache debajo de un panel blanco. */
         --sombra-tarjeta: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 18px rgba(16, 24, 40, 0.07);
@@ -47,16 +109,39 @@
     }
 }
 
-/* 🌟 CLASE PARA CAMBIO MANUAL (Fuerza el Modo Claro al hacer clic en el botón de sol) */
-body.tema-claro {
+/* La paleta clara está escrita DOS veces (acá y en el `@media` de arriba) y en
+   los dos lados, completa. Antes la copia de la clase se comía `--bg-preview`,
+   que no estaba: en tema claro manual los cuadros de vista previa seguían con
+   el color oscuro. Si se agrega una variable a un tema, va en los dos. */
+html.tema-claro {
+    color-scheme: light;
     --bg-body: #f4f7f6;
     --bg-card: #ffffff;
+    --bg-preview: #f1f3f5;
     --border-color: #dee2e6;
     --text-main: #2d3134;
     --text-muted: #6c757d;
     --color-alerta-bg: #fff3cd;
+    --color-warning: #8a6d00;
     --sombra-tarjeta: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 18px rgba(16, 24, 40, 0.07);
     --sombra-tarjeta-hover: 0 2px 4px rgba(16, 24, 40, 0.08), 0 10px 26px rgba(16, 24, 40, 0.10);
+}
+
+/* La paleta oscura, escrita explícita. Tiene que repetir TODAS las variables
+   del `:root` de arriba, no las de la clase de claro: el `@media` de arriba
+   gana por orden de aparición si las dos cosas se empatan. */
+html.tema-oscuro {
+    color-scheme: dark;
+    --bg-body: #1a1d20;
+    --bg-card: #24282c;
+    --bg-preview: #121416;
+    --border-color: #343a40;
+    --text-main: #f8f9fa;
+    --text-muted: #adb5bd;
+    --color-alerta-bg: rgba(255, 198, 0, 0.1);
+    --color-warning: #ffc600;
+    --sombra-tarjeta: 0 4px 10px rgba(0, 0, 0, 0.22), 0 12px 28px rgba(0, 0, 0, 0.18);
+    --sombra-tarjeta-hover: 0 6px 14px rgba(0, 0, 0, 0.26), 0 16px 36px rgba(0, 0, 0, 0.24);
 }
 
 /* ==========================================================================
@@ -405,10 +490,47 @@ label {
     color: var(--text-muted);
 }
 
-input[type="text"],
-input[type="number"],
-input[type="email"],
-input[type="password"],
+/*
+ * REGLA GLOBAL DE LOS CAMPOS
+ * ==========================
+ * ESTA ES LA REGLA, Y ESTA ES LA FORMA DE ESCRIBIRLA.
+ *
+ * Antes era una lista de tipos:
+ *
+ *     input[type="text"], input[type="number"], input[type="email"],
+ *     input[type="password"], select, textarea { ... }
+ *
+ * y esa lista se fue quedando corta. Faltaba `password` (los campos de clave
+ * salían blancos), después faltó `tel` y `url` (el teléfono y la dirección del
+ * logo en el detalle de empresa del panel del SuperAdmin salían con el estilo
+ * crudo del navegador: fondo blanco, texto negro, 21px de alto, borde gris),
+ * y después faltó `date` (los vencimientos y el "válido hasta" del presupuesto,
+ * blancos y con el calendario del navegador en claro).
+ *
+ * Cada vez que se agregaba un `type` nuevo había que acordarse de agregarlo
+ * acá, y tres de las veces se olvidó. Por eso la lista se da vuelta: en vez de
+ * decir qué tipos SÍ se estilizan, se dice cuáles NO, y todo lo demás entra
+ * solo. Un `type="search"`, `time`, `month` o `datetime-local` que se agregue
+ * mañana queda con el estilo de la aplicación sin tocar esta regla.
+ *
+ * LA ESPECIFICIDAD NO CAMBIA, y por eso el resto del CSS sigue manda igual.
+ * `input:not([a], [b], ...)` vale (0,1,1): el `input` aporta (0,0,1) y la lista
+ * del `:not()` aporta la de su argumento más específico, el atributo (0,1,0).
+ * `input[type="text"]` también era (0,1,1). Así que `.p-tabla-items input`,
+ * `.login-form input`, `.admin-barra input[type="text"]` y compañía siguen
+ * ganándole por la misma diferencia que antes.
+ *
+ * Los que se excluyen y por qué:
+ *   - checkbox, radio : se usan bien con el accent-color y su tamaño nativo.
+ *   - file            : el botón "Elegir archivo" es del navegador y estilarlo a
+ *                       medias es peor que dejarlo.
+ *   - color           : es un cuadradito; lleva sus medidas inline en admin.js.
+ *   - range           : la pista la dibuja el navegador.
+ *   - hidden, submit, button, reset, image : no se ven.
+ */
+input:not([type="checkbox"], [type="radio"], [type="file"], [type="color"],
+         [type="range"], [type="hidden"], [type="submit"], [type="button"],
+         [type="reset"], [type="image"]),
 select,
 textarea {
     background-color: var(--bg-body);
@@ -421,22 +543,25 @@ textarea {
 }
 
 /*
- * POR QUE `password` ESTA EN ESA LISTA
- * ------------------------------------
- * Faltaba, y por eso los campos de contraseña salian con fondo blanco y texto
- * negro en el panel de administración y en el modal de cambio de clave: se
- * caían al estilo por defecto del navegador. El síntoma era desconcertante
- * porque al tocar el botón del ojo el `type` pasa a `text`, entra esta regla, y
- * ahí el campo se veía bien. Parecía un problema del botón del ojo y era que el
- * campo nunca estuvo en la lista.
+ * El `<input type="date">` trae un botón de calendario adentro que es un
+ * control del navegador. Con `color-scheme` (arriba, en el bloque del tema)
+ * el navegador lo dibuja en el tema que corresponde, que es lo único que
+ * alcanza: el desplegable del calendario se pinta entero fuera de la página y
+ * ningún `color` de acá llega a él.
  *
- * La página de login no sufría porque `.login-form input` (más abajo) sí
- * cubre todos los tipos, incluido `password`.
+ * Lo que sí se puede desde acá es que se note que se puede tocar.
  */
-input[type="text"]:focus,
-input[type="number"]:focus,
-input[type="email"]:focus,
-input[type="password"]:focus,
+input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+input[type="date"]:hover::-webkit-calendar-picker-indicator,
+input[type="date"]:focus::-webkit-calendar-picker-indicator {
+    opacity: 1;
+}
+
+input:focus,
 select:focus,
 textarea:focus {
     border-color: var(--si-blue-vibrant);
@@ -606,14 +731,14 @@ tr[style*="background-color: #000"] td {
     color: #000000 !important;
 }
 
-body:not(.tema-claro) .fila-alerta-critica {
+html.tema-oscuro .fila-alerta-critica {
     background-color: rgba(255, 198, 0, 0.15) !important;
     border-left: 4px solid var(--si-yellow);
 }
-body:not(.tema-claro) .fila-alerta-critica td {
+html.tema-oscuro .fila-alerta-critica td {
     color: var(--si-yellow) !important;
 }
-body:not(.tema-claro) .fila-alerta-critica td strong {
+html.tema-oscuro .fila-alerta-critica td strong {
     color: #ffffff !important;
 }
 
@@ -1053,6 +1178,21 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     transition: transform 0.3s ease;
 }
 
+/*
+ * EL ICONO DEL BOTON DE TEMA, Y POR QUE NO HAY JS QUE LO MUEVA
+ *
+ * El ícono muestra a qué tema se pasa al hacer clic, no en cuál se está: en
+ * oscuro aparece el sol (vuelve claro) y en claro aparece la luna (vuelve
+ * oscuro). Es el criterio de GitHub, de Windows y de casi todo lo demás.
+ *
+ * Antes `admin.js` tenía una función `ajustarIconoTema` que hacía EXACTAMENTE
+ * lo contrario con estilos en línea: en oscuro ponía la luna. Como el estilo en
+ * línea le gana a cualquier regla de la hoja, el ícono de la página del
+ * SuperAdmin era el contrario del de las otras cinco, para el mismo estado.
+ * Por eso la función se borró y esto quedó siendo lo único que decide: si se
+ * vuelve a necesitar JS, tiene que ser para lo mismo que hace acá y no para
+ * otra cosa.
+ */
 .btn-alternar-tema .icono-sol {
     display: block;
 }
@@ -1060,10 +1200,10 @@ body:not(.tema-claro) .fila-alerta-critica td strong {
     display: none;
 }
 
-body.tema-claro .btn-alternar-tema .icono-sol {
+html.tema-claro .btn-alternar-tema .icono-sol {
     display: none;
 }
-body.tema-claro .btn-alternar-tema .icono-luna {
+html.tema-claro .btn-alternar-tema .icono-luna {
     display: block;
 }
 
@@ -1708,7 +1848,7 @@ body.tema-claro .btn-alternar-tema .icono-luna {
     background-color: rgba(255, 255, 255, 0.08);
 }
 
-body.tema-claro .dropdown-item-btn:hover {
+html.tema-claro .dropdown-item-btn:hover {
     background-color: rgba(0, 0, 0, 0.05);
 }
 

@@ -667,9 +667,5 @@ window.addEventListener('click', (e) => {
 
 
 document.addEventListener('DOMContentLoaded', () => {
-    const temaGuardado = localStorage.getItem('tema-preferido');
-    if (temaGuardado === 'claro') {
-        document.body.classList.add('tema-claro');
-    }
     inicializarModulo();
 });

@@ -460,13 +460,6 @@ window.addEventListener('click', (e) => {
    11. INICIALIZACIÓN DE LA PÁGINA
    ========================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
-    const temaGuardado = localStorage.getItem('tema-preferido');
-    if (temaGuardado === 'claro') {
-        document.body.classList.add('tema-claro');
-    } else {
-        document.body.classList.remove('tema-claro');
-    }
-
     cargarDatos();
     obtenerHistorialPedidos();
 });

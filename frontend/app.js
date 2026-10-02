@@ -695,13 +695,6 @@ if (btnVerMovimientos) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const temaGuardado = localStorage.getItem('tema-preferido');
-    if (temaGuardado === 'claro') {
-        document.body.classList.add('tema-claro');
-    } else {
-        document.body.classList.remove('tema-claro');
-    }
-
     obtenerProductos(1);
     verificarStockMinimo();
     cargarProveedoresDatalist();
