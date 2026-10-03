@@ -492,8 +492,15 @@
     </div>
 
     <!-- --- MODAL C: REGISTRAR NUEVO USUARIO (SOLO ADMIN) --- -->
-    <div id="modal-crear-usuario" class="modal">
-        <div class="modal-contenido modal-chico" style="height: auto; max-height: 90%;">
+    <!-- La clase `modal-alta-usuario` es la que le da a la caja el alto y el
+         `overflow-y`. Antes llevaba inline `style="height:auto; max-height:90%"`,
+         y eso se derramaba: `.modal-chico` es flex column, el `<form>` es un
+         item con `min-height:auto` (o sea no se encoge) y la caja, con
+         `overflow-y: visible`, dejaba pasar el contenido. Con una ventana de
+         menos de ~548px el boton "Guardar Usuario" caia fuera del rectangulo
+         de la tarjeta. Ahora la caja scrollea. -->
+    <div id="modal-crear-usuario" class="modal modal-alta-usuario">
+        <div class="modal-contenido modal-chico">
             <span class="cerrar-modal" onclick="cerrarModal('modal-crear-usuario')">&times;</span>
             <h2 style="color: var(--si-blue-vibrant); margin-bottom: 1rem;">Registrar Nuevo Usuario</h2>
             
@@ -523,7 +530,7 @@
 
                 <div class="campo">
                     <label for="nuevo-usuario-rol">Perfil / Rol:</label>
-                    <select id="nuevo-usuario-rol" style="width: 100%; padding: 10px; border-radius: 8px; border: 1.5px solid var(--border-color); background: var(--bg-body); color: var(--text-main);">
+                    <select id="nuevo-usuario-rol" style="width: 100%; padding: 10px; border-radius: 8px; border: 1.5px solid var(--border-input); background: var(--bg-body); color: var(--text-main);">
                         <option value="TECNICO">TÉCNICO (Sin permisos de eliminación)</option>
                         <option value="ADMIN">ADMINISTRADOR (Acceso total)</option>
                     </select>

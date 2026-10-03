@@ -7,6 +7,12 @@
     --bg-card: #24282c;           /* Tarjetas, paneles y modales un toque más claros */
     --bg-preview: #121416;
     --border-color: #343a40;      /* Bordes sutiles oscuros */
+    /* El borde de un CAMPO tiene queverse, y el de una tarjeta no. Con el mismo
+     * `--border-color` para los dos, la caja de texto quedaba en 1.47:1 contra su
+     * propio fondo: por WCAG 1.4.11 (contraste no textual) el borde de un control
+     * pide 3:1, y 1.47:1 es invisible. Este valor da 3.18:1 sobre `--bg-body`.
+     * Si se cambia `--bg-body`, hay que volver a medir este. */
+    --border-input: #646c74;
     --text-main: #f8f9fa;         /* Texto principal de alto contraste (casi blanco) */
     --text-muted: #adb5bd;        /* Texto secundario o descriptivo en gris claro */
 
@@ -95,6 +101,9 @@
         --bg-card: #ffffff;       /* Paneles blancos puros */
         --bg-preview: #f1f3f5;
         --border-color: #dee2e6;  /* Bordes suaves grises */
+        /* El borde del campo, medido contra `--bg-body` de este mismo tema:
+         * da 3.15:1. Con `--border-color` daba 1.21:1. */
+        --border-input: #868c92;
         --text-main: #2d3134;     /* Gris plomo oscuro del logo de la marca */
         --text-muted: #6c757d;    /* Gris medio para textos secundarios */
         --color-alerta-bg: #fff3cd; /* Fondo clásico amarillento de advertencia */
@@ -119,6 +128,7 @@ html.tema-claro {
     --bg-card: #ffffff;
     --bg-preview: #f1f3f5;
     --border-color: #dee2e6;
+    --border-input: #868c92;
     --text-main: #2d3134;
     --text-muted: #6c757d;
     --color-alerta-bg: #fff3cd;
@@ -136,6 +146,7 @@ html.tema-oscuro {
     --bg-card: #24282c;
     --bg-preview: #121416;
     --border-color: #343a40;
+    --border-input: #646c74;
     --text-main: #f8f9fa;
     --text-muted: #adb5bd;
     --color-alerta-bg: rgba(255, 198, 0, 0.1);
@@ -535,7 +546,10 @@ select,
 textarea {
     background-color: var(--bg-body);
     color: var(--text-main);
-    border: 1.5px solid var(--border-color);
+    /* `--border-input`, no `--border-color`: el borde de un campo es lo que dice
+     * "esto se escribe acá", y con el color de tarjeta quedaba en 1.2 a 1.5:1
+     * contra su propio fondo. Ver `--border-input` en el `:root` de arriba. */
+    border: 1.5px solid var(--border-input);
     border-radius: 6px;
     padding: 10px 14px;
     font-size: 14px;
@@ -937,6 +951,27 @@ html.tema-oscuro .fila-alerta-critica td strong {
     margin: 4vh auto;
     display: flex;
     flex-direction: column;
+}
+
+/*
+ * El alta de usuario es un formulario corto, pero "corto" depende de la ventana:
+ * con cuatro campos mas el boton la caja llega a 493px de alto. Si se le deja el
+ * `height: 85%` de `.modal-chico`, el contenido no entra nunca en una ventana
+ * baja y se ve lo que pasaba antes: la caja con `overflow-y: visible` y el
+ * `<form>` como item flex con `min-height: auto` (que no se encoge), asi que el
+ * boton de guardar caia FUERA del rectangulo de la tarjeta, pintado sobre el
+ * fondo del overlay.
+ *
+ * Por eso esta regla hace las dos cosas juntas: `height: auto` para que la
+ * tarjeta mida lo que mida el formulario, y `overflow-y: auto` para que si no
+ * entra, entre por scroll DENTRO de la tarjeta y no por fuera. El max-height va
+ * en `vh` y no en `%` a proposito: un porcentaje se resuelve contra la altura
+ * del padre, y el padre es el overlay; `vh` no depende de nadie.
+ */
+.modal-alta-usuario .modal-contenido {
+    height: auto;
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 #form-editar-producto {
@@ -1639,7 +1674,10 @@ html.tema-claro .btn-alternar-tema .icono-luna {
     padding: 12px 14px;
     font-size: 0.95rem;
     border-radius: 8px;
-    border: 1.5px solid var(--border-color);
+    /* Mismo `--border-input` que la regla global, por el mismo motivo: esta
+     * regla le gana por especificidad, así que si se le deja `--border-color`
+     * el borde del campo vuelve a 1.2:1 sin que se note el cambio. */
+    border: 1.5px solid var(--border-input);
     background-color: var(--bg-body);
     color: var(--text-main);
 }

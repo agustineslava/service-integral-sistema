@@ -320,6 +320,49 @@ const faltanEnClaro = [...varsOscuro].filter(v => !varsClaro.has(v));
 check(faltanEnClaro.length === 0, 'el tema claro declara las mismas variables que el oscuro',
     `al claro le faltan: ${faltanEnClaro.join(', ')}. Esa pagina se dibuja con la mitad de una paleta y la otra de la del sistema.`);
 
+/* Esta comprobacion es la que faltaba, y la hizo falta el script de mutaciones.
+ * Las tres de arriba miran un solo sentido: "lo que esta en el `@media` tiene que
+ * estar en los dos temas". Si al `@media` se le SACA una variable y la clase
+ * `html.tema-claro` la sigue teniendo, ninguna de las tres se entera: la
+ * comparacion queda "menor o igual" y pasa en verde.
+ *
+ * Y el caso es real: el `@media` es la paleta clara "de verdad" (asi lo dice el
+ * comentario de arriba de este mismo bloque). Es la que se aplica sin JavaScript
+ * y antes de que corra `auth-check.js`. Si `--border-input` quedara solo en la
+ * clase, en una PC en claro el campo tomaria el valor oscuro del `:root`.
+ */
+const soloEnLaClaseClaro = [...varsClaro].filter(v => !varsMqClaro.has(v));
+check(soloEnLaClaseClaro.length === 0, 'el `@media (prefers-color-scheme: light)` declara lo mismo que `html.tema-claro`',
+    `estan solo en la clase: ${soloEnLaClaseClaro.join(', ')}. El @media es la paleta clara de verdad: sin JavaScript, o antes de que corra el script del tema, esa variable se busca en el :root oscuro.`);
+
+/* El `:root` de arriba es el tema oscuro por defecto. Puede declarar variables
+ * que no cambian con el tema (el azul de la marca, el verde de "guardado"), asi
+ * que no se le puede pedir que declare todo. Lo que NO puede pasar es que
+ * declare una variable con un valor distinto del que le pone `html.tema-oscuro`
+ * a la misma variable: las dos dicen "esto es el oscuro" y si difieren, cual de
+ * las dos gana depende de si hay clase o no. */
+const bloqueRaiz = reglasCss.find(r => r.selector === ':root');
+check(!!bloqueRaiz, 'existe el bloque `:root` (el tema oscuro por defecto) en style.css');
+
+if (bloqueRaiz && bloqueOscuro) {
+    const valorRaiz = (nombre) => {
+        const m = new RegExp(`${nombre}\\s*:\\s*([^;]+);`, 'i').exec(bloqueRaiz.declaraciones);
+        return m ? m[1].trim() : null;
+    };
+    const valorOscuro = (nombre) => {
+        const m = new RegExp(`${nombre}\\s*:\\s*([^;]+);`, 'i').exec(bloqueOscuro.declaraciones);
+        return m ? m[1].trim() : null;
+    };
+    const compartidas = [...varsOscuro].filter(v => varsDe(bloqueRaiz).has(v));
+    const dispares = compartidas
+        .map(v => ({ v, raiz: valorRaiz(v), oscuro: valorOscuro(v) }))
+        .filter(x => x.raiz !== x.oscuro);
+
+    check(dispares.length === 0,
+        `el \`:root\` y \`html.tema-oscuro\` dan el mismo valor a las ${compartidas.length} variables que comparten`,
+        `difieren: ${dispares.map(d => `${d.v} (raiz=${d.raiz} / oscuro=${d.oscuro})`).join(', ')}. Las dos declaran el tema oscuro; si no coinciden, cual de las dos gana depende de si la clase esta puesta.`);
+}
+
 /* Cada tema tiene que poner su `color-scheme`: sin eso el desplegable del
    calendario y las barras de desplazamiento se dibujan con el tema del
    sistema, no con el que pidio la persona. */
@@ -570,6 +613,139 @@ check(tiposRaros.includes('tel') || tiposRaros.includes('url'),
     'si `campo()` dejo de usarlos, este control ya no mira nada.');
 
 check(reglaCampos !== undefined, 'la regla global de campos es la que los cubre a los dos');
+
+/* ==========================================================================
+   7. EL BORDE DE LOS CAMPOS: QUE SE VEA
+   --------------------------------------------------------------------------
+   El borde de un campo no puede ser el mismo que el de una tarjeta. Con
+   `--border-color` la caja de texto quedaba en 1.47:1 en oscuro y 1.21:1 en
+   claro contra su propio fondo, y WCAG 1.4.11 pide 3:1 para el borde de un
+   control: por debajo de eso el campo no se distingue del papel. Asi se quejaba
+   el usuario de las barras de los items de la factura, en los dos temas.
+
+   La trampa de medir es contra cual fondo: el del CAMPO, no el de la tarjeta. El
+   campo tiene fondo propio (`--bg-body`) y ese es el color vecino. Medirlo
+   contra `--bg-card` daria un numero parecido y no el que importa.
+   ========================================================================== */
+
+/** '#rgb' o '#rrggbb' -> [r,g,b]. null si no es un hex de 3 o 6 digitos. */
+function rgbDe(valor) {
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(valor).trim());
+    if (!m) return null;
+    const h = m[1].length === 3 ? m[1].split('').map(c => c + c).join('') : m[1];
+    return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+}
+
+/** Luminancia relativa, la misma formula de WCAG. */
+function lum(rgb) {
+    const [r, g, b] = rgb.map(v => {
+        const x = v / 255;
+        return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Razon de contraste entre dos colores opacos, a dos decimales. */
+function contraste(a, b) {
+    const la = lum(a);
+    const lb = lum(b);
+    return Math.round(((Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)) * 100) / 100;
+}
+
+/** El valor de una variable dentro del texto de un bloque. */
+function valorDe(bloque, nombre) {
+    if (!bloque) return null;
+    const m = new RegExp(`${nombre}\\s*:\\s*([^;]+);`, 'i').exec(bloque.declaraciones);
+    return m ? m[1].trim() : null;
+}
+
+const MIN_BORDE_CAMPO = 3;   // WCAG 1.4.11, "Non-text Contrast"
+
+seccion('7. El borde de los campos: que se vea');
+
+for (const [nombreTema, bloque] of [['oscuro', bloqueOscuro], ['claro', bloqueClaro]]) {
+    const vBorde = valorDe(bloque, '--border-input');
+    const vFondo = valorDe(bloque, '--bg-body');
+
+    check(vBorde !== null, `el tema ${nombreTema} define \`--border-input\``,
+        'si el tema no la define, con el SO en claro la variable se busca en el `@media (prefers-color-scheme: light)` y el campo toma el color del otro tema.');
+    check(vFondo !== null, `el tema ${nombreTema} define \`--bg-body\`, el fondo contra el que se mide el borde`);
+
+    const cb = rgbDe(vBorde);
+    const cf = rgbDe(vFondo);
+    if (cb && cf) {
+        const r = contraste(cb, cf);
+        check(r >= MIN_BORDE_CAMPO,
+            `el borde del campo llega a ${MIN_BORDE_CAMPO}:1 en tema ${nombreTema} (mide ${r}:1)`,
+            `\`--border-input: ${vBorde}\` sobre \`--bg-body: ${vFondo}\` da ${r}:1. WCAG 1.4.11 pide ${MIN_BORDE_CAMPO}:1 para el borde de un control de formulario.`);
+    } else {
+        /* Si el color no es un hex corto, esta comprobacion no puede medirlo.
+           Prefiero que falle a que pase en verde sin haber mirado nada. */
+        check(false, `el borde del campo llega a ${MIN_BORDE_CAMPO}:1 en tema ${nombreTema}`,
+            `no se pudieron leer los colores: --border-input=${vBorde}, --bg-body=${vFondo}. Si alguno no es un hex de 3 o 6 digitos, esta comprobacion pasaria en verde sin medir.`);
+    }
+}
+
+/* Quien TIENE que usar `--border-input`: la regla global, y `.login-form input`,
+   que le gana por especificidad. Si a esta ultima se le deja `--border-color`,
+   el borde del campo vuelve a 1.2:1 sin que se note el cambio. */
+if (reglaCampos) {
+    const mBorde = /(?:^|;)\s*border\s*:[^;]*/.exec(reglaCampos.declaraciones);
+    check(mBorde && /var\(\s*--border-input\s*\)/.test(mBorde[0]),
+        'la regla global de campos se dibuja con `var(--border-input)`',
+        `la regla global declara \`border: ${mBorde ? mBorde[0].replace(/^\s*;\s*/, '').trim() : '(no declara border)'}\`. Con \`--border-color\` el borde del campo queda en 1.2 a 1.5:1.`);
+}
+
+const reglaLoginInput = reglasCss.find(r => r.selector.replace(/\s+/g, ' ') === '.login-form input');
+check(!!reglaLoginInput && /var\(\s*--border-input\s*\)/.test(reglaLoginInput.declaraciones),
+    '`.login-form input` se dibuja con `var(--border-input)`',
+    'esta regla le gana por especificidad a la global, asi que si queda con `--border-color` el borde del campo vuelve a ser invisible y esta comprobacion de la global no lo va a ver.');
+
+/* La puerta de atras: un `style="..."` inline le gana a cualquier regla, asi que
+   un control con `--border-color` ahi burla todo lo de arriba. */
+const controlesConBordeViejo = [];
+for (const nombre of fs.readdirSync(FRONT)) {
+    if (!/\.(html|js)$/.test(nombre)) continue;
+    for (const m of leer(nombre).matchAll(/<(input|select|textarea)\b[^>]*style="[^"]*--border-color/gi)) {
+        controlesConBordeViejo.push(`${nombre} (<${m[1].toLowerCase()}>)`);
+    }
+}
+check(controlesConBordeViejo.length === 0,
+    'ningun `<input>`, `<select>` o `<textarea>` lleva `--border-color` en un `style=` inline',
+    `un \`style=\` inline le gana a cualquier regla, asi que estos meten el borde viejo por la puerta de atrás: ${controlesConBordeViejo.join(', ')}`);
+
+/* El modal de alta de usuario. La caja es flex column y el `<form>` es un item
+   con `min-height: auto`, o sea que NO se encoge. Si la caja no scrollea, en una
+   ventana baja el boton de guardar se dibuja fuera del rectangulo de la tarjeta:
+   medido con la ventana a 400px, caia 136px por debajo del borde. */
+const reglaAltaUsuario = reglasCss.find(r => r.selector.replace(/\s+/g, ' ') === '.modal-alta-usuario .modal-contenido');
+check(!!reglaAltaUsuario, 'existe la regla `.modal-alta-usuario .modal-contenido` en style.css',
+    'sin ella el modal vuelve al `height:auto; max-height:90%` inline con `overflow: visible` de antes.');
+
+if (reglaAltaUsuario) {
+    check(/overflow-y\s*:\s*auto/.test(reglaAltaUsuario.declaraciones),
+        '`.modal-alta-usuario .modal-contenido` deja que la tarjeta scrollee (`overflow-y: auto`)',
+        `declara \`${reglaAltaUsuario.declaraciones.replace(/\s+/g, ' ').trim()}\`. Con el overflow en \`visible\` el contenido se dibuja por fuera de la tarjeta.`);
+
+    const mh = /max-height\s*:\s*([^;]+)/.exec(reglaAltaUsuario.declaraciones);
+    check(!!mh && /vh/.test(mh[1]),
+        'el alto maximo de esa tarjeta va en `vh` y no en `%`',
+        `max-height: ${mh ? mh[1].trim() : '(no lo declara)'}. Un porcentaje se resuelve contra la altura del padre, que es el overlay; \`vh\` no depende de nadie.`);
+}
+
+const idx = leer('index.html');
+check(/id="modal-crear-usuario"[^>]*class="[^"]*\bmodal-alta-usuario\b/.test(idx),
+    'el modal de alta de usuario lleva la clase `modal-alta-usuario`',
+    'la regla existe pero el modal no la pide, asi que no aplica.');
+
+/* El `max-height` inline se busca DENTRO del modal del usuario y no en cualquier
+   `.modal-chico` de la pagina: hay otros modales chicos con estilos inline
+   legitimos, y una regla general que los alcanzara a todos molestaria despues
+   a uno que si los necesita. */
+const bloqueModalUsuario = /<div id="modal-crear-usuario"[\s\S]*?<div class="modal-contenido modal-chico"([^>]*)>/.exec(idx);
+check(!!bloqueModalUsuario && !/max-height/.test(bloqueModalUsuario[1]),
+    'el modal de alta de usuario ya no lleva `max-height` inline',
+    'el `style=` inline pisa la regla de la hoja de estilos, asi que por mas correcta que este la regla, no gana.');
 
 /* ==========================================================================
    RESUMEN

@@ -153,8 +153,8 @@ const MUTACIONES = [
                linea existe en el `:root` de arriba, y reemplazar la primera
                habria roto el oscuro por defecto en vez del bloque del tema. */
             reemplazar('style.css',
-                'html.tema-oscuro {\n    color-scheme: dark;\n    --bg-body: #1a1d20;\n    --bg-card: #24282c;\n    --bg-preview: #121416;\n    --border-color: #343a40;\n    --text-main: #f8f9fa;',
-                'html.tema-oscuro {\n    color-scheme: dark;\n    --bg-body: #1a1d20;\n    --bg-card: #24282c;\n    --bg-preview: #121416;\n    --border-color: #343a40;');
+                'html.tema-oscuro {\n    color-scheme: dark;\n    --bg-body: #1a1d20;\n    --bg-card: #24282c;\n    --bg-preview: #121416;\n    --border-color: #343a40;\n    --border-input: #646c74;\n    --text-main: #f8f9fa;',
+                'html.tema-oscuro {\n    color-scheme: dark;\n    --bg-body: #1a1d20;\n    --bg-card: #24282c;\n    --bg-preview: #121416;\n    --border-color: #343a40;\n    --border-input: #646c74;');
         },
         espera: 'el tema oscuro pisa las'
     },
@@ -163,8 +163,8 @@ const MUTACIONES = [
         porQue: 'el contador de usuarios del plan saldria del color del tema oscuro sobre fondo blanco',
         hacer() {
             reemplazar('style.css',
-                'html.tema-claro {\n    color-scheme: light;\n    --bg-body: #f4f7f6;\n    --bg-card: #ffffff;\n    --bg-preview: #f1f3f5;\n    --border-color: #dee2e6;\n    --text-main: #2d3134;\n    --text-muted: #6c757d;\n    --color-alerta-bg: #fff3cd;\n    --color-warning: #8a6d00;',
-                'html.tema-claro {\n    color-scheme: light;\n    --bg-body: #f4f7f6;\n    --bg-card: #ffffff;\n    --bg-preview: #f1f3f5;\n    --border-color: #dee2e6;\n    --text-main: #2d3134;\n    --text-muted: #6c757d;\n    --color-alerta-bg: #fff3cd;');
+                'html.tema-claro {\n    color-scheme: light;\n    --bg-body: #f4f7f6;\n    --bg-card: #ffffff;\n    --bg-preview: #f1f3f5;\n    --border-color: #dee2e6;\n    --border-input: #868c92;\n    --text-main: #2d3134;\n    --text-muted: #6c757d;\n    --color-alerta-bg: #fff3cd;\n    --color-warning: #8a6d00;',
+                'html.tema-claro {\n    color-scheme: light;\n    --bg-body: #f4f7f6;\n    --bg-card: #ffffff;\n    --bg-preview: #f1f3f5;\n    --border-color: #dee2e6;\n    --border-input: #868c92;\n    --text-main: #2d3134;\n    --text-muted: #6c757d;\n    --color-alerta-bg: #fff3cd;');
         },
         espera: 'el tema claro declara las mismas variables'
     },
@@ -371,6 +371,126 @@ const MUTACIONES = [
             reemplazar('facturacion.html', ' d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"', '');
         },
         espera: 'el icono "icono-luna" tiene los <path> con atributo d'
+    },
+
+    /* =======================================================================
+       EL BORDE DE LOS CAMPOS Y EL MODAL DE ALTA DE USUARIO
+
+       Estas mutaciones no son hipoteticas: las dos cosas que arreglan son las
+       que reporto el usuario. El borde del campo daba 1.47:1 en oscuro y 1.21:1
+       en claro (WCAG 1.4.11 pide 3:1), y el boton "Guardar Usuario" se dibujaba
+       136px por debajo del borde de la tarjeta con la ventana en 400px de alto.
+       ======================================================================= */
+    {
+        nombre: 'el tema claro vuelve el borde del campo al color de tarjeta',
+        porQue: 'es el bug original en tema claro. Con `--border-input: #868c92` el borde da 3.15:1; con el `#dee2e6` de `--border-color` daba 1.21:1 y la caja de texto no se distinguia del papel',
+        hacer() {
+            reemplazar('style.css',
+                '    --border-input: #868c92;\n    --text-main: #2d3134;',
+                '    --border-input: #dee2e6;\n    --text-main: #2d3134;');
+        },
+        espera: 'llega a 3:1 en tema claro'
+    },
+    {
+        nombre: 'el tema oscuro vuelve el borde del campo al color de tarjeta',
+        porQue: 'el mismo bug en tema oscuro, que es donde mas se nota: `--border-color` es `#343a40` sobre `#1a1d20`, o sea 1.47:1. El anclaje arranca en `html.tema-oscuro` y no en el `:root` porque la comprobacion de contraste mide ese bloque',
+        hacer() {
+            reemplazar('style.css',
+                'html.tema-oscuro {\n    color-scheme: dark;\n    --bg-body: #1a1d20;\n    --bg-card: #24282c;\n    --bg-preview: #121416;\n    --border-color: #343a40;\n    --border-input: #646c74;',
+                'html.tema-oscuro {\n    color-scheme: dark;\n    --bg-body: #1a1d20;\n    --bg-card: #24282c;\n    --bg-preview: #121416;\n    --border-color: #343a40;\n    --border-input: #343a40;');
+        },
+        espera: 'llega a 3:1 en tema oscuro'
+    },
+    {
+        nombre: 'el `:root` y `html.tema-oscuro` dan valores distintos a la misma variable',
+        porQue: 'los dos declaran el tema oscuro, asi que si no coinciden cual de los dos gana depende de si la clase esta puesta. Es un caso distinto del anterior: el valor de `--border-input` del `:root` no lo mira la comprobacion de contraste (mide el bloque del tema), asi que sin esta comprobacion el `:root` podria quedar con cualquier cosa en verde',
+        hacer() {
+            reemplazar('style.css',
+                '    --border-input: #646c74;\n    --text-main: #f8f9fa;         /* Texto principal de alto contraste (casi blanco) */',
+                '    --border-input: #7a828a;\n    --text-main: #f8f9fa;         /* Texto principal de alto contraste (casi blanco) */');
+        },
+        espera: 'dan el mismo valor a las'
+    },
+    {
+        nombre: 'el `@media (prefers-color-scheme: light)` se queda sin `--border-input`',
+        porQue: 'la copia de la paleta clara esta escrita dos veces y tiene que estar en las dos, en los DOS sentidos. Las comprobaciones de paridad que ya existian miraban un solo sentido ("lo que esta en el @media tiene que estar en los dos temas"), asi que sacar una variable del @media pasaba en verde. Esta es la que se agrega por eso',
+        hacer() {
+            /* La del `@media` va con 8 espacios de sangria; la de `html.tema-claro`
+               con 4. Por eso el anclaje lleva la sangria: sin ella entraria la
+               primera, que es la del `@media`. */
+            reemplazar('style.css', '        --border-input: #868c92;\n', '');
+        },
+        espera: 'el `@media (prefers-color-scheme: light)` declara lo mismo que `html.tema-claro`'
+    },
+    {
+        nombre: 'la regla global de campos vuelve a `--border-color`',
+        porQue: 'la regla global es la que cubre a todos los tipos de campo. Si vuelve a `--border-color`, todos los inputs del sistema vuelven a 1.2-1.5:1 de golpe',
+        hacer() {
+            reemplazar('style.css', '    border: 1.5px solid var(--border-input);', '    border: 1.5px solid var(--border-color);');
+        },
+        espera: 'la regla global de campos se dibuja con `var(--border-input)`'
+    },
+    {
+        nombre: '`.login-form input` vuelve a `--border-color`',
+        porQue: 'esta regla le GANA por especificidad a la global, asi que el error no se ve en el CSS: la global dice `--border-input`, esta dice `--border-color`, y gana la segunda. Por eso hace falta una comprobacion propia y no alcanza con mirar la global',
+        hacer() {
+            reemplazar('style.css',
+                '    border: 1.5px solid var(--border-input);\n    background-color: var(--bg-body);',
+                '    border: 1.5px solid var(--border-color);\n    background-color: var(--bg-body);');
+        },
+        espera: '`.login-form input` se dibuja con `var(--border-input)`'
+    },
+    {
+        nombre: 'un `<select>` vuelve a llevar `--border-color` en un style inline',
+        porQue: 'la puerta de atras: un `style="..."` le gana a cualquier regla, asi que un solo control con el color viejo burla las dos comprobaciones de arriba',
+        hacer() {
+            reemplazar('index.html',
+                'border: 1.5px solid var(--border-input); background: var(--bg-body)',
+                'border: 1.5px solid var(--border-color); background: var(--bg-body)');
+        },
+        espera: 'lleva `--border-color` en un `style=` inline'
+    },
+    {
+        nombre: 'se borra la regla `.modal-alta-usuario .modal-contenido`',
+        porQue: 'el modal vuelve al `height:auto; max-height:90%` inline de antes, con `overflow: visible`, y el boton de guardar se dibuja fuera de la tarjeta',
+        hacer() {
+            quitarRegla('style.css', '.modal-alta-usuario .modal-contenido');
+        },
+        espera: 'existe la regla `.modal-alta-usuario .modal-contenido`'
+    },
+    {
+        nombre: 'el modal de alta de usuario deja de scrollear',
+        porQue: '`.modal-chico` es flex column y el `<form>` es un item con `min-height: auto`, o sea que no se encoge. Sin `overflow-y: auto` en la tarjeta, el contenido que no entra se dibuja por fuera de ella',
+        hacer() {
+            reemplazar('style.css', '    max-height: 90vh;\n    overflow-y: auto;', '    max-height: 90vh;\n    overflow-y: visible;');
+        },
+        espera: 'deja que la tarjeta scrollee'
+    },
+    {
+        nombre: 'el alto maximo del modal vuelve de `vh` a `%`',
+        porQue: 'un `max-height: 90%` se resuelve contra la altura del padre, que es el overlay. Con el overlay en `position: fixed; height: 100%` eso funciona, pero queda atado a una cadena de contenedores que ya fallo una vez: por eso el `vh`',
+        hacer() {
+            reemplazar('style.css', '    max-height: 90vh;', '    max-height: 90%;');
+        },
+        espera: 'el alto maximo de esa tarjeta va en `vh`'
+    },
+    {
+        nombre: 'el modal de alta de usuario se queda sin la clase',
+        porQue: 'la regla puede estar perfecta y no aplicar si el modal no la pide. Es el mismo modo de falla que el del icono del tema que se perdia en una pagina',
+        hacer() {
+            reemplazar('index.html', 'class="modal modal-alta-usuario"', 'class="modal"');
+        },
+        espera: 'el modal de alta de usuario lleva la clase `modal-alta-usuario`'
+    },
+    {
+        nombre: 'el modal de alta de usuario recupera el `max-height` inline',
+        porQue: 'el `style=` inline gana a la hoja de estilos, asi que esta es la forma silenciosa de deshacer todo lo anterior sin tocar el CSS: la regla sigue perfecta y no se esta aplicando',
+        hacer() {
+            reemplazar('index.html',
+                '    <div id="modal-crear-usuario" class="modal modal-alta-usuario">\n        <div class="modal-contenido modal-chico">',
+                '    <div id="modal-crear-usuario" class="modal modal-alta-usuario">\n        <div class="modal-contenido modal-chico" style="height: auto; max-height: 90%;">');
+        },
+        espera: 'ya no lleva `max-height` inline'
     }
 ];
 
