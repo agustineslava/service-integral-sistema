@@ -334,6 +334,202 @@ const MUTACIONES = [
                 'CREATE TABLE `etiquetas_qr_vieja` (');
         },
         espera: 'toda columna que leen las rutas de etiqueta existe en el esquema'
+},
+
+    /* ======================================================================
+       Las mutaciones de la SECCION 8, la de la pantalla.
+
+       Estas importan mas que las del servidor por una razon: la pantalla es lo
+       unico que ve el usuario, y casi ninguno de sus fallos se ven desde
+       atras. El servidor puede devolver 200 con la columna corrida y el listado
+       se ve "raro"; la hoja de impresion puede imprimir gris y el QR no lo lee
+       nadie hasta que el cliente lo complains.
+
+       Y hay una que sale de un error real de esta sesion: la columna "Imp."
+       estaba primera en el encabezado y septima en el cuerpo. Ocho celdas
+       contra ocho encabezados, la cantidad daba bien, y la tabla estaba corrida
+       una columna entera. Las dos primeras mutaciones de abajo ponen eso de
+       nuevo, y el control de orden tiene que verlo.
+       ====================================================================== */
+    {
+        nombre: 'la tabla: el marcado para imprimir vuelve a la septima celda',
+        porQue: 'ES EL ERROR REAL. La columna "Imp." queda primera en el encabezado y septima en el cuerpo. La cantidad de celdas sigue siendo 8 y cualquier control que solo cuente da verde; el listado muestra el nombre del producto debajo de "Imp." y el precio debajo de "Stock"',
+        hacer() {
+            reemplazar('front:etiquetas.js',
+                'return `<tr>\n            <td data-col="imp" style="text-align:center;">${casilla}</td>\n            <td data-col="producto">${escapeHtml(f.nombre)}</td>',
+                'return `<tr>\n            <td data-col="producto">${escapeHtml(f.nombre)}</td>\n            <td data-col="imp" style="text-align:center;">${casilla}</td>');
+        },
+        espera: 'el encabezado y el cuerpo tienen las columnas en el mismo orden'
+    },
+    {
+        nombre: 'la tabla: una columna del encabezado cambia de nombre',
+        porQue: 'deriva realista: se renombra el encabezado a "Precio de venta" y no se actualiza el `data-col` del cuerpo. El nombre queda en un lado solo y el control de orden tiene que avisar cual',
+        hacer() {
+            reemplazar('front:etiquetas.html',
+                '<th data-col="precio" style="text-align: right;">Precio</th>',
+                '<th data-col="precio_venta" style="text-align: right;">Precio de venta</th>');
+        },
+        espera: 'el encabezado y el cuerpo tienen las columnas en el mismo orden'
+    },
+    {
+        nombre: 'la tabla: dos celdas se llaman igual',
+        porQue: 'copiar y pegar una columna sin cambiarle el `data-col`. Las dos listas siguen teniendo la misma cantidad y el mismo conjunto, asi que comparar conjuntos daria verde; solo la comparacion en orden lo ve',
+        hacer() {
+            reemplazar('front:etiquetas.js',
+                '<td data-col="stock" style="text-align:right;">${eO(f.stock)}</td>',
+                '<td data-col="precio" style="text-align:right;">${eO(f.stock)}</td>');
+        },
+        espera: 'ninguna columna tiene el mismo nombre dos veces'
+    },
+    {
+        nombre: 'la tabla: el encabezado crece y las filas de aviso no',
+        porQue: 'se agrega una columna al encabezado y no se actualiza el `colspan` de "Cargando productos". Mientras carga se ve media tabla descolgada, y cuando el filtro no encuentra nada el texto queda angosto en una tabla ancha',
+        hacer() {
+            reemplazar('front:etiquetas.html',
+                '<tr><td colspan="8" style="text-align:center;">Cargando productos…</td></tr>',
+                '<tr><td colspan="7" style="text-align:center;">Cargando productos…</td></tr>');
+        },
+        espera: 'las filas de aviso cubren las 8 columnas'
+    },
+    {
+        nombre: 'el nombre del producto deja de escaparse',
+        porQue: 'lo que reporta el usuario de un nombre con `<b>` o con un `<img onerror>`: se pinta como HTML. El nombre lo escribe cualquiera que carga un producto, y se ve en la pantalla de todos los que abran el listado. El nombre de producto es el campo mas Atari de la base de una empresa de repuestos',
+        hacer() {
+            reemplazar('front:etiquetas.js',
+                '<td data-col="producto">${escapeHtml(f.nombre)}</td>',
+                '<td data-col="producto">${f.nombre}</td>');
+        },
+        espera: 'escapan el dato del servidor'
+    },
+    {
+        nombre: 'el distribuidor deja de escaparse',
+        porQue: 'el mismo agujero por otro camino: cambiar el nombre de producto lo tapa y el de distribuidor sigue abierto. Un control que mirara uno solo de los dos no serviria',
+        hacer() {
+            reemplazar('front:etiquetas.js',
+                '<td data-col="distribuidor">${eO(f.distribuidor)}</td>',
+                '<td data-col="distribuidor">${f.distribuidor}</td>');
+        },
+        espera: 'escapan el dato del servidor'
+    },
+    {
+        nombre: 'el nombre del producto de la etiqueta deja de escaparse',
+        porQue: 'el listado y la hoja de impresion arman HTML en funciones distintas. Arreglar el listado y dejar la hoja sin escapar deja el agujero en el papel, que es donde el nombre se lo lleva el cliente',
+        hacer() {
+            reemplazar('front:etiquetas.js',
+                '<div class="e-etiqueta-nombre">${escapeHtml(f.nombre)}</div>',
+                '<div class="e-etiqueta-nombre">${f.nombre}</div>');
+        },
+        espera: 'escapan el dato del servidor'
+    },
+    {
+        nombre: 'la imagen del QR se pide como ruta de API',
+        porQue: 'es lo que hace el reflejo de cualquiera que ya vio las otras imagenes del sistema, que van por URL. Un `<img>` no puede mandar el encabezado Authorization, asi que sale en 401: en la pantalla un cuadrito roto y en el papel un sticker vacio. Y el control tiene que verlo antes de imprimir 300 etiquetas',
+        hacer() {
+            reemplazar('front:etiquetas.js',
+                '? `<img class="e-etiqueta-qr" src="${dataUrl}" alt="Código QR de ${escapeHtml(f.nombre)}">`',
+                '? `<img class="e-etiqueta-qr" src="/api/etiquetas/${f.etiqueta_id}/qr.png" alt="Código QR">`');
+        },
+        espera: 'la imagen del QR no se pide como ruta de API'
+    },
+    {
+        nombre: 'se saca el contraste del data URL',
+        porQue: 'el valor va adentro de un `src="..."` armado con innerHTML. Sin el patron, un data:text/html del servidor cierra el atributo antes de tiempo y lo que sigue se ejecuta. Hoy el servidor genera el base64 y no hay por que desconfiar: el control esta para el dia en que eso cambie y nadie mire',
+        hacer() {
+            reemplazar('front:etiquetas.js',
+                "if (typeof url !== 'string' || !DATA_URL_DE_IMAGEN.test(url)) return null;\n    return url;",
+                'return url;');
+        },
+        espera: 'el QR del servidor se contrasta contra ese patron'
+    },
+    {
+        nombre: 'al imprimir se saca print-color-adjust',
+        porQue: 'el fallo mas caro y el mas invisible: la hoja se ve perfecta en la pantalla y sale gris en la impresora del cliente. El QR es negro sobre blanco, sobre un fondo que se imprimio oscuro no lo lee nadie. Y el que lo ve es el usuario final, semanas despues',
+        hacer() {
+            reemplazar('front:etiquetas.css',
+                '        print-color-adjust: exact;\n        -webkit-print-color-adjust: exact;\n',
+                '');
+        },
+        espera: 'se respeta el color pedido'
+    },
+    {
+        nombre: 'al imprimir queda el filtro de la pantalla',
+        porQue: 'con el filtro puesto se imprime la barra de busqueda y el boton de generar encima del papel. Se evita tapando una entrada por una, que es como se hacia antes: el listado tiene ocho y con el filtro aparecen mas',
+        hacer() {
+            reemplazar('front:etiquetas.css',
+                '    body > *:not(#e-imp-area) { display: none !important; }',
+                '    .seccion-busqueda { display: none !important; }\n    .panel-tabla { display: none !important; }');
+        },
+        espera: 'se apaga todo menos el area de etiquetas'
+    },
+    {
+        nombre: 'la etiqueta sale en el color del tema',
+        porQue: 'el papel deja de ser blanco. Es tentador porque en la pantalla asi se ve "integrada", y es exactamente el error: la variable de color del tema no existe en una impresora laser comun, y el QR necesita blanco puro alrededor para que el lector no falle',
+        hacer() {
+            reemplazar('front:etiquetas.css',
+                '        background: #fff !important;\n        color: #000 !important;',
+                '        background: transparent !important;\n        color: inherit !important;');
+        },
+        espera: 'el fondo de la pagina es blanco'
+    },
+    {
+        nombre: 'solo la tarjeta de la etiqueta sale en el color del tema',
+        porQue: 'el hermano del anterior, y el que importa mas: el fondo de la pagina es blanco pero el rectangulo de cada etiqueta conserva el color del tema. El control anterior se libraba porque buscaba "#fff en algun lado" y la pagina lo tenia; este tiene que mirar la tarjeta sola, y hay una mutacion por cada una de las dos mitades',
+        hacer() {
+            reemplazar('front:etiquetas.css',
+                '        border: 1px solid #000 !important;\n        background: #fff !important;\n        color: #000 !important;',
+                '        border: 1px solid currentColor !important;\n        background: transparent !important;\n        color: inherit !important;');
+        },
+        espera: 'la tarjeta de la etiqueta es blanca con texto negro'
+    },
+{
+        nombre: 'la hoja en pantalla se pone un color fijo',
+        porQue: 'el error al reves del anterior: un `#fff` en el CSS de la etiqueta FUERA de `@media print` queda bien en el tema oscuro y es INVISIBLE en el claro, o al reves. Los dos lados del CSS estan revisados, y por eso el control mira la parte de pantalla y la de impresion por separado',
+        hacer() {
+            reemplazar('front:etiquetas.css',
+                '    color: var(--text-main);\n    overflow-wrap: anywhere;',
+                '    color: #1a1d20;\n    background: #f4f7f6;\n    overflow-wrap: anywhere;');
+        },
+        espera: 'la hoja en pantalla no tiene colores fijos'
+    },
+    {
+        nombre: 'la grilla de etiquetas fija la cantidad de columnas',
+        porQue: 'con cuatro columnas fijas, en una hoja angosta la cuarta etiqueta se imprime cortada al borde y el QR se parte: media imagen no se lee. Con `auto-fill` lo que se acomoda al papel es la grilla, no la etiqueta',
+        hacer() {
+            reemplazar('front:etiquetas.css',
+                'grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));',
+                'grid-template-columns: repeat(4, 1fr);');
+        },
+        espera: 'ninguna grilla de la hoja fija la cantidad de columnas'
+    },
+    {
+        nombre: 'una etiqueta se puede partir entre dos hojas',
+        porQue: 'sin `break-inside: avoid` el corte cae donde le toque: el nombre queda en una hoja y el QR en la siguiente. Es peor que una etiqueta fea: es un papel que no sirve y no se nota hasta que se quiere escanear',
+        hacer() {
+            reemplazar('front:etiquetas.css',
+                '    break-inside: avoid;\n    page-break-inside: avoid;\n',
+                '');
+        },
+        espera: 'una etiqueta no se parte entre dos hojas'
+    },
+    {
+        nombre: 'la barra de imprimir deja de llevar `no-imprimir`',
+        porQue: 'la hoja es un SECTION del documento, no un modal: para imprimir tiene que estar en la pagina. Sin `no-imprimir` en la barra, "Imprimir" y "Cerrar" salen en el papel del cliente',
+        hacer() {
+            reemplazar('front:etiquetas.html',
+                '<div class="e-imp-barra no-imprimir">',
+                '<div class="e-imp-barra">');
+        },
+        espera: 'la barra de botones de imprimir lleva `no-imprimir`'
+    },
+    {
+        nombre: 'el JS busca un id que el HTML no tiene',
+        porQue: 'sin avisar: `getElementById` devuelve null y `addEventListener` sobre null tira. Y como todos los listeners estan en un solo `DOMContentLoaded`, se cae el que estaba despues tambien: la pagina queda sin busqueda, sin generar y sin imprimir, y la consola muestra un error que nadie lee',
+        hacer() {
+            reemplazar('front:etiquetas.js',
+                "document.getElementById('filtro-qr').addEventListener",
+                "document.getElementById('filtro-estado').addEventListener");
+        },
+        espera: 'todo id que busca el JS existe en el HTML'
     }
 ];
 

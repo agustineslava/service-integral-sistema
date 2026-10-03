@@ -378,7 +378,8 @@ const desescapar = (s) => s
 const archivosConReplace = [
     ['server.js', serverCrudo],
     ...['app.js', 'auth-check.js', 'presupuestos.js', 'admin.js', 'clientes.js',
-        'pedidos.js', 'reparaciones.js', 'marca.js', 'utils-imagenes.js']
+        'pedidos.js', 'reparaciones.js', 'marca.js', 'utils-imagenes.js',
+        'facturacion.js', 'etiquetas.js']
         .filter((n) => fs.existsSync(path.join(RAIZ, '..', 'frontend', n)))
         .map((n) => [n, leer(path.join(RAIZ, '..', 'frontend', n))])
 ];
@@ -594,5 +595,300 @@ check(cuerpoEscanerRuta.length > 500, `el cuerpo de la ruta del escaner se leyo 
 check(/\bdb\.query\(/.test(cuerpoEscanerRuta), 'la ruta del escaner consulta con `db` (el pool de la sesion)');
 check(!/\bpool\.query\(/.test(cuerpoEscanerRuta), 'la ruta del escaner no usa un `pool` suelto');
 check(!/obtenerPool/.test(cuerpoEscanerRuta), 'la ruta del escaner no pide ninguna base de datos');
+
+/* ==========================================================================
+   8. La pantalla de etiquetas
+   --------------------------------------------------------------------------
+   Todo lo de arriba mira el servidor. Esta seccion mira los tres archivos del
+   frontend, y mira tres cosas que en el servidor no se ven:
+
+   a) Que la pantalla exista y quede pegada al servidor: un `getElementById` de
+      un id que no esta en el HTML no avisa, tira. Y como todos los listeners
+      estan en UN `DOMContentLoaded`, uno que falle se lleva por delante a los
+      demas: la pagina queda en blanco de datos sin decir por que.
+
+   b) Que nada del servidor entre al HTML sin pasar por `escapeHtml`. Los nombres
+      de producto los escribe el usuario: un producto llamado `<img onerror=...>`
+      se ejecuta en la pantalla de cualquiera que abra el listado.
+
+   c) Que al imprimir salga blanco y negro. Este es el control que mas se va de
+      la fila: la hoja de impresion se ve bien en la pantalla, y el problema
+      aparece recien en el papel, en la impresora de la empresa del cliente, que
+      nadie de aca va a ver.
+   ========================================================================== */
+seccion('8. La pantalla de etiquetas');
+
+const FRONT = path.join(RAIZ, '..', 'frontend');
+const etHtml = leer(path.join(FRONT, 'etiquetas.html'));
+const etCss = leer(path.join(FRONT, 'etiquetas.css'));
+const etJsCrudo = leer(path.join(FRONT, 'etiquetas.js'));
+const etJs = sinComentarios(etJsCrudo);
+
+/* --- a) La pantalla esta y esta pegada al servidor ------------------------ */
+
+check(/<script[^>]+src=["']etiquetas\.js/.test(etHtml), 'etiquetas.html carga etiquetas.js');
+check(/<link[^>]+href=["']etiquetas\.css/.test(etHtml), 'etiquetas.html carga etiquetas.css');
+check(/<table/.test(etHtml), 'la pantalla tiene la tabla de productos');
+
+/* Cada id que el JS busca tiene que estar en el HTML. Se comparan los dos
+   conjuntos, no uno por uno: asi el control avisa CUAL falta. */
+const idsQuePide = new Set([...etJs.matchAll(/getElementById\(\s*['"]([\w-]+)['"]\s*\)/g)].map((x) => x[1]));
+const idsQueHay = new Set([...etHtml.matchAll(/\sid=["']([\w-]+)['"]/g)].map((x) => x[1]));
+const idsAusentes = [...idsQuePide].filter((i) => !idsQueHay.has(i));
+check(idsQuePide.size > 0, `el JS busca ${idsQuePide.size} elemento(s) por id`);
+check(idsAusentes.length === 0, 'todo id que busca el JS existe en el HTML',
+    idsAusentes.map((i) => `falta #${i}`).join(' | '));
+
+/* Y al reves: un id del HTML que nadie busca es markup muerto. No se cuenta como
+   fallo —`info-usuario-header` y `btn-tema` los maneja `auth-check.js`— pero se
+   informa, porque casi siempre es un boton que quedo de una version anterior y
+   que no hace nada.
+
+   Por eso se buscan en TODOS los scripts del frontend y no solo en
+   `etiquetas.js`: con un solo archivo, todo el encabezado compartido salia
+   reportado en cada pagina y la nota dejaba de servir para nada. */
+const otrosJs = fs.readdirSync(FRONT)
+    .filter((n) => n.endsWith('.js'))
+    .filter((n) => n !== 'etiquetas.js')
+    .map((n) => fs.readFileSync(path.join(FRONT, n), 'utf8'))
+    .join('\n');
+const idsQuePideAlgunJs = new Set([
+    ...[...etJs.matchAll(/getElementById\(\s*['"]([\w-]+)['"]\s*\)/g)].map((x) => x[1]),
+    ...[otrosJs.matchAll(/getElementById\(\s*['"]([\w-]+)['"]\s*\)/g)].map((x) => x[1])
+]);
+/* Y los que se enganchan con un handler en linea, sin pasar por JS. El boton de
+   tema es el caso: `onclick="cambiarTemaManualmente()"` en las siete paginas.
+
+   Lo que se busca es un elemento que tenga un id Y un `on*`, no el id adentro
+   del handler: el handler no menciona el id de su propio elemento. Buscarlo
+   dentro del texto del handler no encontraba nada y la nota seguia reportando
+   el boton en todas las paginas, que es lo mismo que no tener nota. */
+for (const [, etiqueta] of etHtml.matchAll(/<[a-z][a-z0-9]*\b[^>]*>/gi)) {
+    if (!/\son[a-z]+\s*=/.test(etiqueta)) continue;
+    const id = /\sid=["']([\w-]+)["']/.exec(etiqueta);
+    if (id) idsQuePideAlgunJs.add(id[1]);
+}
+const idsHuerfanos = [...idsQueHay].filter((i) => !idsQuePideAlgunJs.has(i));
+if (idsHuerfanos.length) {
+    console.log(`  nota  ${idsHuerfanos.length} id(s) del HTML que ningun script busca: ${idsHuerfanos.join(', ')}`);
+}
+
+/* Los botones de la hoja de impresion tienen que existir Y estar en el area que
+   se imprime, o se imprimen con el papel. */
+check(/<section[^>]+id=["']e-imp-area["']/.test(etHtml), 'el area de impresion tiene su propio contenedor');
+check(/class=["'][^"']*e-imp-barra[^"']*no-imprimir/.test(etHtml),
+    'la barra de botones de imprimir lleva `no-imprimir` (si no, sale impresa)');
+
+/* --- a2) El encabezado y el cuerpo, en el MISMO orden --------------------- */
+
+/* Este control existe por un error que ya paso. La columna "Imp." estaba
+   primera en el encabezado y septima en el cuerpo: ocho celdas contra ocho
+   encabezados, o sea, la cantidad daba bien, y la tabla igual estaba corrida
+   una columna entera. Lo que faltaba era mirar el ORDEN.
+
+   Y no se puede sospechar el orden contando: hace falta saber que celda es la
+   que corresponde a cada encabezado, y eso no se deduce de la cantidad. Por eso
+   cada `<th>` y cada `<td>` de la fila llevan `data-col` con el nombre de la
+   columna, y aca se comparan las dos listas EN ORDEN. Si alguien agrega una
+   columna al encabezado y no la agrega al cuerpo, o la agrega del lado
+   equivocado, la comparacion no da igual y el control avisa.
+
+   Las dos listas tienen que además no repetirse: dos celdas con el mismo
+   `data-col` pasarían la comparación de conjuntos y no la de orden. */
+const colsDelEncabezado = [...etHtml.matchAll(/<th[^>]*\sdata-col=["']([\w-]+)["']/g)].map((x) => x[1]);
+
+const desdeFila = etJsCrudo.indexOf('return `<tr>');
+const cuerpoFila = desdeFila === -1 ? '' : etJsCrudo.slice(desdeFila, etJsCrudo.indexOf('</tr>`', desdeFila));
+const colsDelCuerpo = [...cuerpoFila.matchAll(/<td[^>]*\sdata-col=["']([\w-]+)["']/g)].map((x) => x[1]);
+
+check(colsDelEncabezado.length > 0, `el encabezado nombra sus ${colsDelEncabezado.length} columnas`);
+check(colsDelCuerpo.length > 0, `el cuerpo nombra sus ${colsDelCuerpo.length} columnas`);
+
+const repetidas = (xs) => [...new Set(xs.filter((x, i) => xs.indexOf(x) !== i))];
+check(repetidas(colsDelEncabezado).length === 0 && repetidas(colsDelCuerpo).length === 0,
+    'ninguna columna tiene el mismo nombre dos veces',
+    [...repetidas(colsDelEncabezado), ...repetidas(colsDelCuerpo)].join(' | '));
+
+check(colsDelEncabezado.join(',') === colsDelCuerpo.join(','),
+    'el encabezado y el cuerpo tienen las columnas en el mismo orden',
+    `encabezado [${colsDelEncabezado.join(', ')}]  cuerpo [${colsDelCuerpo.join(', ')}]`);
+
+/* Y la fila de "cargando" y la de "no hay nada" cubren la tabla entera. Si el
+   encabezado crece y esas filas siguen con el `colspan` viejo, en pantalla se ve
+   media tabla descolgada mientras carga.
+
+   Se buscan en LOS DOS ARCHIVOS. La fila de "cargando" esta en el HTML y las de
+   "no hay nada" y "no coincide con el filtro" estan en el JS: son filas
+   distintas escritas en archivos distintos. Mirando solo el JS, cambiar el
+   `colspan` del HTML no movia nada y el control daba verde. */
+const colspanViejito = [
+    ...[...etHtml.matchAll(/colspan=["'](\d+)["']/g)].map((x) => `html ${x[1]}`),
+    ...[...etJs.matchAll(/colspan=["'](\d+)["']/g)].map((x) => `js ${x[1]}`)
+];
+const colspanMalos = colspanViejito.filter((n) => Number(n.split(' ')[1]) !== colsDelEncabezado.length);
+check(colspanViejito.length > 0 && colspanMalos.length === 0,
+    `las filas de aviso cubren las ${colsDelEncabezado.length} columnas`,
+    colspanMalos.join(' | '));
+/* --- b) Nada del servidor entra al HTML sin escapar ----------------------- */
+
+/* Que nombres de `etiquetas.js` traen datos del servidor. La lista es explicita
+   y corta a proposito: si aparece una tercera fuente hay que escribirla aca.
+
+   Que sea una lista y no un `.replace` sobre TODO `${...}` del archivo es por
+   un motivo concreto: `${ePesos(f.precio)}` no necesita escaparse —devuelve
+   `$ 5.000,00`, no el precio crudo— y un control que lo pidiera estaria
+   markingando codigo que ya es seguro. Un control que se queja de lo correcto
+   termina ignorandose. */
+const DATOS_DEL_SERVIDOR = /\bf\.[A-Za-z_]\w*|\bdataUrl\b/;
+
+/* Las funciones que arman HTML con `innerHTML`. */
+const DONDE_SE_ARMA_HTML = ['dibujarListadoEtiquetas', 'abrirHojaImpresion', 'pintarEtiqueta'];
+
+/* Cada acceso a un dato del servidor tiene que estar DENTRO de una de estas
+   llamadas, y no solo accompanied de una:
+
+     escapeHtml / eO      escapan el texto. `eO` es `escapeHtml` con un guion
+                          largo para lo que llega vacio.
+     Number / parseInt /  no pueden devolver HTML: si el dato no es un numero
+     parseFloat            sale `NaN`, y en un atributo `data-*` eso no rompe
+                          nada.
+     ePesos / eFecha      arman un numero y una fecha con formato fijo
+                          (`$ 5.000,00`, `30/9/2026`), nunca el dato crudo. */
+const SEGUROS = /\b(?:escapeHtml|eO|Number|parseInt|parseFloat|ePesos|eFecha)\s*\(/;
+
+const lineasSinEscapar = [];
+for (const nombre of DONDE_SE_ARMA_HTML) {
+    const desde = etJsCrudo.indexOf('function ' + nombre);
+    if (desde === -1) continue;
+    const hasta = etJsCrudo.indexOf('\nfunction ', desde + 1);
+    const cuerpo = etJsCrudo.slice(desde, hasta === -1 ? undefined : hasta);
+
+    cuerpo.split('\n').forEach((linea, n) => {
+        for (const [, pedazo] of linea.matchAll(/\$\{([^}]*)\}/g)) {
+            if (!DATOS_DEL_SERVIDOR.test(pedazo)) continue;
+            if (SEGUROS.test(pedazo)) continue;
+
+            /* `dataUrl` es el unico nombre que se acepta sin envolver, y no por
+               confianza. `qrDeEtiqueta` lo contrasta contra `DATA_URL_DE_IMAGEN`
+               y devuelve `null` si no es una imagen, asi que lo unico que puede
+               llegar al `src` es un base64. Ese contraste tiene su propio control
+               mas abajo en esta misma seccion, y hay una mutacion que lo borra
+               para comprobar que avisa. Si ese control seWeak, este tiene que
+               caer con el; por eso no se acepta a ciegas. */
+            if (/^\s*dataUrl\s*$/.test(pedazo)) continue;
+
+            lineasSinEscapar.push(`${nombre}:${n + 1}  \${${pedazo.trim().slice(0, 46)}}`);
+        }
+    });
+}
+check(lineasSinEscapar.length === 0, `las ${DONDE_SE_ARMA_HTML.length} funciones que arman HTML escapan el dato del servidor`,
+    lineasSinEscapar.join(' | '));
+
+/* El caso al reves: si en algun momento alguien mete la imagen del QR como una
+   ruta, el `<img>` no puede llevar el encabezado `Authorization` y sale en 401.
+   O sea, en la pagina un cuadrito de imagen rota y en el papel un sticker
+   vacio. */
+const qrComoRuta = [...etJs.matchAll(/src=\{?["']\/api\/[^"']*["']/g)].map((x) => x[0]);
+check(qrComoRuta.length === 0, 'la imagen del QR no se pide como ruta de API (no lleva token)',
+    qrComoRuta.join(' | '));
+
+/* Y el `data:` que se usa tiene que estar acotado a imagen base64. Un
+   `data:text/html` en el `src` de una imagen que el sistema dibuja solo es un
+   agujero esperando que el servidor cambie.
+
+   Se comprueban las DOS mitades por separado: que el patron este DECLARADO y que
+   `qrDeEtiqueta` lo USE. Con una sola de las dos el control no tiene dientes: la
+   mutacion que borra el `if` de la funcion deja el `const` intacto, y un control
+   que solo busca el `const` daba verde con la validacion eliminada. */
+check(/^\s*const DATA_URL_DE_IMAGEN = \/\^data:image\\\//m.test(etJs),
+    'el data URL del QR tiene un patron que acepta solo imagen base64');
+
+const cuerpoQrDeEtiqueta = (() => {
+    const p = etJs.indexOf('async function qrDeEtiqueta');
+    if (p === -1) return '';
+    const q = etJs.indexOf('\nfunction ', p + 1);
+    return etJs.slice(p, q === -1 ? undefined : q);
+})();
+check(cuerpoQrDeEtiqueta.length > 0, 'se encontro la funcion que trae el QR del servidor');
+check(/DATA_URL_DE_IMAGEN\.test\(/.test(cuerpoQrDeEtiqueta),
+    'el QR del servidor se contrasta contra ese patron antes de usarse');
+
+/* --- c) Al imprimir, blanco y negro ---------------------------------------- */
+
+/* ANTES DE LEER NADA: se borran los comentarios.
+
+   No es prolijidad. El `etiquetas.css` arranca con un comentario largo que
+   explica POR QUE el papel es blanco y negro, y al explicarlo escribe
+   `print-color-adjust: exact`, `background: #fff` y
+   `grid-template-columns: repeat(auto-fill, minmax(...))` como texto.
+
+   Con los comentarios en el archivo, tres controles de esta seccion daban
+   verde con el codigo roto: el patron se encontraba en la explicacion, no en
+   la regla. Se comprobo con mutaciones, y las tres siguieron dando verde con la
+   regla borrada. Un control que lee lo que dice el comentario no esta
+   mirando el CSS: esta mirando el texto que hay alrededor del CSS.
+
+   `sinComentarios` tambien se usa en el servidor por lo mismo, asi que no es
+   una regla nueva: es la misma, aplicada al archivo que faltaba. */
+const etCssSinComentarios = sinComentarios(etCss);
+
+const abrePrint = etCssSinComentarios.indexOf('@media print');
+check(abrePrint !== -1, 'etiquetas.css tiene una regla para imprimir');
+if (abrePrint !== -1) {
+    const bloquePrint = etCssSinComentarios.slice(abrePrint);
+    check(/body\s*>\s*\*\s*:\s*not\(\s*#e-imp-area\s*\)/.test(bloquePrint),
+        'imprimiendo se apaga todo menos el area de etiquetas');
+    check(/print-color-adjust:\s*exact/.test(bloquePrint),
+        'imprimiendo se respeta el color pedido: sin esto el tema oscuro imprime gris y el QR no se lee');
+/* Y el blanco tiene que estar en LOS DOS lugares, no en cualquiera de los dos.
+       El papel es el fondo de la pagina y el fondo de la tarjeta: si solo se
+       fuerza el de la pagina y la tarjeta conserva el color del tema, el
+       rectangulo de cada etiqueta sale oscuro y el QR negro sobre oscuro no lo
+       lee nadie. Un control que buscara "#fff en algun lado" daba verde con la
+       tarjeta rota. */
+    const bloqueDe = (css, selector) => {
+        const i = css.indexOf(selector + ' {');
+        return i === -1 ? '' : css.slice(i, css.indexOf('}', i) + 1);
+    };
+    const paginaImpresa = bloqueDe(bloquePrint, 'html, body');
+    const tarjetaImpresa = bloqueDe(bloquePrint, '.e-etiqueta');
+    check(/background:\s*#fff\s*!important/.test(paginaImpresa),
+        'al imprimir, el fondo de la pagina es blanco y no el del tema');
+    check(/background:\s*#fff\s*!important/.test(tarjetaImpresa) && /color:\s*#000\s*!important/.test(tarjetaImpresa),
+        'al imprimir, la tarjeta de la etiqueta es blanca con texto negro, no con el del tema',
+        `pagina [${paginaImpresa.replace(/\s+/g, ' ').slice(0, 60)}]  etiqueta [${tarjetaImpresa.replace(/\s+/g, ' ').slice(0, 60)}]`);
+}
+/* Y en pantalla, al reves: si el CSS de la hoja tiene un color escrito a mano
+   -`#fff`, `#000`, `white`, `black`- es que no va a seguir al tema, y en el
+   tema contrario se lee invisible. Salvo adentro de `@media print`, donde el
+   blanco y el negro son justamente lo que se busca. */
+const dondeHayColorFijo = [];
+const hastaPrint = abrePrint === -1 ? etCssSinComentarios.length : abrePrint;
+etCssSinComentarios.slice(0, hastaPrint).split('\n').forEach((linea, n) => {
+    if (/(?:#[0-9a-f]{3,8}\b|\b(?:white|black)\b)/i.test(linea)) {
+        dondeHayColorFijo.push(`${n + 1}: ${linea.trim().slice(0, 54)}`);
+    }
+});
+check(dondeHayColorFijo.length === 0, 'la hoja en pantalla no tiene colores fijos: usa variables del tema',
+    dondeHayColorFijo.join(' | '));
+
+/* Por ultimo: la grilla de la hoja. Con una cantidad fija de columnas, una
+   etiqueta queda cortada al final de la fila cuando el papel es mas angosto que
+   lo que la pantalla asumia; con `auto-fill` la hoja se acomoda.
+
+   Se revisan TODAS las declaraciones de columnas, no la primera. La grilla
+   aparece dos veces —en pantalla y en la regla de impresión— yMutable la
+   primera: la segunda seguia con `auto-fill` y el control daba verde con la
+   hoja de impresión rota, que es la que va al papel. */
+const grillas = [...etCssSinComentarios.matchAll(/grid-template-columns:\s*([^;]+);/g)].map((x) => x[1].trim());
+check(grillas.length > 0, `la hoja declara ${grillas.length} grilla(s)`);
+const grillasFijas = grillas.filter((g) => !/repeat\(\s*auto-fill\s*,\s*minmax\(/.test(g));
+check(grillasFijas.length === 0, 'ninguna grilla de la hoja fija la cantidad de columnas: todas usan `auto-fill`',
+    grillasFijas.map((g) => g.slice(0, 54)).join(' | '));
+
+check(/break-inside:\s*avoid/.test(etCssSinComentarios) || /page-break-inside:\s*avoid/.test(etCssSinComentarios),
+    'una etiqueta no se parte entre dos hojas');
+
+fin();
 
 fin();

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Integral - Etiquetas QR</title>
+    <script src="auth-check.js?v=2.5"></script>
+    <script src="marca.js?v=2.5"></script>
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <link rel="stylesheet" href="reparaciones.css?v=2.5">
+    <link rel="stylesheet" href="etiquetas.css?v=2.5">
+</head>
+<body>
+    <header>
+        <section class="barra-cabecera">
+            <div class="logo">
+                <img src="logos/logo.jpg" alt="Logo de Service Integral">
+                <div class="servidor-estado">
+                    Servidor Local: <span class="badge-online">Conectado</span>
+                </div>
+            </div>
+
+            <div id="info-usuario-header" class="info-usuario-header"></div>
+
+            <nav class="menu-navegacion">
+                <ul>
+                    <li data-modulo="stock"><a href="index.html">Stock</a></li>
+                    <li data-modulo="reparaciones"><a href="reparaciones.html">Taller / Reparaciones</a></li>
+                    <li data-modulo="clientes"><a href="clientes.html">Clientes</a></li>
+                    <li data-modulo="pedidos"><a href="pedidos.html">Pedidos</a></li>
+                    <li data-modulo="presupuestos"><a href="presupuestos.html">Presupuestos</a></li>
+                    <li data-modulo="facturacion"><a href="facturacion.html">Facturación</a></li>
+                    <li data-modulo="etiquetas_qr"><a href="etiquetas.html" class="active">Etiquetas QR</a></li>
+                    <li>
+                        <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema">
+                            <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+                            <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </section>
+    </header>
+
+    <main class="contenedor-principal">
+        <h1 style="margin-bottom: 6px;">Etiquetas QR</h1>
+        <p style="color: var(--text-muted); margin-bottom: 18px;">
+            Una etiqueta por producto del depósito. El QR lleva solo un código, y
+            ese código lo lee el escáner de la propia aplicación.
+        </p>
+
+        <!--
+            Por qué el QR no lleva una dirección web.
+
+            La etiqueta física sobrevive al dominio. Si el QR llevara una URL, el
+            día que la empresa se mude a su dominio las etiquetas ya impresas
+            dejarían de servir, y durante el desarrollo apuntarían a
+            `localhost:3000`, que en un celular no existe. Por eso el QR lleva un
+            código corto y el escáner lo resuelve contra la base de la empresa que
+            inició sesión.
+
+            Y por qué el aviso es visible y no está escondido: el que tiene que
+            entenderlo es el que va a estampar el papel, y es el que se va a
+            llevar la sorpresa cuando la etiqueta no funcione en otro local.
+        -->
+        <div class="e-aviso" role="note">
+            <strong>El QR no lleva una dirección web.</strong>
+            Lleva un código corto que solo lee esta aplicación, con la sesión
+            iniciada. Si la empresa cambia de dominio, las etiquetas ya
+            impresas siguen sirviendo. <strong>No se puede abrir con la cámara
+            del celular sin entrar al sistema.</strong>
+        </div>
+
+        <!-- Filtros -->
+        <section class="seccion-busqueda">
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <label for="filtro-buscar" style="white-space: nowrap; font-weight: bold; color: var(--text-main); margin-bottom: 0;">Buscar:</label>
+                <input type="text" id="filtro-buscar" placeholder="Nombre, código o distribuidor..." autocomplete="off" style="flex: 1; min-width: 220px; height: 42px;">
+
+                <label for="filtro-qr" style="white-space: nowrap; font-weight: bold; color: var(--text-main); margin-bottom: 0;">Estado:</label>
+                <select id="filtro-qr" style="height: 42px;">
+                    <option value="">Todas</option>
+                    <option value="true">Con QR</option>
+                    <option value="false">Sin QR</option>
+                </select>
+
+                <button class="btn btn-crear" id="btn-generar-todas">Generar las que faltan</button>
+                <button class="btn btn-secundario" id="e-imp-imprimir-marcadas" disabled>Imprimir las marcadas</button>
+            </div>
+        </section>
+
+        <!-- Listado -->
+        <section class="panel-tabla">
+            <h2>Listado de productos</h2>
+            <div class="tabla-wrapper">
+                <table>
+                    <!--
+                        El `data-col` de cada encabezado y el de cada celda del
+                        cuerpo tienen que ser el MISMO nombre, en el MISMO orden.
+
+                        Ponerlos no es desconfianza del verificador. La cantidad
+                        de celdas no alcanza para saber si una tabla esta bien:
+                        ocho celdas contra ocho encabezados puede ser una tabla
+                       -perfecta o una donde todo esta corrido una columna, que
+                        fue exactamente lo que paso con la columna "Imp.": el
+                        encabezado la ponia primera y la celda aparecia septima.
+                        Igual cantidad, tabla corrida.
+
+                        Con los nombres, el corrimiento se ve comparando las dos
+                        listas en orden, y eso si se puede comprobar sin abrir un
+                        navegador.
+                    -->
+                    <thead>
+                        <tr>
+                            <th data-col="imp" style="text-align:center;">Imp.</th>
+                            <th data-col="producto">Producto</th>
+                            <th data-col="codigo">Código</th>
+                            <th data-col="distribuidor">Distribuidor</th>
+                            <th data-col="precio" style="text-align: right;">Precio</th>
+                            <th data-col="stock" style="text-align: right;">Stock</th>
+                            <th data-col="etiqueta">Etiqueta</th>
+                            <th data-col="acciones" style="text-align: center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-etiquetas">
+                        <tr><td colspan="8" style="text-align:center;">Cargando productos…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!--
+            La hoja de impressedion vive en esta pagina y no en un modal: para
+            imprimir hace falta que el navegador la vea entera, y un modal se
+            imprime recortado segun el alto de la pantalla.
+        -->
+        <section id="e-imp-area" class="e-imp-area" aria-hidden="true">
+            <div class="e-imp-barra no-imprimir">
+                <span id="e-imp-resumen">0 etiquetas</span>
+                <button type="button" class="btn btn-crear" id="e-imp-imprimir">Imprimir</button>
+                <button type="button" class="btn btn-secundario" id="e-imp-cerrar">Cerrar</button>
+            </div>
+            <div class="e-imp-etiquetas" id="e-imp-etiquetas"></div>
+        </section>
+    </main>
+
+    <script src="etiquetas.js?v=2.5"></script>
+</body>
+</html>

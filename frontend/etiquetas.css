@@ -1,0 +1,184 @@
+/* ==========================================================================
+   ETIQUETAS QR
+   --------------------------------------------------------------------------
+   Dos cosas distintas y separadas a proposito:
+
+   1. El AVISO de arriba, que vive en la pantalla y tiene que seguir al tema.
+   2. La HOJA DE IMPRESION, que NO tiene que seguir al tema: es papel. Sale en
+      blanco con texto negro, y en `@media print` se saca el tema entero con
+      `print-color-adjust: exact`.
+
+   La hoja de impresion NO es el comprobante: ahi el color es informacion
+   (estado, importe). En la etiqueta el color no informa nada, asi que se
+   imprime todo en blanco y negro. Es lo que sale bien de cualquier impresora
+   laser sin tinta de color, y ademas el QR necesita contraste puro para que
+   el lector no falle.
+   ========================================================================== */
+
+/* --- El aviso de arriba ---------------------------------------------------- */
+
+.e-aviso {
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 45%, transparent);
+    color: var(--text-main);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 18px;
+    font-size: 0.92rem;
+}
+
+.e-aviso strong { color: var(--text-main); }
+
+/* --- La hoja de impresion -------------------------------------------------- */
+
+/*
+ * Por que esta area esta siempre en el documento y no en un modal: para
+ * imprimir hace falta que el navegador la vea entera. Un modal se imprime
+ * recortado segun el alto de la pantalla, asi que una tanda de 30 etiquetas
+ * saldria en tres paginas y media.
+ */
+.e-imp-area { display: none; }
+
+.e-imp-area.abierta { display: block; }
+
+.e-imp-barra {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.e-imp-barra span { font-weight: 600; }
+
+/*
+ * La grilla de etiquetas.
+ *
+ * El ancho de cada etiqueta NO se calcula con `mm` a proposito. Las impresoras
+ * no todas respetan el tamano de pagina, y una hoja A4 con `mm` fijos sale
+ * distinta en cada una: unas imprimen la ultima etiqueta a medio cortar.
+ * Con `minmax(200px, 1fr)` la hoja se acomoda al papel que se le de, y lo que
+ * se corta es el margen, no una etiqueta.
+ */
+.e-imp-etiquetas {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.e-etiqueta {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: center;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.e-etiqueta-qr {
+    width: 100%;
+    max-width: 132px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+/*
+ * El codigo va con una fuente monoespaciada y con `letter-spacing`: es lo que
+ * el operador copia a mano o lee de lejos cuando la etiqueta esta gastada.
+ * No se le pone `font-weight: 700` porque en la tipografia del sistema el
+ * monocromo grueso se junta entre letras y el codigo deja de poder leerse.
+ */
+.e-etiqueta-codigo {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.95rem;
+    letter-spacing: 1px;
+    color: var(--text-main);
+}
+
+.e-etiqueta-nombre {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-main);
+    overflow-wrap: anywhere;
+}
+
+.e-etiqueta-datos {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.e-etiqueta-datos strong {
+    color: var(--text-main);
+    font-size: 1rem;
+}
+
+/* --- La etiqueta en pantalla, antes de imprimir ---------------------------- */
+
+/*
+ * En pantalla la etiqueta se ve como la vera el operador: con los datos de
+ * VERDAD del producto, no los del snapshot.
+ *
+ * El snapshot (`datos_json`) es lo que se guardo el dia que se genero el QR. Si
+ * el precio subio despues, reimprimir con el snapshot viejo saca en el papel un
+ * precio que ya no existe, y el que lo compro igual. Por eso el codigo del QR y
+ * el nombre van del producto, y solo se cae al snapshot para el detalle que no
+ * tiene de donde sacarse (el codigo del QR es lo unico que no cambia).
+ */
+
+.e-acciones { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+
+/* --- Impresion ------------------------------------------------------------- */
+
+@media print {
+    /*
+     * Se apaga TODO lo que no es papel. La alternativa -ocultar una entrada por
+     * una- se dejo de usar porque con el filtro puesto quedan ocho cosas y con
+     * el filtro saco alguna vez mas, el papel sale con el filtro impreso encima.
+     */
+    body > *:not(#e-imp-area) { display: none !important; }
+
+    #e-imp-area {
+        display: block !important;
+        position: static !important;
+    }
+
+    #e-imp-area .no-imprimir { display: none !important; }
+
+    /*
+     * Esto es lo que hace que la etiqueta salga en blanco y no en el color del
+     * tema. Sin esto, en tema oscuro el fondo de la pagina se imprime como gris
+     * oscuro y el QR, que es negro sobre blanco, pierde el contraste y el lector
+     * no lo lee.
+     */
+    html, body {
+        background: #fff !important;
+        color: #000 !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+
+    .e-imp-etiquetas {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 4mm;
+    }
+
+    .e-etiqueta {
+        border: 1px solid #000 !important;
+        background: #fff !important;
+        color: #000 !important;
+    }
+
+    .e-etiqueta-nombre,
+    .e-etiqueta-codigo,
+    .e-etiqueta-datos strong { color: #000 !important; }
+
+    .e-etiqueta-datos { color: #444 !important; }
+}
