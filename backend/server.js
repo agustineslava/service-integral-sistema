@@ -3463,6 +3463,124 @@ app.post('/api/facturas/desde-presupuesto/:presupuestoId', verificarToken, requi
 });
 
 /* ==========================================================================
+   13.2 REPORTES  (modulo vendible `reportes`)
+   ==========================================================================
+   Son seis reportes y todos hacen lo mismo: leen un rango de fechas de la base
+   de la empresa y devuelven filas. Lo que cambia entre uno y otro está en
+   `src/servicios/reportes.js`, y acá hay solo el cableado.
+
+   POR QUÉ SON DOS RUTAS Y NO UNA
+   --------------------------------------------------------------------------
+   `/api/reportes` devuelve el catálogo: los seis códigos, con su título, su
+   descripción y sus columnas. La pantalla lo pide una vez al abrir y con eso
+   arma el menú, sin tener que correr un reporte para saber que existe.
+
+   `/api/reportes/:codigo` devuelve los datos de uno.
+
+   Podría ser una sola ruta que devuelve el catálogo cuando no hay código, pero
+   entonces la respuesta sería una de dos formas distintas según la URL, y
+   cualquier cliente tiene que preguntar primero para saber qué esperar. Con dos
+   rutas, cada una tiene una sola respuesta posible.
+
+   EL 404 DEL CÓDIGO DESCONOCIDO
+   --------------------------------------------------------------------------
+   `/api/reportes/inventado` responde 404, no 400. Un 400 diría "entendí lo que
+   pediste pero no puedo"; un 404 dice "esto no existe". Los seis códigos están
+   en una lista blanca de este proceso, así que no hay forma de que un código
+   inventado llegue a una consulta: `reportes.correr` indexa un objeto con esos
+   seis nombres y una clave más da `undefined`, que se detecta antes de tocar la
+   base.
+
+   EL CSV Y EL JSON SALEN DE LA MISMA EJECUCIÓN
+   --------------------------------------------------------------------------
+   `?formato=csv` no es una consulta aparte: es la MISMA que ya se corrió para la
+   pantalla, serializada distinto. Así que el archivo y la tabla no pueden
+   desfasarse: si pueden, es porque alguien escribió el nombre de las columnas
+   dos veces, y eso lo detecta el verificador.
+   ========================================================================== */
+const reportes = require('./src/servicios/reportes');
+
+/**
+ * El catálogo de reportes: qué hay y cómo se llama cada columna.
+ *
+ * No pide fechas a propósito. Es la lista de lo que existe, y la fecha depende
+ * de la pantalla, no del catálogo.
+ */
+app.get('/api/reportes', verificarToken, requiereModulo('reportes'), (req, res) => {
+    res.json({ reportes: reportes.catalogo() });
+});
+
+/**
+ * Un reporte.
+ *
+ * `?desde=AAAA-MM-DD` y `?hasta=AAAA-MM-DD` acotan el período. Los dos son
+ * opcionales: sin ninguno el reporte sale de toda la historia, que es lo que
+ * tiene que pasar cuando alguien pega la URL a mano.
+ *
+ * `?formato=csv` devuelve el archivo en lugar del JSON. Cualquier otro valor es
+ * un 400 con la lista de los dos formatos que existen: devolver el JSON para
+ * `formato=xlsx` haría que alguien pida una planilla, reciba un JSON y tarde
+ * media hora en entender por qué no abre.
+ */
+app.get('/api/reportes/:codigo', verificarToken, requiereModulo('reportes'), async (req, res) => {
+    const codigo = String(req.params.codigo || '');
+
+    if (!reportes.existe(codigo)) {
+        return res.status(404).json({ error: 'No encontrado' });
+    }
+
+    const rango = reportes.leerRango(req.query);
+    if (!rango.ok) {
+        return res.status(400).json({ error: rango.error });
+    }
+
+    const formato = String(req.query.formato || 'json').trim().toLowerCase();
+    if (formato !== 'json' && formato !== 'csv') {
+        return res.status(400).json({
+            error: `El formato "${formato}" no existe. Usá "json" o "csv".`
+        });
+    }
+
+    try {
+        const resultado = await reportes.correr(db, codigo, rango);
+
+        if (formato === 'csv') {
+            const archivo = reportes.aCsv(resultado);
+
+            /* El nombre va entre comillas y sale de `nombreArchivo`, que deja
+               pasar solo letras, números, punto, guion y guion bajo. No es
+               paranoia: un `nombre` con comillas o salto de línea rompería el
+               encabezado y, en el peor caso, inyectaría otra respuesta HTTP
+               adentro de él. */
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${reportes.nombreArchivo(codigo, rango)}"`);
+            res.setHeader('Content-Length', archivo.length);
+
+            /* Un reporte es un dato del momento. Si el navegador guarda el
+               archivo y el operador lo abre al día siguiente, tiene que ver los
+               números de ese día, no los del día que lo pidió. */
+            res.setHeader('Cache-Control', 'no-store');
+
+            /* Sin esto, un navegador puede decidir que `text/csv` es HTML y
+               ejecutarlo. No hay nada ejecutable en un CSV que venga de acá
+               (el antivirus de fórmulas está en el servicio), pero el
+               encabezado cuesta nada. */
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+
+            console.log(`  ${req.empresa.nombre} exportó ${codigo} (${rango.desde || 'inicio'} a ${rango.hasta || 'hoy'}) -> ${resultado.filas.length} filas`);
+            return res.send(archivo);
+        }
+
+        res.json(resultado);
+    } catch (err) {
+        /* El mensaje NO va al cliente. Decirle "Unknown column 'x'" le dice
+           cómo es la base por dentro. */
+        console.error(`Error al generar el reporte ${codigo}:`, err);
+        res.status(500).json({ error: 'Error al generar el reporte' });
+    }
+});
+
+/* ==========================================================================
    14. PANEL DEL SUPERADMIN  (rol SUPERADMIN, sobre la base CENTRAL)
    --------------------------------------------------------------------------
    Estas rutas no son de una empresa: son de todas. Por eso van aparte y no

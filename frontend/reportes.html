@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Integral - Reportes</title>
+    <script src="auth-check.js?v=2.5"></script>
+    <script src="marca.js?v=2.5"></script>
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <link rel="stylesheet" href="reportes.css?v=2.5">
+</head>
+<body>
+    <header>
+        <section class="barra-cabecera">
+            <div class="logo">
+                <img src="logos/logo.jpg" alt="Logo de Service Integral">
+                <div class="servidor-estado">
+                    Servidor Local: <span class="badge-online">Conectado</span>
+                </div>
+            </div>
+
+            <div id="info-usuario-header" class="info-usuario-header"></div>
+
+            <nav class="menu-navegacion">
+                <ul>
+                    <li data-modulo="stock"><a href="index.html">Stock</a></li>
+                    <li data-modulo="reparaciones"><a href="reparaciones.html">Taller / Reparaciones</a></li>
+                    <li data-modulo="clientes"><a href="clientes.html">Clientes</a></li>
+                    <li data-modulo="pedidos"><a href="pedidos.html">Pedidos</a></li>
+                    <li data-modulo="presupuestos"><a href="presupuestos.html">Presupuestos</a></li>
+                    <li data-modulo="facturacion"><a href="facturacion.html">Facturación</a></li>
+                    <li data-modulo="etiquetas_qr"><a href="etiquetas.html">Etiquetas QR</a></li>
+                    <li data-modulo="reportes"><a href="reportes.html" class="active">Reportes</a></li>
+                    <li>
+                        <button id="btn-tema" class="btn-alternar-tema" onclick="cambiarTemaManualmente()" aria-label="Cambiar tema">
+                            <svg class="icono-sol" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+                            <svg class="icono-luna" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </section>
+    </header>
+
+    <main class="contenedor-principal">
+        <!--
+            `titulo-seccion` se usa acá porque es la clase que usan las otras
+            páginas, aunque no tenga reglas propias de CSS: el espaciado sale de
+            los valores en línea. Lo que NO se hace es agregar un `.titulo-seccion`
+            nuevo al CSS, que quedaría con cero reglas y daría la impresión de que
+            estiliza algo.
+        -->
+        <div class="titulo-seccion" style="margin-bottom: 18px;">
+            <h1>Reportes</h1>
+            <p>Seis lecturas de la historia de la empresa, con filtro de fechas y salida a planilla.</p>
+        </div>
+
+        <!-- Filtros -->
+        <section class="seccion-busqueda">
+            <div class="rp-filtros">
+                <label for="filtro-reporte">Reporte:</label>
+                <!--
+                    El <select> se arma con el catálogo que devuelve
+                    `/api/reportes`, no con una lista escrita acá. Si el servidor
+                    agrega un reporte, aparece solo; si saca uno, desaparece solo.
+                    Una lista de seis escrita en el HTML es una lista que se
+                    desactualiza sin que nadie se entere.
+                -->
+                <select id="filtro-reporte" style="height: 42px; padding: 0 10px; min-width: 260px;">
+                    <option value="">Cargando...</option>
+                </select>
+
+                <label for="filtro-desde">Desde:</label>
+                <input type="date" id="filtro-desde" style="height: 42px;">
+
+                <label for="filtro-hasta">Hasta:</label>
+                <input type="date" id="filtro-hasta" style="height: 42px;">
+
+                <button class="btn btn-secundario" id="btn-mes" type="button" title="Del primero al último día del mes en curso">Este mes</button>
+                <button class="btn btn-secundario" id="btn-todo" type="button" title="Sin filtro: todo el historial">Todo</button>
+
+                <button class="btn btn-crear" id="btn-csv" type="button" style="margin-left: auto;">
+                    ↓ Exportar CSV
+                </button>
+            </div>
+        </section>
+
+        <!--
+            El resumen son las tarjetas con el total del período. Las arma el
+            servidor (`resumen`), no el navegador: si las calculara el navegador,
+            el CSV —que sale del servidor— y la pantalla podrían mostrar números
+            distintos con los mismos datos. Es el mismo motivo por el que el
+            nombre de las columnas no está escrito en el HTML.
+        -->
+        <section class="rp-resumen" id="rp-resumen" hidden></section>
+
+        <!-- Listado -->
+        <section class="panel-tabla">
+            <h2 id="rp-titulo">Reporte</h2>
+            <p id="rp-descripcion" class="rp-descripcion"></p>
+
+            <div class="tabla-wrapper">
+                <table>
+                    <thead>
+                        <!-- El <tr> lo arma reportes.js desde `columnas`. -->
+                        <tr id="rp-encabezados"></tr>
+                    </thead>
+                    <tbody id="rp-filas">
+                        <tr><td class="p-vacio" style="text-align:center;">Elegí un reporte.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p id="rp-pie" class="rp-pie"></p>
+        </section>
+    </main>
+
+    <script src="reportes.js?v=2.5"></script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+/* ==========================================================================
+   REPORTES
+   --------------------------------------------------------------------------
+   Esta hoja tiene cuatro reglas y ninguna más. A propósito: lo que hace la
+   pantalla —elegir reporte, poner fechas, exportar— ya está hecho con las clases
+   de `style.css`, y lo que falta son tres cosas que son de esta página sola.
+
+   LO QUE NO ESTÁ ACÁ, Y POR QUÉ
+   --------------------------------------------------------------------------
+   - Los colores de la tabla. Vienen de `style.css` (`--text-main`,
+     `--borde-suave`, `--fondo-panel`), así que los dos temas los resuelve el
+     archivo que ya los resuelve para las otras siete pantallas. Una segunda
+     copia de esas reglas es la forma corta de que una se quede vieja: ya pasó
+     con `--text-secondary` en vez de `--text-muted`, y el texto salía negro
+     sobre el fondo oscuro en una página y no en la otra.
+
+   - El `border-collapse` del `<table>`. `style.css` lo tiene.
+
+   - Cualquier `@media` para pantalla angosta. Las reglas de abajo usan
+     `flex-wrap` y `min-width`, que ya dejan la barra de filtros usable en un
+     teléfono sin reglas extra.
+
+   LAS CUATRO REGLAS
+   --------------------------------------------------------------------------
+   1. La barra de filtros se acomoda sola (`flex-wrap`) y el botón de exportar
+      se va al final con `margin-left: auto`. En una pantalla angosta el botón
+      baja de línea en vez de quedar apretado contra el selector.
+
+   2. Las tarjetas del resumen son una grilla y no una fila. La cantidad cambia
+      según el reporte: son cuatro en unos y cinco en otros, y con `auto-fit`
+      entran las que entran en vez de desbordar siempre en el mismo lugar.
+
+   3. La tabla de reportes puede ser ancha —repuestos más vendidos tiene siete
+      columnas—, así que el wrapper deja hacer scroll horizontal. `style.css`
+      ya lo hace en `.tabla-wrapper`; acá se reaffirma para que quede dicho que
+      en esta pantalla se espera.
+
+   4. La alineación a la derecha de las columnas de plata va en una clase y no
+      en un `style` del `<th>`, porque los encabezados los arma el servidor desde
+      `columnas` y no hay forma de ponerles un `style` por columna sin que el
+      nombre de cada columna esté escrito dos veces.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. La barra de filtros
+   -------------------------------------------------------------------------- */
+.rp-filtros {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    flex-wrap: wrap;
+}
+
+.rp-filtros label {
+    white-space: nowrap;
+    font-weight: bold;
+    color: var(--text-main);
+    margin-bottom: 0;
+}
+
+/* El botón de exportar se pega a la derecha mientras haya lugar. Cuando la barra
+   se parte en dos líneas, `auto` no hace nada de raro: queda abajo, a la
+   izquierda, que es lo que se lee bien. */
+.rp-filtros #btn-csv {
+    margin-left: auto;
+}
+
+/* --------------------------------------------------------------------------
+   2. Las tarjetas del resumen
+   -------------------------------------------------------------------------- */
+.rp-resumen {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.rp-tarjeta {
+    background: var(--fondo-panel);
+    border: 1px solid var(--borde-suave);
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+
+/* La etiqueta va arriba y en chica; el número es lo que se lee de lejos. */
+.rp-tarjeta-etiqueta {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.rp-tarjeta-valor {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-main);
+    word-break: break-word;
+}
+
+/* --------------------------------------------------------------------------
+   3. La tabla
+   -------------------------------------------------------------------------- */
+.panel-tabla .tabla-wrapper {
+    overflow-x: auto;
+}
+
+/*
+    Las columnas de plata y de cantidad se alinean a la derecha. La clase la
+    pone el servidor: cada columna declara su `tipo`, y de ahí sale si la
+    columna lleva `rp-col-numero`.
+
+    La regla es para el `th` Y para el `td` de la misma clase. Si fuera solo
+    para el `td`, el título quedaría a la izquierda sobre números a la derecha,
+    y en una tabla con dos columnas de importes no se sabría cuál es cuál.
+*/
+.rp-col-numero {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   4. Los textos de arriba y de abajo de la tabla
+   -------------------------------------------------------------------------- */
+.rp-descripcion {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin: -6px 0 14px;
+}
+
+.rp-pie {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 12px 0 0;
+}
+
+/* El botón se apaga mientras corre el pedido, para que dos clics seguidos no
+   pidan dos veces lo mismo. */
+.rp-filtros button[disabled] {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
