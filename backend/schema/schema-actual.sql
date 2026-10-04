@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- Esquema de: ServiceIntegralsistema
 -- Servidor:   MySQL 9.5.0
--- Generado:   2/10/2026, 09:02:54
+-- Generado:   3/10/2026, 03:20:13
 --
 -- FUENTE DE VERDAD del esquema. Reemplaza al esquema que se creaba a mano
 -- en MySQL Workbench sin versionar.
@@ -232,7 +232,7 @@ CREATE TABLE `productos` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- ---------------------------------------------------------------------------
--- Tabla: reparaciones   (23 columnas, 2 indices)
+-- Tabla: reparaciones   (23 columnas, 4 indices)
 -- ---------------------------------------------------------------------------
 CREATE TABLE `reparaciones` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -259,7 +259,9 @@ CREATE TABLE `reparaciones` (
   `fecha_ingreso` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `fecha_entrega` datetime NULL,
   PRIMARY KEY (`id`),
-  KEY `fk_reparaciones_cliente` (`cliente_id`) USING BTREE
+  KEY `fk_reparaciones_cliente` (`cliente_id`) USING BTREE,
+  KEY `idx_repar_estado` (`estado`) USING BTREE,
+  KEY `idx_repar_fecha_ingreso` (`fecha_ingreso`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 ALTER TABLE `reparaciones` ADD CONSTRAINT `fk_reparaciones_cliente` FOREIGN KEY (`cliente_id`) REFERENCES `clientes` (`id`) ON UPDATE NO ACTION ON DELETE SET NULL;

@@ -1,0 +1,60 @@
+# EL FIN DE LÍNEA ES PARTE DEL CONTENIDO DE UNA MIGRACIÓN
+# ---------------------------------------------------------------------------
+# El motor de migraciones guarda el SHA-256 de cada archivo que aplicó y
+# aborta si después el archivo cambió. Eso es lo que impide que dos empresas
+# queden con esquemas distintos, así que el control es bueno y no hay que
+# tocarlo.
+#
+# El problema es que ese control también se dispara cuando el archivo NO
+# cambió: se grabó con LF y aparece con CRLF. Pasa siempre en Windows, porque
+# con `core.autocrlf = true` un `git checkout`, un `git stash` o un `merge`
+# reescriben los archivos con CRLF. El texto es idéntico, el checksum no.
+#
+# Pasó de verdad: la 005 quedó con 38 CRLF, el ledger tenía el hash de la
+# versión con LF, y `npm run migrate` se negaba a correr con un error que
+# accuse a una migración que nadie había tocado.
+#
+# Con esto, el fin de línea se normaliza a LF al guardar y al sacar del
+# repositorio, en cualquier máquina. El archivo que se lee es el que está en
+# el repositorio, y el hash es el del repositorio.
+#
+# OJO: esto no arregla los archivos que YA están con CRLF en el disco. Hay que
+# volver a sacarlos del repositorio una vez, y sólo a los queickets: un
+# `git checkout` de todo pisaría el trabajo sin commitear de quien esté
+# trabajando.
+
+
+* text=auto eol=lf
+
+
+# EXCEPCIONES
+# ---------------------------------------------------------------------------
+# Los .bat y los .cmd SÍ necesitan CRLF: Windows no corre un lote con LF, da
+# error de sintaxis en la primera línea. Estos dos archivos del proyecto
+# arrancan el sistema y el motor de PM2, así que el error caería justo cuando
+# alguien está tratando de arreglar otra cosa.
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+
+# LO QUE NO SE TOCA
+# ---------------------------------------------------------------------------
+# Los .sql de `backend/backups/` son volcados que genera mysqldump. No entran
+# al control de versiones y no se comparan por checksum, así que da igual cómo
+# estén los fines de línea.
+
+
+# Las imágenes y los comprimidos no son texto: sin esto, `text=auto` intenta
+# decodificarlos para decidir si son texto, y en el mejor caso los marca como
+# modificados sin motivo.
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
