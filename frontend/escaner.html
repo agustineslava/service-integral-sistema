@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escáner QR – AEXIA</title>
+    <script src="marca.js?v=2.5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <link rel="stylesheet" href="escaner.css?v=2.5">
+    <link rel="icon" href="img/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <header class="encabezado">
+        <div class="contenedor-encabezado">
+            <button class="menu-toggle" aria-label="Abrir menú"><span></span><span></span><span></span></button>
+            <div class="logo"><img id="logo-img" src="img/logo.png" alt="AEXIA"></div>
+            <div class="titulo-sistema"><h1>AEXIA</h1></div>
+            <div class="usuario-info"><span class="nombre-usuario" id="nombre-usuario"></span><button class="btn-logout" id="btn-logout">Cerrar sesión</button></div>
+        </div>
+    </header>
+    <nav class="menu-lateral">
+        <ul>
+            <li data-modulo="inicio"><a href="index.html">Inicio</a></li>
+            <li data-modulo="clientes"><a href="clientes.html">Clientes</a></li>
+            <li data-modulo="pedidos"><a href="pedidos.html">Pedidos</a></li>
+            <li data-modulo="presupuestos"><a href="presupuestos.html">Presupuestos</a></li>
+            <li data-modulo="reparaciones"><a href="reparaciones.html">Órdenes de Reparación</a></li>
+            <li data-modulo="etiquetas"><a href="etiquetas.html">Etiquetas QR</a></li>
+            <li data-modulo="reportes"><a href="reportes.html">Reportes</a></li>
+            <li data-modulo="escaner" class="active" class="active"><a href="escaner.html">Escáner QR</a></li>
+            <li data-modulo="facturacion"><a href="facturacion.html">Facturación</a></li>
+            <li data-modulo="admin"><a href="admin.html">Administración</a></li>
+        </ul>
+    </nav>
+    <main class="contenido-principal">
+        <div class="contenedor">
+            <div class="encabezado-pagina">
+                <h2>Escáner QR</h2>
+                <p class="subtitulo">escáner qr. No accesible públicamente.</p>
+            </div>
+            <section class="panel">
+                <div class="escaner-acciones">
+                    <button id="btn-encender-camara" class="btn primario">Encender cámara</button>
+                    <button id="btn-apagar-camara" class="btn secundario escaner-oculto">Apagar cámara</button>
+                    <button id="btn-subir-foto" class="btn secundario">Subir foto</button>
+                    <button id="btn-modo-manual" class="btn terciario">Entrada manual</button>
+                    <button id="btn-modo-camara" class="btn terciario escaner-oculto">Volver a cámara</button>
+                    <input type="file" id="input-foto" accept="image/*" class="escaner-oculto">
+                </div>
+                <div id="area-camara" class="escaner-video-wrapper">
+                    <video id="video-escaner" playsinline class="escaner-video"></video>
+                    <div class="escaner-sobreposicion"></div>
+                    <div class="escaner-cuadro"></div>
+                </div>
+                <div id="area-manual" class="panel escaner-oculto">
+                    <p class="escaner-modo-titulo">Entrada manual de código QR</p>
+                    <div class="formulario">
+                        <div class="campo">
+                            <label for="input-manual">Código</label>
+                            <input type="text" id="input-manual" class="escaner-input-manual" placeholder="Pegar o escribir el código aquí">
+                        </div>
+                        <div class="escaner-botones-resultado">
+                            <button id="btn-procesar-manual" class="btn primario">Procesar</button>
+                            <button id="btn-limpiar-manual" class="btn secundario">Limpiar</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="estado-escaner" class="escaner-estado">Listo.</div>
+                <div id="resultado-escaner" class="escaner-resultado panel escaner-oculto">
+                    <h3>Resultado del escaneo</h3>
+                    <pre id="contenido-resultado" class="texto-resultado"></pre>
+                    <div class="escaner-botones-resultado">
+                        <button id="btn-limpiar-resultado" class="btn secundario">Limpiar resultado</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+    <div class="overlay-menu"></div>
+    <script src="auth-check.js?v=2.5"></script>
+    <script src="escaner.js?v=2.5"></script>
+</body>
+</html>
