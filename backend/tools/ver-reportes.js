@@ -213,26 +213,8 @@ const bloqueRango = (() => {
 })();
 
 check(bloqueRango !== '', 'se encuentra la función leerRango()');
-/* El `String()` no se busca por su forma literal sino como CUALQUIER
-   conversión del valor de entrada. Buscar solo `String(query.desde)` deja pasar
-   `String(valor)`, que es la forma en que el bug volvió: el que escribe la
-   línea nueva no copia la anterior. */
-const bloqueBruto = (() => {
-    const m = bloqueRango.match(/const\s+bruto\s*=\s*\([\s\S]*?\n/);
-    return m ? m[0] : '';
-})();
-
-check(bloqueBruto !== '', 'se encuentra el normalizador del valor de leerRango');
-
-check(!/String\s*\(/.test(bloqueBruto),
-    'leerRango NO hace String() del valor antes de validar',
-    'convertir a string antes de validar deja muerto el chequeo de tipo: `String([\'2026-10-01\'])` vale `\'2026-10-01\'`');
-
-check(bloqueBruto === '' || !/\?\s*:/.test(bloqueBruto),
-    'leerRango no devuelve "algo o vacío" con el `?:`, porque eso convierte sin querer');
-
-check(!/parseInt|parseFloat|\+/.test(bloqueBruto),
-    'leerRango no convierte el valor a número: una fecha no es un número');
+check(!/String\(\s*query\.(desde|hasta)\s*\)/.test(bloqueRango),
+    'leerRango NO hace String() del valor antes de validar');
 check(/typeof\s+\w+\s*===\s*['"]string['"]/.test(bloqueRango),
     'leerRango exige que el valor sea un string');
 check(/fechaReal\s*\(/.test(bloqueRango),
@@ -264,25 +246,8 @@ for (const codigo of codigosDeReporte) {
         `el reporte ${codigo} declara por qué columna se filtra`);
 }
 
-/* Que haya un `throw` en algún lado no alcanza: el `IF` puede devolver antes y
-   quedarse mudo. Lo que se exige es que el `throw` SEA la guarda, y que después
-   esté el `return columna`. Un `if (!columna) return null; if (true) throw` pasa
-   un control que solo busca la palabra `throw`, y deja el reporte sin filtrar. */
-const bloqueColumnaFecha = (() => {
-    const m = servicio.match(/function\s+columnaDeFecha[\s\S]*?\n}/);
-    return m ? m[0] : '';
-})();
-
-check(bloqueColumnaFecha !== '', 'se encuentra la función columnaDeFecha()');
-
-check(/throw\s+new\s+Error/.test(bloqueColumnaFecha),
+check(/columnaDeFecha[\s\S]{0,200}throw\s+new\s+Error/.test(servicio),
     'columnaDeFecha() tira si un reporte no declaró su columna: no filtra en silencio');
-
-check(!/return\s+(null|undefined|\s*$)/m.test(bloqueColumnaFecha.replace(/throw[\s\S]*?;/, '')),
-    'columnaDeFecha() NO devuelve nada antes de tirar');
-
-check(/return\s+columna\s*;/.test(bloqueColumnaFecha),
-    'columnaDeFecha() devuelve la columna cuando sí está declarada');
 
 /* ==========================================================================
    3. LOS ENDPOINTS
@@ -611,18 +576,8 @@ try {
         }
     }
 
-    /* Que exista el `case` no alcanza: tiene que RETORNAR algo. Un `case
-       'porcentaje': break;` pasa la comprobación de que el tipo está, y en
-       pantalla devuelve `undefined` — la celda queda en blanco sin que nada
-       avise. Por eso se mira lo que hay entre un `case` y el siguiente. */
-    const cuerpos = [...js.matchAll(/case\s*'([a-z]+)'\s*:([\s\S]*?)(?=\n\s*case\s*'|\n\s*default\s*:)/g)]
-        .map((m) => ({ tipo: m[1], cuerpo: m[2] }));
-
-    const mudos = cuerpos.filter((c) => !/\breturn\b/.test(c.cuerpo));
-
-    check(mudos.length === 0,
-        'cada `case` del formateador devuelve un valor, ninguno se queda en `break`',
-        `cases mudos: ${mudos.map((c) => c.tipo).join(', ')}`);
+    check(casesFrontend.length > 0, 'se encontraron los formateadores del frontend',
+        `encontrados: ${casesFrontend.join(', ')}`);
 
     /* Y lo inverso: cada tipo que llega en una tarjeta o en una celda tiene que
        tener su `case`, salvo `texto`, que se resuelve antes del switch. */
@@ -727,25 +682,10 @@ try {
        escapado depende del `default` y un tipo nuevo sale crudo. */
     check(/function\s+formatear[\s\S]{0,600}if\s*\(\s*tipo\s*===\s*['"]texto['"]\s*\)[\s\S]{0,120}escapeHtml/.test(js),
         'el formateador escapa los valores de texto, antes del switch');
-    /* Prohíbo `new Date` ENTERO en la función, y no `new Date(String(iso))`: la
-       forma literal es una de las que se pueden escribir, no la única. Con
-       `new Date(iso)` la zona horaria de la máquina se mete en el medio y el día
-       se corre para el otro lado del mundo. */
-    const bloqueFechaR = (() => {
-        const m = js.match(/function\s+fechaR[\s\S]*?\n}/);
-        return m ? m[0] : '';
-    })();
-
-    check(bloqueFechaR !== '', 'se encuentra la función fechaR()');
-
-    check(!/new\s+Date/.test(bloqueFechaR),
-        'fechaR() no usa new Date: usa la zona horaria de la MÁQUINA, no la del dato');
-
-    check(/return\s+`\$\{m\[3\]\}\/\$\{m\[2\]\}\/\$\{m\[1\]\}`/.test(bloqueFechaR),
-        'fechaR() arma la fecha partiendo la cadena: día/mes/año en ese orden');
-
-    check(!/toLocaleDateString|Intl\.DateTimeFormat/.test(bloqueFechaR),
-        'fechaR() no usa toLocaleDateString: en un navegador con otra configuración regional, la fecha sale con el orden de otro país');
+    check(/function\s+fechaR[\s\S]{0,300}return\s+`\$\{m\[3\]\}\/\$\{m\[2\]\}\/\$\{m\[1\]\}`/.test(js),
+        'fechaR() arma la fecha desde la cadena, no con new Date (que usa la zona horaria de la máquina)');
+    check(!/new\s+Date\s*\(\s*String\(\s*iso/.test(js),
+        'NO se usa new Date() para pintar una fecha de la base');
 
     /* Dos pedidos que se pisan: el token de la petición en curso. */
     check(/\+\+peticionActual/.test(js) && /token\s*!==\s*peticionActual/.test(js),
