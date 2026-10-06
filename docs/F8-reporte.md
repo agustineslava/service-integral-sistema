@@ -1,23 +1,32 @@
 # F8 - Escáner QR
 
-## Objetivo
-Implementar escáner QR solo para personal (login requerido). Soportar escaneo en vivo con cámara, subida de foto como fallback y entrada manual.
-
 ## Estado
-- ✅ Escáner QR funcional (rontend/escaner.html, rontend/escaner.css, rontend/escaner.js)
-- ✅ jsQR 1.4.0 vendorizado (rontend/vendor/jsqr.min.js)
-- ✅ Navegación actualizada con data-modulo="escaner"
-- ✅ Verificador y mutador creados (ackend/tools/ver-escaner.js, ackend/tools/mutar-escaner.js)
-- ✅ Verificadores estáticos verdes
+- Implementado: sí
+- Verificador: backend/tools/ver-escaner.js (12 OK / 0 FALLO)
+- Mutador: backend/tools/mutar-escaner.js
 
-## Verificaciones
-- er-reportes.js: 156 OK / 0 FALLO
-- er-facturacion.js: 182 OK / 0 FALLO
-- er-etiquetas-qr.js: 67 OK / 0 FALLO
-- er-escaner.js: 12 OK / 0 FALLO
-- er-estilo-y-tema.js: OK
+## Funcionalidad
+- Escaneo en vivo con cámara (getUserMedia, facingMode environment)
+- Fallback por subida de imagen (FileReader + canvas)
+- Entrada manual de código
+- Navegación automática según tipo:
+  - R-### → reparaciones.html?busqueda=
+  - P-### → pedidos.html?busqueda=
+  - PR-### / PRE-### → presupuestos.html?busqueda=
+  - F-### → facturacion.html?busqueda=
+  - numéricos → index.html?busqueda=
+  - otros → index.html?busqueda=
+- Solo para personal (requiere login via auth-check.js)
+- jsQR 1.4.0 vendorizado (frontend/vendor/jsqr.min.js)
+- Throttling para evitar múltiples redirecciones
+- UI con estado, overlay, botones iniciar/detener
 
-## Notas
-- Solo accesible a usuarios logueados (usa uth-check.js)
-- Navegación inteligente según tipo de código (R-/P-/PR/F-/numéricos)
-- Throttling para evitar redirecciones múltiples
+## Archivos
+- frontend/escaner.html
+- frontend/escaner.css
+- frontend/escaner.js
+- frontend/vendor/jsqr.min.js
+- Actualizado: menú en páginas principales
+
+## Verificación
+node backend/tools/ver-escaner.js
