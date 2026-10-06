@@ -1,51 +1,62 @@
 <!DOCTYPE html>
-<html lang=\"es\">
+<html lang="es">
 <head>
-    <meta charset=\"UTF-8\">
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Service Integral - Escáner QR</title>
-    <script src=\"auth-check.js?v=2.5\"></script>
-    <script src=\"marca.js?v=2.5\"></script>
-    <script src=\"vendor/jsqr.min.js\"></script>
-    <link rel=\"stylesheet\" href=\"style.css?v=2.5\">
-    <link rel=\"stylesheet\" href=\"escaner.css?v=2.5\">
+    <script src="auth-check.js?v=2.5"></script>
+    <script src="marca.js?v=2.5"></script>
+    <script src="vendor/jsqr.min.js"></script>
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <link rel="stylesheet" href="escaner.css?v=2.5">
 </head>
 <body>
     <header>
-        <section class=\"barra-cabecera\">
-            <div class=\"logo\">
-                <img src=\"logos/logo.jpg\" alt=\"Logo de Service Integral\">
-                <div class=\"servidor-estado\">Servidor Local: <span class=\"badge-online\">Conectado</span></div>
+        <section class="barra-cabecera">
+            <div class="logo">
+                <img src="logos/logo.jpg" alt="Logo de Service Integral">
+                <div class="servidor-estado">Servidor Local: <span class="badge-online">Conectado</span></div>
             </div>
-            <div id=\"info-usuario-header\" class=\"info-usuario-header\"></div>
-            <nav class=\"menu-navegacion\">
+            <div id="info-usuario-header" class="info-usuario-header"></div>
+            <nav class="menu-navegacion">
                 <ul>
-                    <li data-modulo=\"stock\"><a href=\"index.html\">Stock</a></li>
-                    <li data-modulo=\"reparaciones\"><a href=\"reparaciones.html\">Taller / Reparaciones</a></li>
-                    <li data-modulo=\"clientes\"><a href=\"clientes.html\">Clientes</a></li>
-                    <li data-modulo=\"pedidos\"><a href=\"pedidos.html\">Pedidos</a></li>
-                    <li data-modulo=\"presupuestos\"><a href=\"presupuestos.html\">Presupuestos</a></li>
-                    <li data-modulo=\"facturacion\"><a href=\"facturacion.html\">Facturación</a></li>
-                    <li data-modulo=\"etiquetas_qr\"><a href=\"etiquetas.html\">Etiquetas QR</a></li>
-                    <li data-modulo=\"reportes\"><a href=\"reportes.html\">Reportes</a></li>
+                    <li data-modulo="stock"><a href="index.html">Stock</a></li>
+                    <li data-modulo="reparaciones"><a href="reparaciones.html">Taller / Reparaciones</a></li>
+                    <li data-modulo="clientes"><a href="clientes.html">Clientes</a></li>
+                    <li data-modulo="pedidos"><a href="pedidos.html">Pedidos</a></li>
+                    <li data-modulo="presupuestos"><a href="presupuestos.html">Presupuestos</a></li>
+                    <li data-modulo="facturacion"><a href="facturacion.html">Facturación</a></li>
+                    <li data-modulo="etiquetas_qr"><a href="etiquetas.html">Etiquetas QR</a></li>
+                    <li data-modulo="reportes"><a href="reportes.html">Reportes</a></li>
+                    <li data-modulo="escaner"><a href="escaner.html">Escáner QR</a></li>
                 </ul>
             </nav>
         </section>
     </header>
-    <main class=\"contenedor-principal\">
-        <div style=\"margin-bottom:18px\"><h1>Escáner QR</h1></div>
-        <section class=\"panel-tabla\">
-            <video id=\"video\" playsinline muted style=\"max-width:100%\"></video>
-            <canvas id=\"canvas\" hidden></canvas>
-            <div id=\"resultado\" class=\"resultado\"></div>
-            <div class=\"scanner-opciones\">
-                <input type=\"text\" id=\"manual\" placeholder=\"Ingresar código manualmente\">
-                <button class=\"btn btn-secundario\" id=\"btn-manual\">Buscar por código</button>
-                <input type=\"file\" id=\"input-imagen\" accept=\"image/*\">
-                <button class=\"btn btn-secundario\" id=\"btn-detener\">Detener cámara</button>
+    <main class="contenedor-principal">
+        <div style="margin-bottom:18px">
+            <h1>Escáner QR</h1>
+            <p>Solo para el personal. Escaneá etiquetas QR para ir directamente al ítem asociado.</p>
+        </div>
+        <section class="panel-tabla">
+            <div class="scanner-area">
+                <video id="video" playsinline muted></video>
+                <canvas id="canvas" hidden></canvas>
+                <div id="overlay" class="scanner-overlay"></div>
+                <div id="estado" class="scanner-estado">Iniciando cámara...</div>
             </div>
+            <div id="resultado" class="resultado" hidden></div>
+            <div class="scanner-opciones">
+                <input type="text" id="manual" placeholder="Ingresar código o ID manualmente (ej. R-001, P-123)">
+                <button class="btn btn-primario" id="btn-manual">Buscar</button>
+                <label class="btn btn-secundario" for="input-imagen">Subir foto para escanear</label>
+                <input type="file" id="input-imagen" accept="image/*" hidden>
+                <button class="btn btn-secundario" id="btn-iniciar">Iniciar cámara</button>
+                <button class="btn btn-secundario" id="btn-detener">Detener cámara</button>
+            </div>
+            <small>Nota: Si estás en un dispositivo móvil, podés subir una foto como alternativa al escaneo en vivo.</small>
         </section>
     </main>
-    <script src=\"escaner.js?v=2.5\"></script>
+    <script src="escaner.js?v=2.5"></script>
 </body>
 </html>
