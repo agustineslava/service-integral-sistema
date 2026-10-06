@@ -842,14 +842,14 @@ seccion('6. El orden de las rutas');
 
     /* --- La hoja de tema se carga DESPUES de las de los documentos ---------
        Se chequea el orden de verdad, no que esten presentes: si `facturacion.css`
-       entrara antes de `presupuestos.css`, las reglas de `f-neto-calc` y
+       entrara antes de `documentos.css`, las reglas de `f-neto-calc` y
        `f-tabla-items` (que pisan padding de celdas) perderian contra las
        comunes y la tabla quedaria desalineada. El orden es la dependencia. */
     const ordenHojas = [...fHtml.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]);
-    const posPresupuestos = ordenHojas.findIndex((h) => h.startsWith('presupuestos.css'));
+    const posPresupuestos = ordenHojas.findIndex((h) => h.startsWith('documentos.css'));
     const posFacturacion = ordenHojas.findIndex((h) => h.startsWith('facturacion.css'));
     check(posPresupuestos >= 0 && posFacturacion >= 0 && posPresupuestos < posFacturacion,
-        'facturacion.css se carga DESPUES de presupuestos.css',
+        'facturacion.css se carga DESPUES de documentos.css',
         `orden real: ${JSON.stringify(ordenHojas)}`);
 
     /* --- Las alicuotas del navegador y las del servidor, la misma lista ----
@@ -933,7 +933,7 @@ seccion('6. El orden de las rutas');
        con una etiqueta pelada en el medio.
 
        Las clases se buscan en TODAS las hojas que carga la pagina, no solo en
-       `facturacion.css`: `.p-estado-borrador` vive en `presupuestos.css`, que
+       `facturacion.css`: `.p-estado-borrador` vive en `documentos.css`, que
        esta pagina carga justamente para no duplicarla. Buscar solo en la hoja
        propia daba un FALLO que estaba equivocado. */
     const hojasDeLaPagina = ordenHojas
