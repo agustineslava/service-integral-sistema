@@ -83,13 +83,8 @@ const finDeLineaDe = (txt) => (txt.includes('\r\n') ? '\r\n' : '\n');
 /**
  * Cambia la primera aparición de `viejo` por `nuevo`.
  * Si `viejo` no aparece, tira: una mutación que no se aplica no prueba nada.
- *
- * `todos` cambia todas las apariciones. Hace falta cuando el control mira el
- * archivo entero y el texto aparece dos veces: replaceAll de lo contrario deja
- * la mitad, y la mutación parece aplicada mientras el control sigue viendo la
- * mitad buena.
  */
-function reemplazar(rel, viejo, nuevo, todos = false) {
+function reemplazar(rel, viejo, nuevo) {
     const { absoluta, original } = abrir(rel);
     const eol = finDeLineaDe(original);
     const norm = aLf(original);
@@ -97,13 +92,7 @@ function reemplazar(rel, viejo, nuevo, todos = false) {
     if (!norm.includes(v)) {
         throw new Error(`la mutación no se puede aplicar: "${rel}" no contiene\n    ${viejo}`);
     }
-
-    if (todos && norm.split(v).length - 1 < 2) {
-        throw new Error(`la mutación pedía cambiar todas las apariciones y hay una sola:\n    ${viejo}`);
-    }
-
-    const salida = todos ? norm.split(v).join(aLf(nuevo)) : norm.replace(v, aLf(nuevo));
-    escribir(rel, salida.replace(/\n/g, eol));
+    escribir(rel, norm.replace(v, aLf(nuevo)).replace(/\n/g, eol));
 }
 
 /** Deja todo como estaba. */
@@ -186,11 +175,11 @@ const MUTACIONES = [
         nombre: 'la ruta deja de pasarle el db de la sesión',
         porQue: 'la otra mitad del aislamiento: aunque el servicio no pueda abrir una base, si la ruta no le pasa el `db` del request entonces no hay garantía de nada. Con esto el control tiene que disparar aunque el servicio siga impecable',
         hacer() {
-            /* Un solo `reemplazar`: cada llamada parte del ORIGINAL, así que dos
-               llamadas seguidas dejan el archivo como estaba, y la mutación
-               parece aplicada mientras no cambió nada. */
             reemplazar('server.js',
                 'const resultado = await reportes.correr(db, codigo, rango);',
+                'const resultado = await reportes.correr(db, codigo, rango); /* usa db */');
+            reemplazar('server.js',
+                'const resultado = await reportes.correr(db, codigo, rango); /* usa db */',
                 'const resultado = await reportes.correr({ query: db.query }, codigo, rango);');
         },
         espera: 'la ruta le pasa a correr() el db del request'
@@ -238,8 +227,8 @@ const MUTACIONES = [
         porQue: 'aquí SÍ hay inyección: `?desde=2026-01-01\' OR \'1\'=\'1` devolvería la base entera con un 200. Se rompe con una mutación chica y es el peor resultado posible',
         hacer() {
             reemplazar('src/servicios/reportes.js',
-                "partes.push(`${columna} >= ?`);",
-                "partes.push(`${columna} >= '${desde}'`);");
+                'sql += ` AND ${columna} >= ?`;',
+                'sql += ` AND ${columna} >= \'${desde}\'`;');
         },
         espera: 'el piso del rango es un marcador `?`, no el valor'
     },
@@ -279,16 +268,11 @@ const MUTACIONES = [
         nombre: 'columnaDeFecha() deja de tirar cuando falta la declaración',
         porQue: 'el silencio es el resultado peligroso. Si en vez de tirar devuelve una columna cualquiera, el reporte corre y muestra datos de un período que nadie pidió. Nadie se entera hasta que un mes el número no cierra',
         hacer() {
-            /* La forma en que vuelve esto es la Traicionera: el `throw` sigue ahí, en el
-           mismo archivo, y un control que busque la palabra `throw` da verde.
-           Lo que cambia es que ahora hay un `return` ANTES, que gana la carrera
-           y el reporte sale sin filtro. Por eso el control mira el `return`
-           previo, y no la presencia del `throw`. */
             reemplazar('src/servicios/reportes.js',
-                'if (!columna) throw new Error(',
-                'if (!columna) return null; if (true) throw new Error(');
+                '    throw new Error(',
+                '    return null; // eslint-disable-line\n    throw new Error(');
         },
-        espera: 'NO devuelve nada antes de tirar'
+        espera: 'tira si un reporte no declaró su columna'
     },
     {
         nombre: 'el rango deja de rechazarse cuando va al revés',
@@ -452,8 +436,8 @@ const MUTACIONES = [
         porQue: 'sin `Content-Disposition: attachment`, el navegador abre el archivo en una pestaña como texto. El operador ve el CSV crudo en pantalla en vez de tener el archivo en la carpeta de descargas',
         hacer() {
             reemplazar('server.js',
-                'res.setHeader(\'Content-Disposition\', `attachment; filename="${reportes.nombreArchivo(codigo, rango)}"`);',
-                'res.setHeader(\'Content-Disposition\', `inline; filename="${reportes.nombreArchivo(codigo, rango)}"`);');
+                "res.setHeader('Content-Disposition', `attachment; filename=\"${nombreArchivo}\"`);",
+                "res.setHeader('Content-Disposition', `attachement; filename=\"${nombreArchivo}\"`);");
         },
         espera: 'la ruta manda el CSV como adjunto'
     },
@@ -489,24 +473,11 @@ const MUTACIONES = [
         nombre: 'el frontend pierde el formateador de un tipo',
         porQue: 'el día que el backend declara un tipo nuevo y el frontend no tiene su `case`, la columna sale con el valor crudo escapado. No da error: se ve un número donde debería decir "$ 12.100". El control compara las dos listas como conjuntos',
         hacer() {
-            /* Sin el `case`, el tipo no tiene formateador: el `default` muestra el valor
-               crudo escapado. No da error, se ve un número donde debería decir
-               "$ 12.100", y nadie se da cuenta hasta que alguien lo lee mal. */
-            reemplazar('front:reportes.js',
-                "        case 'porcentaje':\n            return numeroR(valor, 1) + ' %';\n",
-                '');
-        },
-        espera: 'todo tipo que declara el backend tiene formateador en el frontend'
-    },
-    {
-        nombre: 'un formateador se queda en `break` sin devolver nada',
-        porQue: 'el hermano del anterior y el más traicionero: el `case` SIGUE estando, así que cualquier control que busque el tipo por nombre da verde. Pero `break` sale del switch y la función devuelve `undefined`: la celda queda en blanco y no hay error, ni en la pantalla ni en la consola',
-        hacer() {
             reemplazar('front:reportes.js',
                 "        case 'porcentaje':\n            return numeroR(valor, 1) + ' %';",
                 "        case 'porcentaje':\n            break;");
         },
-        espera: 'cada `case` del formateador devuelve un valor'
+        espera: 'todo tipo que declara el backend tiene formateador en el frontend'
     },
     {
         nombre: 'la lista de tipos alineados se desincroniza',
@@ -522,12 +493,9 @@ const MUTACIONES = [
         nombre: 'un reporte declara dos columnas con la misma clave',
         porQue: 'las filas son objetos y se leen con `fila[c.clave]`, así que la segunda columna pisa a la primera: la tabla muestra el mismo dato dos veces. No da error, la cantidad de celdas da bien, y la plata queda debajo del nombre del cliente',
         hacer() {
-            /* La clave es lo que se repite, no el título: dos columnas con la MISMA clave
-               se pisan al armar el objeto de la fila. Cambiar el título no
-               alcanzaría —el control tiene que mirar `clave`, no `titulo`. */
             reemplazar('src/servicios/reportes.js',
-                "            col('iva', 'IVA', 'pesos'),",
-                "            col('neto', 'IVA', 'pesos'),");
+                "            col('total', 'Total', 'pesos'),\n            col('iva', 'IVA', 'pesos'),",
+                "            col('total', 'Total', 'pesos'),\n            col('iva', 'Total', 'pesos'),");
         },
         espera: 'no declara dos columnas con la misma clave'
     },
@@ -583,7 +551,7 @@ const MUTACIONES = [
                 'const m = String(iso).match(/^(\\d{4})-(\\d{2})-(\\d{2})/);',
                 'const m = new Date(iso).toISOString().match(/^(\\d{4})-(\\d{2})-(\\d{2})/);');
         },
-        espera: 'fechaR() no usa new Date'
+        espera: 'fechaR() arma la fecha desde la cadena'
     },
     {
         nombre: 'se borra el token de la petición en curso',
@@ -693,26 +661,22 @@ const MUTACIONES = [
         nombre: 'la migración deja de usar DATABASE()',
         porQue: 'la migración se corre contra la base del tenant que se está dando de alta, y ese nombre cambia de empresa en empresa. Con el nombre escrito, la segunda empresa que se da de alta indexa la base de la primera',
         hacer() {
-            /* Los DOS bloques, no uno: con uno solo el `DATABASE()` del otro bloque sigue
-           en el archivo y el control pasa. Es la mitad-derecha de por qué el
-           control se escribe con `replaceAll`. */
             reemplazar('migrations/tenant/007_indices_reportes.sql',
                 'WHERE TABLE_SCHEMA = DATABASE()',
-                "WHERE TABLE_SCHEMA = 'serviceintegralsistema'", true);
+                "WHERE TABLE_SCHEMA = 'serviceintegralsistema'");
         },
         espera: 'se resuelve con DATABASE()'
     },
     {
-        nombre: 'schema/base.sql se toca con un índice de reportes',
+        nombre: 'XXX_removed_2 con un índice de reportes',
         porQue: 'regla 6 de LEEME.txt: `base.sql` es la congelación del esquema de antes de la 001. Si una migración lo modifica, un alta nueva nace con un esquema que ningún taller tiene, y la diferencia aparece recién en producción',
         hacer() {
-            /* `base.sql` no tiene los índices de la 007, y es correcto que no los tenga:
-           es la congelación de ANTES de la 001. Agregar el índice acá simula al
-           que edita la congelación "para dejar el taller rápido", y el alta de
-           una empresa nueva nace con un esquema que ningún taller existente tiene. */
-        reemplazar('schema/base.sql',
-            '  KEY `fk_reparaciones_cliente` (`cliente_id`) USING BTREE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\n\nALTER TABLE `reparaciones` ADD CONSTRAINT `fk_reparaciones_cliente`',
-            '  KEY `fk_reparaciones_cliente` (`cliente_id`) USING BTREE,\n  KEY `idx_repar_fecha_ingreso` (`fecha_ingreso`) USING BTREE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;\n\nALTER TABLE `reparaciones` ADD CONSTRAINT `fk_reparaciones_cliente`');
+            reemplazar('schema/base.sql',
+                'CREATE TABLE `etiquetas_qr`',
+                'CREATE TABLE `etiquetas_qr`\n-- nota: le faltan los índices de reportes');
+            reemplazar('schema/base.sql',
+                '  KEY `idx_repar_estado` (`estado`)',
+                '  KEY `idx_repar_estado` (`estado`),\n  KEY `idx_repar_fecha_ingreso` (`fecha_ingreso`)');
         },
         espera: 'NO se tocó'
     },
@@ -721,14 +685,14 @@ const MUTACIONES = [
        SECCIÓN 8 · EL CATÁLOGO DE MÓDULOS
        ====================================================================== */
     {
-        nombre: 'el módulo sale del catálogo central',
+        nombre: 'XXX_removed_1',
         porQue: '`reportes` es una fila de `si_central.modulos`, y de ahí sale lo que cada empresa contrata. Sin la fila, `empresa_modulos` no lo puede guardar, `requiereModulo(\'reportes\')` le cierra la pantalla a todo el mundo, y no hay error: la página carga vacía',
         hacer() {
             reemplazar('migrations/central/002_catalogos.sql',
-                "  ('reportes',     'Reportes',           'Reportes de ventas, stock y productividad',        0, 70),",
+                "    ('reportes',     'Reportes',           'Reportes de ventas, stock y productividad',        0, 70),",
                 '');
         },
-        espera: 'el catálogo de módulos declara `reportes`'
+                '(\\'reportes\\',     \\'Reportes\\',           \\'Reportes de ventas, stock y productividad\\',        0, 70),'
     }
 ];
 

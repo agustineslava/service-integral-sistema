@@ -105,7 +105,7 @@
          * da 3.15:1. Con `--border-color` daba 1.21:1. */
         --border-input: #868c92;
         --text-main: #2d3134;     /* Gris plomo oscuro del logo de la marca */
-        --text-muted: #495057;    /* Gris medio para textos secundarios (mejor contraste AA) */
+        --text-muted: #6c757d;    /* Gris medio para textos secundarios */
         --color-alerta-bg: #fff3cd; /* Fondo clásico amarillento de advertencia */
         /* Oscuro sobre blanco: el #ffc600 del modo oscuro no se lee en una
            hoja blanca. Es el mismo dorado quemado que usa `admin.css` para
