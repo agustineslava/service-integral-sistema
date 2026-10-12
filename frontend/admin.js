@@ -111,7 +111,7 @@ const PESO_MAXIMO_LOGO = 5 * 1024 * 1024;
  *
  * `alTerminar` recibe la URL o `null` para que el llamador la muestre.
  */
-async function subirLogo(archivo, alTerminar) {
+async function subirLogo(archivo, alTerminar, slug) {
     if (!archivo) {
         alTerminar(null, 'No se seleccionó ningún archivo.');
         return null;
@@ -128,6 +128,10 @@ async function subirLogo(archivo, alTerminar) {
 
     const cuerpo = new FormData();
     cuerpo.append('imagen', archivo);
+    // El slug solo elige la carpeta en Cloudinary; el servidor lo valida y, si
+    // no viene, usa la carpeta de plataforma (pasa en el alta, cuando la
+    // empresa todavía no existe). No es un dato de negocio.
+    if (slug) cuerpo.append('slug', slug);
 
     try {
         // FormData sin `Content-Type` a propósito: si se lo pone, el `boundary`
@@ -192,7 +196,7 @@ if (inputLogoAlta) {
                 );
             }
             logoAltaEnCurso = null;
-        });
+        }, $('alta-slug') ? $('alta-slug').value.trim() : '');
     });
 }
 
@@ -229,7 +233,7 @@ document.addEventListener('change', (e) => {
             `"${archivo.name}" subido. Presioná "Guardar datos y marca" para que quede.`,
             false
         );
-    });
+    }, e.target.dataset.slug || '');
 });
 
 // ==========================================================================
@@ -671,7 +675,7 @@ function pintarDetalle(d) {
         <div class="admin-detalle-seccion">
             <h3>Datos de la empresa</h3>
             <div class="admin-grilla">
-                ${campo('Nombre', 'nombre', 'text', { requerido: true, pista: 'Service Integral S.A.' })}
+                ${campo('Nombre', 'nombre', 'text', { requerido: true, pista: 'Nombre de la empresa S.A.' })}
                 ${campo('Rubro', 'rubro', 'select', {
                     valores: [
                         ['taller', 'Taller / Mecánico'],
@@ -683,7 +687,7 @@ function pintarDetalle(d) {
                         ['general', 'General']
                     ]
                 })}
-                ${campo('Subtítulo', 'subtitulo', 'text', { pista: 'Service Integral · Mantenimiento' })}
+                ${campo('Subtítulo', 'subtitulo', 'text', { pista: 'Nombre de la empresa · Rubro' })}
             </div>
         </div>
 
@@ -702,6 +706,7 @@ function pintarDetalle(d) {
                 <div class="campo">
                     <label for="detalle-logo-archivo">Subir desde un archivo</label>
                     <input type="file" id="detalle-logo-archivo"
+                           data-slug="${escapeHtml(e.slug)}"
                            accept="image/png,image/jpeg,image/webp,image/gif">
                     <div id="detalle-logo-estado" class="admin-pista" style="margin-top:6px;">
                         ${e.logo_url

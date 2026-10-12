@@ -1,46 +1,50 @@
 /**
- * Carga e inyecta la marca de la empresa.
+ * Carga e inyecta la marca: la de la plataforma y la de cada empresa.
+ *
+ * HAY DOS MARCAS DISTINTAS
+ * -----------------------------------------------------------------------
+ *   - Plataforma (Aexia): dueña del sistema. Se ve cuando la pantalla NO es
+ *     de ninguna empresa: el login antes de escribir el correo y el panel del
+ *     superadmin. Sale de `PLATAFORMA_*` (variables de entorno del servidor).
+ *   - Empresa: la fila de `empresas` de la base central. Es lo que ve cada
+ *     cliente una vez identificado.
  *
  * DE DONDE VIENE LA MARCA
  * -----------------------------------------------------------------------
  * La ruta `/api/config-comercio` resuelve sola:
  *   - si hay sesion (Bearer), responde con la fila de ESA empresa;
  *   - si viene `?slug=`, responde con la marca de esa empresa;
- *   - si no hay nada de eso, responde con las variables de entorno.
- *
- * POR QUE ESTA PAGINA NO APLICA NADA SI NO HAY SESION
- * -----------------------------------------------------------------------
- * Antes, entrar a login.html sin sesion aplicaba la marca de entorno, que es
- * la de Service Integral. Con eso TODOS los clientes veian el nombre y el
- * logo de Service Integral en la pantalla de login, antes de escribir una
- * sola letra: el sistema se anunciaba como de una sola empresa, que es
- * justamente lo contrario de lo que se esta vendiendo.
- *
- * Ahora, sin token esta pagina no hace nada y deja la pantalla neutral. La
- * marca correcta la pone login.html recien cuando el email escrito
- * pertenece a una empresa (ver `aplicarMarcaDesdeConfig`).
+ *   - si no hay nada de eso (login, superadmin, token roto), responde con la
+ *     marca de la plataforma.
  *
  * COMO SE USA
  * -----------------------------------------------------------------------
- *   - En el resto de las paginas: no hay que llamarla, se sola sola.
+ *   - En el resto de las paginas: no hay que llamarla, se aplica sola al
+ *     cargar (`aplicarMarcaDinamica`).
  *   - En login.html: `aplicarMarcaDesdeConfig(conf)` con lo que devuelve
- *     `/api/config-comercio?slug=...`.
+ *     `/api/config-comercio?slug=...` cuando el email escrito es de una
+ *     empresa.
  *
- * Un detalle importante: la respuesta puede traer `color_primario: null`
- * (la empresa todavia no cargo su color). En ese caso NO se toca la variable
- * de CSS, para que la pantalla conserve la paleta por defecto y no se quede
- * sin acento.
+ * EL TITULO SE COMPONE, NUNCA SE REEMPLAZA
+ * -----------------------------------------------------------------------
+ * Cada HTML declara su pagina en `<title data-pagina="...">`. El titulo final
+ * es `${nombre} - ${pagina}`. Antes se hacia `.replace('Service Integral',
+ * nombre)`, que dependia de que el HTML tuviera el nombre de una empresa
+ * escrito a mano: con dos empresas eso era una fuga de marca.
  */
+
+/** Logo neutro para una empresa que todavia no cargo el suyo (nunca el de otra). */
+const LOGO_NEUTRO = '/logos/placeholder.svg';
 
 /** Un color tiene que ser #RGB o #RRGGBB. Cualquier otra cosa se ignora. */
 function esColorValido(valor) {
     return typeof valor === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(valor.trim());
 }
 
-/** Las mismas rutas relativas que usaba la version anterior. */
+/** Resuelve la ruta de un logo. Sin valor cae al placeholder neutro. */
 function rutaDeLogo(valor) {
-    if (!valor) return '/logos/logo.jpg';
-    const v = String(valor).trim();
+    const v = valor ? String(valor).trim() : '';
+    if (!v) return LOGO_NEUTRO;
     if (v.startsWith('http') || v.startsWith('/')) return v;
     return '/' + v;
 }
@@ -73,36 +77,34 @@ function oscurecer(color) {
  * con o sin sesion, para no tener dos copias de la misma logica.
  *
  * Devuelve true si se aplico algo. Si la respuesta no trae nombre, no hace
- * nada y devuelve false: es preferible mostrar la marca que ya esta escrita
- * en el HTML antes que dejar la pantalla a medias.
+ * nada y devuelve false.
  */
 function aplicarMarcaDesdeConfig(conf) {
     if (!conf || !conf.nombre) return false;
 
     const nombre = String(conf.nombre);
 
-    // 1. Pestaña del navegador. Se reemplaza el nombre viejo, que es lo que
-    //    viene escrito en el <title> de cada HTML.
-    document.querySelectorAll('title').forEach((t) => {
-        t.textContent = t.textContent.replace('Service Integral', nombre);
-    });
+    // 1. Pestaña del navegador: `${nombre} - ${pagina}`. La pagina sale del
+    //    atributo `data-pagina` del <title>; si no esta, queda solo el nombre.
+    const titulo = document.querySelector('title');
+    if (titulo) {
+        const pagina = (titulo.getAttribute('data-pagina') || '').trim();
+        titulo.textContent = pagina ? `${nombre} - ${pagina}` : nombre;
+    }
 
     // 2. Logos (login y header).
     const logoSrc = rutaDeLogo(conf.logo_url);
     document.querySelectorAll('.logo img, .login-logo').forEach((img) => {
         img.src = logoSrc;
         img.alt = `Logo ${nombre}`;
-        // Si venia oculto (pantalla de login neutral), se muestra.
+        // Si venia oculto (arranque sin marca), se muestra.
         img.style.display = '';
         img.hidden = false;
     });
 
-    // 3. Nombre comercial.
-    document.querySelectorAll('.login-titulo').forEach((el) => {
+    // 3. Nombre comercial: login, bienvenida y etiquetas de comercio.
+    document.querySelectorAll('.login-titulo, [data-nombre-comercio]').forEach((el) => {
         el.textContent = nombre;
-    });
-    document.querySelectorAll('[data-neutral]').forEach((el) => {
-        el.hidden = true;
     });
 
     const bienvenidaH1 = document.querySelector('.bienvenida h1');
@@ -138,32 +140,35 @@ function aplicarMarcaDesdeConfig(conf) {
         document.documentElement.style.setProperty('--si-blue-dark', conf.color_secundario.trim());
     }
 
+    // 6. Punto unico para el resto del frontend (etiquetas, WhatsApp), en vez
+    //    de que cada pantalla raspe el DOM buscando el nombre.
+    window.MARCA_ACTUAL = {
+        nombre,
+        logo_url: conf.logo_url || null,
+        color_primario: conf.color_primario || null,
+        color_secundario: conf.color_secundario || null
+    };
+
     return true;
 }
 
 /**
- * Rutina de las paginas con sesion. Sin token no hace nada: la pantalla de
- * login es neutral y la marca la elige login.html segun el email escrito.
+ * Rutina de todas las paginas al cargar. Sin sesion la respuesta es la marca
+ * de la plataforma (login, superadmin, token roto): es lo correcto en una
+ * pantalla que no es de ninguna empresa. La marca de una empresa recien
+ * aparece con su token o con el email escrito en el login.
  */
 async function aplicarMarcaDinamica() {
     const token = localStorage.getItem('jwt_token');
-    if (!token) return;                 // pagina de login: que siga neutral
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
     let conf = null;
     try {
-        const res = await fetch('/api/config-comercio', {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await fetch('/api/config-comercio', { headers });
         if (res.ok) conf = await res.json();
     } catch (err) {
-        console.warn('No se pudo cargar la marca de la empresa:', err);
+        console.warn('No se pudo cargar la marca:', err);
     }
-
-    // `sin_empresa` = el token es valido pero no pertenece a ninguna empresa
-    // (el SUPERADMIN). En ese caso la respuesta trae la marca de entorno, que
-    // es la de Service Integral: aplicarla、Windows lo que hacia era poner el
-    // nombre de una empresa que no es esta en una pantalla que no es de nadie.
-    if (conf && conf.sin_empresa) return;
 
     aplicarMarcaDesdeConfig(conf);
 }

@@ -3,31 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Service Integral - Iniciar Sesión</title>
-    <link rel="stylesheet" href="style.css?v=2.5">
-    <script src="marca.js?v=2.5"></script>
+    <title data-pagina="Iniciar Sesión">Iniciar Sesión</title>
+    <link rel="stylesheet" href="style.css?v=2.6">
+    <script src="marca.js?v=2.6"></script>
 </head>
 <body class="pantalla-login">
 
     <main class="caja-login">
         <!--
-            Arranque NEUTRAL a proposito.
+            La plataforma (Aexia) es la marca por defecto.
 
-            Antes esta pantalla ponia el logo y el nombre de Service Integral en
-            todos los casos, porque `marca.js` pedia /api/config-comercio sin
-            token y el servidor respondia con la marca de entorno. Con eso cada
-            cliente veia en el login el nombre de la empresa numero 1: el
-            sistema decia ser de varias empresas y en pantalla era de una sola.
+            Sin empresa identificada la pantalla no pertenece a nadie... salvo a
+            la plataforma, que es dueña del sistema. Por eso el arranque muestra
+            el logo y el nombre de Aexia, que vienen de `PLATAFORMA_*` y los
+            escribe `marca.js` al cargar. Recién cuando el email escrito es de
+            una empresa se cambia por SU logo, SU nombre y SU color.
 
-            Ahora el logo arranca oculto y el nombre es neutro. La marca real la
-            escribe `aplicarMarcaDesdeConfig` recien cuando el email escrito
-            pertenece a una empresa. Quien no escribe nada ve una pantalla
-            HONESTA: no se le muestra el nombre de ninguna empresa todavia.
+            Así el login no anuncia a la empresa numero 1 a todo el mundo (lo
+            que pasaba antes, cuando la marca salia de `COMERCIO_*`) ni queda
+            mudo: dice de quién es el sistema y espera a saber de quién es la
+            cuenta. El texto de abajo es solo el respaldo sin JavaScript.
         -->
-        <img src="logos/logo.jpg" alt="" class="login-logo" hidden>
+        <img src="logos/placeholder.svg" alt="" class="login-logo">
 
-        <h1 class="login-titulo" data-neutral>Gestión de Taller y Stock</h1>
-        <p class="login-subtitulo" data-neutral>Ingresá con tu correo de la empresa</p>
+        <h1 class="login-titulo">Aexia</h1>
+        <p class="login-subtitulo">Gestión para talleres y comercios</p>
 
         <div id="mensaje-error" class="error-login"></div>
         <div id="mensaje-info" class="info-login"></div>
@@ -106,7 +106,7 @@
                 ya responde correctamente y sin filtrar nada cuando se
                 mandan mal.
 
-           Que no haya marca no es un error: se sigue escribiendo la clave.
+           Que no haya empresa no es un error: se sigue escribiendo la clave.
         ------------------------------------------------------------------ */
         let consultaEnCurso = false;
         let ultimaConsultada = '';
@@ -133,9 +133,13 @@
                     if (aplicarMarcaDesdeConfig(conf)) {
                         mostrarInfo(`Entrando a ${conf.nombre}`);
                     }
-                    ultimaConsultada = email;
+                } else {
+                    // No pertenece a ninguna empresa: se vuelve a la marca de la
+                    // plataforma (Aexia), sin decir si el correo existe. Nota arriba.
+                    limpiarAvisos();
+                    aplicarMarcaDinamica();
                 }
-                // No encontrado: se queda neutral y en silencio. Ver nota arriba.
+                ultimaConsultada = email;
             } catch (err) {
                 // Falla de red: no se muestra nada. El login va a fallar solo y
                 // con un mensaje util si realmente no hay conexion.

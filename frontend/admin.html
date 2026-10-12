@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Administración del servicio</title>
+    <title>Aexia - Administración del servicio</title>
 
     <!--
         Esta pantalla la ve el SUPERADMIN, que NO pertenece a ninguna empresa.
         Por eso es distinta a las del sistema:
 
         - No carga `marca.js`. La marca (logo, colores, nombre) es de cada
-          empresa cliente; acá no hay ninguna y tiene que verse neutra.
+          empresa cliente; acá no hay ninguna. Lo que sí se marca es la
+          PLATAFORMA (Aexia): el panel es del sistema, no de un cliente. El
+          nombre sale de `PLATAFORMA_NOMBRE` y lo escribe el script del final.
 
         - Carga `auth-check.js` por `escapeHtml` y `apiFetch`, y por el menú de
           usuario y el botón de tema, que son iguales en todo el sistema. Como
@@ -20,9 +22,9 @@
         - La sesión la valida el SERVIDOR en cada pedido (`verificarSuperAdmin`).
           Esconder links acá no sería seguridad; el 403 del servidor sí.
     -->
-    <script src="auth-check.js?v=2.5"></script>
-    <link rel="stylesheet" href="style.css?v=2.5">
-    <link rel="stylesheet" href="admin.css?v=2.5">
+    <script src="auth-check.js?v=2.6"></script>
+    <link rel="stylesheet" href="style.css?v=2.6">
+    <link rel="stylesheet" href="admin.css?v=2.6">
 </head>
 <body>
 
@@ -36,7 +38,7 @@
                 <path d="m9 12 2 2 4-4"></path>
             </svg>
             <div>
-                <strong>Administración del servicio</strong>
+                <strong data-plataforma>Aexia</strong>
                 <div class="admin-subtitulo">Empresas, planes y módulos</div>
             </div>
         </div>
@@ -156,7 +158,7 @@
                 <div class="campo">
                     <label for="alta-rubro">Rubro</label>
                     <select id="alta-rubro">
-                        <option value="taller">Taller / Mecánico</option>
+                        <option value="taller">Servicio Tecnico / Servicio Mecánico</option>
                         <option value="cerrajeria">Cerrajería</option>
                         <option value="electricidad">Electricidad</option>
                         <option value="plomeria">Plomería</option>
@@ -278,6 +280,20 @@
 
 <div id="aviso" class="admin-aviso" style="display:none;"></div>
 
-<script src="admin.js?v=2.5"></script>
+<script src="admin.js?v=2.6"></script>
+<script>
+    /* El panel es de la plataforma, no de una empresa: muestra el nombre de
+       Aexia tomado de PLATAFORMA_NOMBRE. "Aexia" en el HTML es el respaldo. */
+    fetch('/api/config-comercio')
+        .then((r) => r.json())
+        .then((c) => {
+            if (!c || !c.nombre) return;
+            document.querySelectorAll('[data-plataforma]').forEach((el) => {
+                el.textContent = c.nombre;
+            });
+            document.title = `${c.nombre} - Administración del servicio`;
+        })
+        .catch(() => {});
+</script>
 </body>
 </html>

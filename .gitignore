@@ -7,6 +7,7 @@
 backend/.env
 backend/.env.*
 !.env.example
+!.env.dev.example
 
 # ===========================================================================
 # Dependencias
@@ -41,6 +42,11 @@ backend/scratch/
 cloudflared.exe
 cloudflared.exe.exe
 tunnel_log.txt
+
+# ===========================================================================
+# Artefactos locales del agente (logs y capturas de sesiones de navegador)
+# ===========================================================================
+.playwright-mcp/
 
 # ===========================================================================
 # Sistema operativo y editores

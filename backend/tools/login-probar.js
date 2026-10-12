@@ -2,17 +2,20 @@
  * Prueba manual del login, en el navegador de verdad.
  *
  * El objetivo es ver las tres pantallas:
- *   1. login en blanco        -> NO debe decir "Service Integral" en ningun lado
+ *   1. login en blanco        -> muestra la PLATAFORMA (Aexia), no una empresa
  *   2. email de empresa       -> aparece el nombre y el color de ESA empresa
- *   3. email de SuperAdmin    -> se queda en blanco, sin decir nada
+ *   3. email de SuperAdmin    -> no dice nada de ninguna empresa (vuelve a Aexia)
  *
  * El caso 3 es el que estaba roto: antes decia "Email no registrado".
  */
 const path = require('path');
 require('dotenv').config({ path: __dirname + '/../.env', quiet: true });
 
+// Nombre de la plataforma, el mismo valor por defecto que usa el servidor.
+const NOMBRE_PLATAFORMA = process.env.PLATAFORMA_NOMBRE || 'Aexia';
+
 const CASOS = [
-    { etiqueta: 'sin escribir nada',      email: '',                            debe: 'neutral' },
+    { etiqueta: 'sin escribir nada',      email: '',                            debe: 'plataforma' },
     { etiqueta: 'email de la empresa',    email: 'admin@serviceintegral.com',   debe: 'marca'   },
     { etiqueta: 'email del SuperAdmin',   email: 'aguseslava11@gmail.com',      debe: 'silencio'},
     { etiqueta: 'email inexistente',      email: 'nadie@ejemplo.com',            debe: 'silencio'},
@@ -48,6 +51,7 @@ const CASOS = [
         const marcaServiceIntegral = /service\s*integral/i.test(
             [visto.titulo, visto.subtitulo, visto.aviso, visto.error, visto.pagina].join(' | ')
         );
+        const marcaPlataforma = visto.titulo === NOMBRE_PLATAFORMA;
 
         console.log(`\n[${caso.etiqueta}]`);
         console.log(`   titulo    : ${visto.titulo}`);
@@ -57,9 +61,10 @@ const CASOS = [
         console.log(`   logo      : ${visto.hayLogo ? 'visible' : 'oculto'}`);
 
         let falla = false;
-        if (caso.debe === 'neutral') {
-            if (marcaServiceIntegral) { console.log('   FALLO: muestra el nombre de Service Integral sin escribir nada'); falla = true; }
-            else console.log('   OK: pantalla neutral');
+        if (caso.debe === 'plataforma') {
+            if (marcaServiceIntegral) { console.log('   FALLO: muestra el nombre de una empresa sin escribir nada'); falla = true; }
+            else if (!marcaPlataforma) { console.log(`   FALLO: no muestra la plataforma (${NOMBRE_PLATAFORMA})`); falla = true; }
+            else console.log(`   OK: pantalla de la plataforma (${NOMBRE_PLATAFORMA})`);
         }
         if (caso.debe === 'marca') {
             if (!marcaServiceIntegral) { console.log('   FALLO: no muestra el nombre de la empresa'); falla = true; }

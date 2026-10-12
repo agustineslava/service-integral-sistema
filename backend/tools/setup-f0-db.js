@@ -5,6 +5,10 @@
  *
  * 1) Crea si_tenant_admin con permiso de crear/borrar las bases por empresa.
  *    Sin esto no hay multi-tenant posible (la app no puede CREATE DATABASE).
+ *    Tambien le da ALL sobre la central (`DB_CENTRAL_NAME`) y, si el `.env`
+ *    trae `DB_NAME` (instalacion legada), permisos explicitos sobre esa base
+ *    (empresa #1) para no romperla. Una plataforma nueva no menciona bases de
+ *    cliente. Ver `docs/plan-desacople-db-name.md`.
  *
  * 2) Rota la contrasena del usuario de la aplicacion, porque quedo en texto
  *    plano en logs que SI fueron subidos a GitHub.
@@ -24,9 +28,18 @@ const crypto = require('crypto');
 
 const RUTA_ENV = path.join(__dirname, '..', '.env');
 const APP_USER = process.env.DB_USER || 'service_integral_app';
-const DB_CENTRAL = process.env.DB_NAME || 'ServiceIntegralsistema';
-const TENANT_ADMIN = 'si_tenant_admin';
-const PREFIJO_TENANT = 'si_tenant_';
+// El admin sale de DB_ADMIN_USER (lo escribe este mismo script); el default es
+// el historico. Las instalaciones nuevas ponen DB_ADMIN_USER=aexia_admin.
+const TENANT_ADMIN = process.env.DB_ADMIN_USER || 'si_tenant_admin';
+const { patronDeBase, verificarPrefijoTenant } = require('../src/db/permisos');
+const { nombreCentral } = require('../src/db/conexiones');
+const PREFIJO_TENANT = verificarPrefijoTenant();
+const PATRON_TENANT = patronDeBase(PREFIJO_TENANT);
+// `DB_NAME` es la base de la empresa #1 LEGADA, no la plataforma. F0 ya no la
+// trata como central: la central sale de `DB_CENTRAL_NAME` via `nombreCentral()`.
+// Si `DB_NAME` existe (instalacion actual) igual se le dan permisos, para no
+// romperla. Ver `docs/plan-desacople-db-name.md`.
+const DB_LEGADO = process.env.DB_NAME || null;
 
 function preguntar(prompt, { oculto = false } = {}) {
     return new Promise((resolve) => {
@@ -87,13 +100,81 @@ function actualizarEnv(cambios) {
     return respaldo;
 }
 
+/**
+ * Arma la lista de privilegios de F0. Es PURA: no toca MySQL ni el .env, asi
+ * que se puede probar sin root y sin escribir nada.
+ *
+ *   - la base central sale de `nombreCentral()` (DB_CENTRAL_NAME), nunca de DB_NAME;
+ *   - las bases de empresa, por el patron del prefijo (`PREFIJO_TENANT` + `%`);
+ *   - `DB_NAME` solo entra como LEGADO (empresa #1), y solo si existe.
+ */
+function construirPasos({ passTenantAdmin, central = nombreCentral(), dbLegado = DB_LEGADO } = {}) {
+    const pasos = [
+        // OJO: con CREATE USER IF NOT EXISTS, si el usuario ya existe MySQL NO
+        // cambia la contrasena. Si despues igual escribieramos passTenantAdmin
+        // en el .env, quedaria una contrasena que no es la real. Por eso se
+        // separa: crear si falta, y ALTER USER para fijar la contrasena.
+        [`crear usuario ${TENANT_ADMIN} (si falta)`,
+         `CREATE USER IF NOT EXISTS '${TENANT_ADMIN}'@'localhost'`],
+        [`fijar la contrasena de ${TENANT_ADMIN}`,
+         `ALTER USER '${TENANT_ADMIN}'@'localhost' IDENTIFIED BY '${passTenantAdmin}'`],
+        ['permitir administrar la base central',
+         `GRANT ALL PRIVILEGES ON \`${central}\`.* TO '${TENANT_ADMIN}'@'localhost'`],
+        [`permitir crear/borrar bases de clientes (${PREFIJO_TENANT}*)`,
+         `GRANT CREATE, DROP, ALTER, INDEX, REFERENCES, SELECT, INSERT, UPDATE, DELETE, CREATE VIEW, SHOW VIEW, TRIGGER ON \`${PATRON_TENANT}%\`.* TO '${TENANT_ADMIN}'@'localhost'`]
+    ];
+
+    // Compatibilidad con la instalacion actual: la base legada no matchea el
+    // patron de empresas, asi que recibe sus permisos EXPLICITOS. En una
+    // plataforma nueva (sin DB_NAME) no se menciona ninguna base de cliente.
+    if (dbLegado) {
+        pasos.push(
+            ['legado: administrar la base de la empresa #1',
+             `GRANT ALL PRIVILEGES ON \`${dbLegado}\`.* TO '${TENANT_ADMIN}'@'localhost'`],
+            ['legado: base temporal de verificacion de restores',
+             `GRANT ALL PRIVILEGES ON \`${dbLegado}_verificacion\`.* TO '${TENANT_ADMIN}'@'localhost'`]
+        );
+    }
+
+    pasos.push(['recargar privilegios', 'FLUSH PRIVILEGES']);
+    return pasos;
+}
+
 (async () => {
+    // Al importarlo (tests del constructor) no se ejecuta nada.
+    if (require.main !== module) return;
+
     console.log('='.repeat(70));
     console.log(' F0 - CIERRE: PRIVILEGIOS MULTI-TENANT + ROTACION DE CONTRASENA');
     console.log('='.repeat(70));
     console.log(` Usuario de la aplicacion : ${APP_USER}`);
-    console.log(` Base actual (tenant 1)   : ${DB_CENTRAL}`);
+    console.log(` Prefijo de las empresas  : ${PREFIJO_TENANT}`);
+    console.log(` Base central             : ${nombreCentral()}`);
+    if (DB_LEGADO) console.log(` Base empresa #1 (legado) : ${DB_LEGADO}`);
     console.log('='.repeat(70) + '\n');
+
+    if (DB_LEGADO) {
+        console.log(' [!] DB_NAME es legado: es la base de la empresa #1, no la plataforma.');
+        console.log('     F0 le da permisos para no romper la instalacion actual.');
+        console.log('     Las empresas nuevas van por:  npm run importar-empresa -- --nombre ... --slug ... --base ...\n');
+    }
+
+    const passTenantAdmin = crypto.randomBytes(24).toString('base64url').slice(0, 28);
+    const pasos = construirPasos({ passTenantAdmin });
+
+    // --- SIMULACION: no toca MySQL ni el .env ---------------------------
+    if (process.argv.includes('--dry-run')) {
+        console.log('[SIMULACION] no se conecta a MySQL ni se escribe el .env\n');
+        console.log('--- PASO 1: privilegios multi-tenant (se aplicarian) ---');
+        for (const [desc, sql] of pasos) {
+            console.log(`  [ ]     ${desc}`);
+            console.log(`          ${sql.replace(passTenantAdmin, '********')}`);
+        }
+        console.log('\n--- PASO 3: claves que se escribirian en .env ---');
+        console.log('  [ ]     DB_ADMIN_USER, DB_ADMIN_PASSWORD (y DB_PASSWORD si se rota)');
+        console.log('\n(dry-run) no se ejecuto nada.\n');
+        return;
+    }
 
     const rootUser = (await preguntar('Usuario administrador de MySQL [root]: ')) || 'root';
     const rootPass = await preguntar(`Contrasena de ${rootUser}: `, { oculto: true });
@@ -116,25 +197,6 @@ function actualizarEnv(cambios) {
     // PASO 1 - Privilegios multi-tenant
     // ------------------------------------------------------------------
     console.log('--- PASO 1: privilegios multi-tenant ---');
-    const passTenantAdmin = crypto.randomBytes(24).toString('base64url').slice(0, 28);
-
-    const pasos = [
-        // OJO: con CREATE USER IF NOT EXISTS, si el usuario ya existe MySQL NO
-        // cambia la contrasena. Si despues igual escribieramos passTenantAdmin
-        // en el .env, quedaria una contrasena que no es la real. Por eso se
-        // separa: crear si falta, y ALTER USER para fijar la contrasena.
-        [`crear usuario ${TENANT_ADMIN} (si falta)`,
-         `CREATE USER IF NOT EXISTS '${TENANT_ADMIN}'@'localhost'`],
-        [`fijar la contrasena de ${TENANT_ADMIN}`,
-         `ALTER USER '${TENANT_ADMIN}'@'localhost' IDENTIFIED BY '${passTenantAdmin}'`],
-        [`permitir crear/borrar bases de clientes (${PREFIJO_TENANT}*)`,
-         `GRANT CREATE, DROP, ALTER, INDEX, REFERENCES, SELECT, INSERT, UPDATE, DELETE, CREATE VIEW, SHOW VIEW, TRIGGER ON \`${PREFIJO_TENANT}%\`.* TO '${TENANT_ADMIN}'@'localhost'`],
-        ['permitir administrar la base central',
-         `GRANT ALL PRIVILEGES ON \`${DB_CENTRAL}\`.* TO '${TENANT_ADMIN}'@'localhost'`],
-        ['permitir crear la base temporal de verificacion de restores',
-         `GRANT ALL PRIVILEGES ON \`${DB_CENTRAL}_verificacion\`.* TO '${TENANT_ADMIN}'@'localhost'`],
-        ['recargar privilegios', 'FLUSH PRIVILEGES']
-    ];
 
     let fallos = 0;
     for (const [desc, sql] of pasos) {
@@ -186,21 +248,26 @@ function actualizarEnv(cambios) {
     // ------------------------------------------------------------------
     console.log('\n--- PASO 4: verificacion ---');
 
-    // La app sigue funcionando?
-    try {
-        const cfg = require('dotenv').config({ path: RUTA_ENV, override: true });
-        const t = await mysql.createConnection({
-            host: process.env.DB_HOST || 'localhost',
-            user: cfg.parsed.DB_USER || APP_USER,
-            password: cfg.parsed.DB_PASSWORD,
-            database: cfg.parsed.DB_NAME
-        });
-        const [[n]] = await t.query('SELECT COUNT(*) AS c FROM reparaciones');
-        console.log(`  [OK]    la app conecta y lee reparaciones (${n.c} filas)`);
-        await t.end();
-    } catch (e) {
-        console.log(`  [FALLO] la app NO conecta: ${e.message}`);
-        fallos++;
+    // La app sigue leyendo la base LEGADA? (solo si existe: la plataforma
+    // nueva no tiene empresa #1 que verificar).
+    if (DB_LEGADO) {
+        try {
+            const cfg = require('dotenv').config({ path: RUTA_ENV, override: true });
+            const t = await mysql.createConnection({
+                host: process.env.DB_HOST || 'localhost',
+                user: cfg.parsed.DB_USER || APP_USER,
+                password: cfg.parsed.DB_PASSWORD,
+                database: DB_LEGADO
+            });
+            const [[n]] = await t.query('SELECT COUNT(*) AS c FROM reparaciones');
+            console.log(`  [OK]    la app conecta y lee la base legada (${n.c} filas en reparaciones)`);
+            await t.end();
+        } catch (e) {
+            console.log(`  [FALLO] la app NO conecta a la base legada: ${e.message}`);
+            fallos++;
+        }
+    } else {
+        console.log('  [SKIP]  sin DB_NAME: no hay base de empresa #1 que verificar');
     }
 
     // El admin de tenants puede crear bases?
@@ -209,8 +276,8 @@ function actualizarEnv(cambios) {
             host: process.env.DB_HOST || 'localhost',
             user: TENANT_ADMIN, password: passTenantAdmin
         });
-        await t.query(`CREATE DATABASE IF NOT EXISTS si_tenant_prueba`);
-        await t.query(`DROP DATABASE si_tenant_prueba`);
+        await t.query(`CREATE DATABASE IF NOT EXISTS ${PREFIJO_TENANT}prueba`);
+        await t.query(`DROP DATABASE ${PREFIJO_TENANT}prueba`);
         console.log('  [OK]    si_tenant_admin puede CREATE y DROP bases de clientes');
         await t.end();
     } catch (e) {
@@ -236,3 +303,5 @@ function actualizarEnv(cambios) {
         process.exit(1);
     }
 })().catch(e => { console.error('\nError inesperado:', e.message); process.exit(1); });
+
+module.exports = { construirPasos };

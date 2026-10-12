@@ -51,7 +51,7 @@
  * se mata a la mitad, al arrancar limpia lo que quedo de una corrida anterior
  * buscando el prefijo de prueba, que no es ninguna empresa de nadie.
  */
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), quiet: true });
+require('../src/config/entorno');
 
 const path = require('path');
 const fs = require('fs');
@@ -59,6 +59,10 @@ const jwt = require('jsonwebtoken');
 
 const central = require('../src/db/central');
 const { configAdmin, nombreCentral } = require('../src/db/conexiones');
+const { prefijoTenant, patronDeBase } = require('../src/db/permisos');
+
+const PREFIJO_DB_EMPRESA = prefijoTenant();
+const PATRON_DB_EMPRESA = patronDeBase(PREFIJO_DB_EMPRESA);
 
 const PUERTO = process.env.PORT || 3000;
 const BASE_URL = `http://127.0.0.1:${PUERTO}`;
@@ -143,8 +147,10 @@ async function servidorVivo() {
 
 // --- limpieza -------------------------------------------------------------
 
-/** Bases `si_tenant_` de las pruebas de este archivo y de f5a. */
-const BASES_DE_PRUEBA = /^si_tenant_(f5b|f5)_/;
+/** Bases de prueba (prefijo de empresa + f5b/f5a) de este archivo y de f5a. */
+const BASES_DE_PRUEBA = new RegExp(
+    '^' + PREFIJO_DB_EMPRESA.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(f5b|f5)_'
+);
 
 /**
  * La conexión que puede crear y borrar bases. Se abre una sola vez y se
@@ -195,7 +201,7 @@ async function barrerRestos() {
 
     const c = await admin();
     const [bases] = await c.query(
-        `SELECT SCHEMA_NAME AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'si\\_tenant\\_%'`
+        `SELECT SCHEMA_NAME AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${PATRON_DB_EMPRESA}%'`
     );
     const huerfanas = [];
     for (const b of bases) {
@@ -227,7 +233,7 @@ async function crearEmpresaFalsa(extra = {}) {
     const datos = {
         nombre: 'Empresa De Prueba F5b',
         slug,
-        nombre_db: `si_tenant_f5b_${slug.replace(/-/g, '_')}`,
+        nombre_db: `${PREFIJO_DB_EMPRESA}f5b_${slug.replace(/-/g, '_')}`,
         rubro: 'cerrajeria',
         plan: 'basico',
         estado: 'ACTIVO',
@@ -601,7 +607,7 @@ async function main() {
         comprobar(usInvalidos.length === 0, 'ni ningún usuario', usInvalidos.length);
         const c3 = await admin();
         const [basesInvalidas] = await c3.query(
-            `SELECT SCHEMA_NAME AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'si\\_tenant\\_alta%'`
+            `SELECT SCHEMA_NAME AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${PATRON_DB_EMPRESA}alta%'`
         );
         comprobar(basesInvalidas.length === 0, 'ni ninguna base', basesInvalidas.map((b) => b.n));
 
@@ -630,7 +636,7 @@ async function main() {
             altaCompleta = true;
             creadaPorAlta = rAlta.cuerpo.empresa;
             comprobar(true, 'alta completa: 201 (el permiso de base ya estaba concedido)');
-            comprobar(creadaPorAlta.nombre_db.startsWith('si_tenant_'), 'la base se llama si_tenant_*', creadaPorAlta.nombre_db);
+            comprobar(creadaPorAlta.nombre_db.startsWith(PREFIJO_DB_EMPRESA), `la base se llama ${PREFIJO_DB_EMPRESA}*`, creadaPorAlta.nombre_db);
             // Prefijo, no igualdad. Con igualdad esta comprobacion fallaba por lo
         // que menos tiene que ver con el alta: si quedaba una fila de pruebas
         // anterior, el slug automatico se armaba como `alta-de-prueba-f5b-2` y
@@ -684,7 +690,7 @@ async function main() {
             comprobar(!usuario, 'no quedó ningún usuario', usuario);
             const c = await admin();
             const [bases] = await c.query(
-                `SELECT SCHEMA_NAME AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'si\\_tenant\\_alta%'`
+                `SELECT SCHEMA_NAME AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${PATRON_DB_EMPRESA}alta%'`
             );
             comprobar(bases.length === 0, 'no quedó ninguna base huérfana', bases.map((b) => b.n));
 
@@ -1059,7 +1065,7 @@ async function main() {
             // se puede borrar a mano y molesta menos.
             const [residuo] = await (await admin()).query(
                 `SELECT id, nombre_db FROM empresas
-                  WHERE nombre_db LIKE 'si\\_tenant\\_alta\\_de\\_prueba\\_f5b%'
+                  WHERE nombre_db LIKE '${patronDeBase(PREFIJO_DB_EMPRESA + 'alta_de_prueba_f5b')}%'
                      OR slug LIKE 'f5b-prueba%'`
             );
             for (const r of residuo) {
@@ -1078,7 +1084,7 @@ async function main() {
             );
             const c = await admin();
             const [bases] = await c.query(
-                `SELECT SCHEMA_NAME AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'si\\_tenant\\_f5b%'`
+                `SELECT SCHEMA_NAME AS n FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE '${PATRON_DB_EMPRESA}f5b%'`
             );
             for (const b of bases) await borrarBasePorAdmin(b.n);
             console.log(`  Listo. ${fallos === 0 ? 'Sin restos.' : 'Quedaron restos si algo fallo arriba.'}`);

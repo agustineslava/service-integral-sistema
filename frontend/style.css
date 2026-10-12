@@ -1,5 +1,5 @@
 /* ==========================================================================
-   1. VARIABLES DE ENTORNO Y PALETA DE COLORES (SERVICE INTEGRAL)
+   1. PALETA DE COLORES DE LA PLATAFORMA (AEXIA) Y DE CADA EMPRESA
    ========================================================================== */
 :root {
     /* --- MODO OSCURO (Predeterminado - Gris Plomo y Azul Eléctrico) --- */
@@ -469,7 +469,7 @@ header {
     border-color: var(--si-blue-vibrant);
     outline: none;
     /* El anillo se deriva del color de la empresa. Antes estaba fijo en el
-       azul de Service Integral: un cliente con otro color veía el borde de su
+       azul de la plataforma: un cliente con otro color veía el borde de su
        empresa y el halo azul de la nuestra, dos colores juntos. */
     box-shadow: 0 0 0 3px rgba(0, 159, 227, 0.15);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--si-blue-vibrant) 15%, transparent);
@@ -1642,13 +1642,6 @@ html.tema-claro .btn-alternar-tema .icono-luna {
     line-height: 1.2;
 }
 
-/* Antes de que se sepa de que empresa se trata, el titulo va en color de
-   texto: no tiene que_delatar el color de Service Integral en una pantalla
-   que todavia no pertenece a nadie. */
-.login-titulo[data-neutral] {
-    color: var(--text-main);
-}
-
 .login-subtitulo {
     color: var(--text-muted);
     font-size: 0.9rem;
@@ -1711,9 +1704,9 @@ html.tema-claro .btn-alternar-tema .icono-luna {
     margin-bottom: 1.2rem;
 }
 
-/* Aviso que NO es un error: "Entrando a Service Integral", la marca que se
-   acaba de detectar. No puede verse igual que un fallo, o la gente lo lee
-   como que algo anda mal. */
+/* Aviso que NO es un error: "Entrando a <empresa>", la marca que se acaba de
+   detectar. No puede verse igual que un fallo, o la gente lo lee como que algo
+   anda mal. */
 .info-login {
     background-color: rgba(40, 167, 69, 0.12);
     color: #28a745;

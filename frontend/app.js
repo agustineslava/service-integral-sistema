@@ -605,7 +605,10 @@ function abrirModalEtiqueta(id) {
     const prod = productosLocales.find(p => p.id === id);
     if (!prod) return;
 
-    const nombreComercio = document.querySelector('.login-titulo')?.textContent || 'Service Integral';
+    // Nombre de la marca para la etiqueta impresa. Sale de `window.MARCA_ACTUAL`
+    // (lo deja `marca.js` al cargar): antes se raspaba `.login-titulo`, que en
+    // esta pantalla no existe, y se caia a un literal "Service Integral".
+    const nombreComercio = (window.MARCA_ACTUAL && window.MARCA_ACTUAL.nombre) || '';
     document.getElementById('etiqueta-comercio').textContent = nombreComercio;
     document.getElementById('etiqueta-nombre').textContent = prod.nombre;
     document.getElementById('etiqueta-codigo').textContent = `COD: ${prod.codigoDistribuidor || 'S/C'}`;

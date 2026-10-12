@@ -22,7 +22,7 @@ const bcrypt = require('bcryptjs');
         host: process.env.CENTRAL_DB_HOST || process.env.DB_HOST || '127.0.0.1',
         user: process.env.CENTRAL_DB_USER || process.env.DB_USER,
         password: process.env.CENTRAL_DB_PASSWORD || process.env.DB_PASSWORD,
-        database: process.env.CENTRAL_DB_NAME || 'si_central'
+        database: process.env.DB_CENTRAL_NAME || 'si_central'
     });
 
     const [filas] = await central.query(

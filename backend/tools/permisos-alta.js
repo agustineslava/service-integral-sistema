@@ -56,9 +56,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), 
 
 const mysql = require('mysql2/promise');
 const { configApp, configAdmin, nombreCentral } = require('../src/db/conexiones');
-
-/** La app necesita DML + DDL + REFERENCES para migraciones (foreign keys). */
-const PRIVILEGIOS_APP = 'SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES';
+const { PRIVILEGIOS_APP, patronDeBase, prefijoTenant } = require('../src/db/permisos');
 
 /** El usuario que concede es el que hay en el .env: asi no hay que hardcodear. */
 const USUARIO_ADMIN = process.env.DB_ADMIN_USER || 'si_tenant_admin';
@@ -82,13 +80,7 @@ function comprobar(ok, texto, detalle) {
     }
 }
 
-/**
- * Escapa el comodin de MySQL para que el nombre de la base se tome literal.
- * Sin esto, `si_tenant_%` matchearia tambien `si-tenant-cualquier-cosa`.
- */
-function patronDeBase(prefijo) {
-    return prefijo.replace(/_/g, '\\_');
-}
+// `patronDeBase` y `PRIVILEGIOS_APP` viven en `../src/db/permisos`.
 
 async function main() {
     const rootUser = process.argv[2] || 'root';
@@ -132,7 +124,7 @@ async function main() {
 
         // Sin WITH GRANT OPTION no puede dar permisos sobre bases que no creo
         // el mismo. Con el, el alta de F5b puede conceder sola.
-        const comodin = `\`${patronDeBase('si_tenant_')}%\``;
+        const comodin = `\`${patronDeBase(prefijoTenant())}%\``;
         const sql1 = `GRANT ${PRIVILEGIOS_APP} ON ${comodin}.* TO '${USUARIO_ADMIN}'@'localhost' WITH GRANT OPTION`;
 
         console.log(`  SQL: ${sql1}\n`);
@@ -171,9 +163,9 @@ async function main() {
         // verificaciones, si quedo alguna.
         const [bases] = await root.query(
             `SELECT SCHEMA_NAME AS nombre FROM information_schema.SCHEMATA
-              WHERE SCHEMA_NAME LIKE 'si\\_tenant\\_%' ORDER BY SCHEMA_NAME`
+              WHERE SCHEMA_NAME LIKE '${patronDeBase(prefijoTenant())}%' ORDER BY SCHEMA_NAME`
         );
-        console.log(`  Bases si_tenant_% que hay ahora: ${bases.length}`);
+        console.log(`  Bases ${prefijoTenant()}% que hay ahora: ${bases.length}`);
         if (!bases.length) {
             console.log('  (ninguna: todavia no se dio de alta ninguna empresa desde el panel)');
         }
@@ -195,7 +187,7 @@ async function main() {
         // Un permiso concedido puede no servir. Esta es la unica seccion que
         // importa: todo lo de arriba es declarativo, esto es lo que va a
         // pasar cuando un usuario abra una pantalla.
-        const prueba = 'si_tenant_permisos_test';
+        const prueba = `${prefijoTenant()}permisos_test`;
         try {
             await root.query(`DROP DATABASE IF EXISTS \`${prueba}\``);
             await root.query(`CREATE DATABASE \`${prueba}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`);

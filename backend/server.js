@@ -1,7 +1,7 @@
 /* ==========================================================================
    1. VARIABLES DE ENTORNO, DEPENDENCIAS Y LIBRERÍAS
    ========================================================================== */
-require('dotenv').config();
+require('./src/config/entorno');
 
 const express = require('express');
 const cors = require('cors');
@@ -13,15 +13,36 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
+const { ipCliente } = require('./src/http/ip-cliente');
 
 const app = express();
 
-// Habilitar proxy de confianza para Cloudflare Tunnel y express-rate-limit
-app.set('trust proxy', 1);
+// Habilitar proxy de confianza para Cloudflare Tunnel y express-rate-limit.
+// TRUST_PROXY = cuantos saltos de proxy confiar (Cloudflare Tunnel = 1). Por
+// defecto 1, igual que antes, para no cambiar el comportamiento actual.
+const TRUST_PROXY = process.env.TRUST_PROXY === undefined || process.env.TRUST_PROXY === ''
+    ? 1
+    : Number(process.env.TRUST_PROXY);
+if (!Number.isInteger(TRUST_PROXY) || TRUST_PROXY < 0) {
+    console.error('❌ TRUST_PROXY tiene que ser un entero >= 0 (saltos de proxy a confiar).');
+    process.exit(1);
+}
+app.set('trust proxy', TRUST_PROXY);
 
 const PORT = process.env.PORT || 3000;
+// Interface donde escucha la app. Por defecto 0.0.0.0 (todas) para no cambiar
+// el comportamiento actual. En produccion, detras del tunel, se recomienda
+// HOST=127.0.0.1: el tunel conecta por localhost, asi el :3000 no queda
+// alcanzable sin pasar por Cloudflare (plan R-3, paso 1).
 const HOST = process.env.HOST || '0.0.0.0';
 const JWT_SECRET = process.env.JWT_SECRET;
+
+// Marca de la plataforma (Aexia): es la que se ve cuando la pantalla no
+// pertenece a ninguna empresa (login antes de escribir el correo, panel del
+// superadmin, token roto). La marca de cada empresa sale de la central.
+const PLATAFORMA_NOMBRE = process.env.PLATAFORMA_NOMBRE || 'Aexia';
+const PLATAFORMA_SUBTITULO = process.env.PLATAFORMA_SUBTITULO || 'Gestión para talleres y comercios';
+const PLATAFORMA_LOGO = process.env.PLATAFORMA_LOGO || 'logos/aexia.svg';
 
 if (!JWT_SECRET) {
     console.error('❌ Falta JWT_SECRET en el archivo .env. El servidor no puede arrancar así.');
@@ -83,6 +104,26 @@ const registro = require('./src/servicios/registro');
 const central = require('./src/db/central');
 const altas = require('./src/servicios/altas');
 const soporte = require('./src/servicios/soporte');
+const { prefijoTenant, verificarPrefijoTenant } = require('./src/db/permisos');
+
+// Chequeo de arranque del prefijo de las bases de empresa. El nombre que arma
+// el alta (`altas.PREFIJO_DB`) y el patron del GRANT (`prefijoTenant()`) tienen
+// que salir de la MISMA variable. Si no coinciden (por ejemplo, alguien
+// reintroduce un literal), el alta crearia bases que el comodin no cubre y el
+// error recien aparece al usar la empresa. Mejor no arrancar.
+try {
+    verificarPrefijoTenant();
+    if (altas.PREFIJO_DB !== prefijoTenant()) {
+        throw new Error(
+            `El prefijo de altas ("${altas.PREFIJO_DB}") no coincide con ` +
+            `PREFIJO_TENANT ("${prefijoTenant()}").`
+        );
+    }
+} catch (e) {
+    console.error(`❌ ${e.message}`);
+    console.error('   Revisa PREFIJO_TENANT en backend/.env (default: si_tenant_).');
+    process.exit(1);
+}
 
 // El `db` que usan las rutas: mismos argumentos que el pool anterior
 // (db.query(sql, params, callback)), pero sale por la base de la empresa
@@ -107,23 +148,22 @@ central.verificar()
 /* ==========================================================================
    MARCA BLANCA: DE DONDE SALE Y QUE ES PUBLICA
    ==========================================================================
-   La marca de cada empresa vive en la fila de `empresas` de la base CENTRAL,
-   no en variables de entorno. Antes salia de `COMERCIO_*`: con eso, la empresa
-   numero 2 entra al sistema y ve en el header el nombre y el logo de la
-   numero 1, que es justamente lo que un sistema de varias empresas no puede
-   hacer.
+   Hay DOS marcas distintas:
+
+     - Plataforma (Aexia): dueña del sistema. Se ve cuando NO hay empresa
+       (login antes de escribir el correo, panel del superadmin, token roto).
+       Sale de `PLATAFORMA_*`, nunca de la fila de una empresa.
+     - Empresa: la fila de `empresas` de la base CENTRAL. Es lo que ve cada
+       cliente despues de identificarse.
 
    `/api/config-comercio` es PUBLICA a proposito: la tiene que poder leer la
    pantalla de login, que todavia no sabe de quien es el usuario. Por eso:
 
      - Si viene un token, se responde con la marca de ESA empresa.
      - Si no viene token (pantalla de login, o el logo antes de escribir el
-       mail), se responde con las variables de entorno, que son la marca de la
-       unica empresa que hay instalado.
-
-   La segunda parte es un puente, no la solución final: cuando exista la
-   busqueda "a que empresa pertenece este email" (F5b), la pantalla de login va
-   a preguntar por la empresa y no va a necesitar este camino de aqui.
+       mail), se responde con la marca de la plataforma.
+     - Si el token es de un SUPERADMIN, tambien es la plataforma: ese usuario
+       no pertenece a ninguna empresa.
 
    Que sea publica no filtra nada: los mismos datos (nombre, logo, telefono,
    direccion) salen impresos en los comprobantes que el cliente se lleva.
@@ -144,7 +184,9 @@ central.verificar()
 function datosDeMarca(e) {
     if (!e) return null;
     return {
-        nombre: e.nombre,
+        // Una empresa siempre tiene nombre; si faltara, no se muestra vacio:
+        // cae al nombre de la plataforma (decision D6 del plan de marca).
+        nombre: e.nombre || PLATAFORMA_NOMBRE,
         subtitulo: e.subtitulo,
         logo_url: e.logo_url,
         color_primario: e.color_primario,
@@ -156,13 +198,13 @@ function datosDeMarca(e) {
     };
 }
 
-/** La marca de las variables de entorno: el puente para el que no tiene token. */
-function marcaDeEntorno() {
+/** La marca de la PLATAFORMA: la que se ve cuando la pantalla no es de ninguna empresa. */
+function marcaDePlataforma() {
     return {
-        nombre: process.env.COMERCIO_NOMBRE || 'Sistema de Gestión',
-        subtitulo: process.env.COMERCIO_SUBTITULO || 'Gestión de Stock y Taller',
+        nombre: PLATAFORMA_NOMBRE,
+        subtitulo: PLATAFORMA_SUBTITULO,
         // Sin barra inicial porque `marca.js` normaliza las rutas relativas.
-        logo_url: process.env.COMERCIO_LOGO || 'logos/logo.jpg',
+        logo_url: PLATAFORMA_LOGO,
         color_primario: null,
         color_secundario: null,
         telefono: null,
@@ -182,10 +224,9 @@ app.get('/api/config-comercio', async (req, res) => {
     const slug = req.query.slug; // opcional: pre-login lookup por slug
 
     // Un token VÁLIDO que no pertenece a ninguna empresa (el SUPERADMIN) se
-    // distingue de la ausencia de token. Con el codigo anterior los dos caian
-    // al final y recibian `marcaDeEntorno()`, o sea la marca de Service
-    // Integral: entrar a login.html con la sesion del panel abierta volvia a
-    // poner el nombre de Service Integral en una pantalla que no es de nadie.
+    // distingue de la ausencia de token. Los dos reciben la marca de la
+    // plataforma: una pantalla que no es de ninguna empresa no puede mostrar
+    // el nombre de una.
     let tokenValido = false;
 
     if (token) {
@@ -209,13 +250,13 @@ app.get('/api/config-comercio', async (req, res) => {
     }
 
     // Con un token de SUPERADMIN no hay empresa que marcar. Se responde igual
-    // (esta ruta nunca dice "no") pero avisando que no hay marca, y el cliente
-    // deja la pantalla neutral en vez de inventar una.
+    // (esta ruta nunca dice "no") con la marca de la plataforma, avisando que
+    // no hay empresa para que el cliente no la trate como si fuera una.
     if (tokenValido) {
-        return res.json({ ...marcaDeEntorno(), sin_empresa: true });
+        return res.json({ ...marcaDePlataforma(), sin_empresa: true });
     }
 
-    res.json(marcaDeEntorno());
+    res.json(marcaDePlataforma());
 });
 
 // F5c — Lookup empresa por email (sin auth, rate-limited)
@@ -232,7 +273,7 @@ const limitadorLookupEmail = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Demasiadas consultas. Espera un minuto.' },
-    keyGenerator: (req) => req.ip
+    keyGenerator: (req) => ipCliente(req)
 });
 
 app.get('/api/central/empresa-por-email', limitadorLookupEmail, async (req, res) => {
@@ -398,7 +439,8 @@ function rutaOriginal(req) {
      etiquetas_qr, presupuestos, reportes, facturacion   (todavia sin rutas)
 
    Quedan SIN módulo a propósito, porque no son funcionalidad vendible sino
-   infraestructura: /api/usuarios, /api/upload, /api/delete-image.
+   infraestructura: /api/usuarios, /api/delete-image. `/api/upload` SI lleva
+   `stock`: sube las fotos de producto.
 
    POR QUÉ 404 Y NO 403
    Un 403 confirmaría que la sección existe pero no la podés usar, lo cual le
@@ -568,7 +610,11 @@ const limitadorLogin = rateLimit({
     max: 8,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: 'Demasiados intentos de inicio de sesión. Probá de nuevo en unos minutos.' }
+    message: { error: 'Demasiados intentos de inicio de sesión. Probá de nuevo en unos minutos.' },
+    // La clave sale del helper: confia en CF-Connecting-IP solo si el socket
+    // es loopback (vino por el tunel) y, si no, usa la IP del socket. Con el
+    // default (req.ip) un XFF forjado elegia la clave del limite.
+    keyGenerator: (req) => ipCliente(req)
 });
 
 // Hash descartable. Cuando el email no existe se compara igual contra esto,
@@ -852,7 +898,8 @@ const limitadorCambioPassword = rateLimit({
     max: 10,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: 'Demasiados intentos. Probá de nuevo en unos minutos.' }
+    message: { error: 'Demasiados intentos. Probá de nuevo en unos minutos.' },
+    keyGenerator: (req) => ipCliente(req)
 });
 
 app.post('/api/usuarios/cambiar-password', verificarToken, limitadorCambioPassword, async (req, res) => {
@@ -1265,15 +1312,34 @@ async function borrarImagenDeCloudinary(imageUrl) {
     }
 }
 
-app.post('/api/upload', verificarToken, requiereAdmin, upload.single('imagen'), (req, res) => {
+/**
+ * Normaliza el slug de una empresa para usarlo como carpeta en Cloudinary.
+ *
+ * El slug ya vive en `[a-z0-9-]` (lo garantiza `altas.js`), pero se limpia
+ * igual: que un dato viejo o raro nunca arme una ruta con `/`, `..` ni acentos.
+ * La carpeta la elige SIEMPRE el servidor, nunca el cliente.
+ */
+function slugParaCarpeta(slug) {
+    return String(slug || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '')
+        .slice(0, 60);
+}
+
+app.post('/api/upload', verificarToken, requiereModulo('stock'), requiereAdmin, upload.single('imagen'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No se subió ningún archivo' });
     }
 
     const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
 
+    // Carpeta por empresa, sacada del token (`req.empresa.slug`). Los archivos
+    // viejos que ya viven en `service_integral/` no se mueven: Cloudinary sirve
+    // por URL completa, asi que las URLs guardadas siguen funcionando.
+    const carpeta = `aexia/${slugParaCarpeta(req.empresa.slug)}/archivos`;
+
     cloudinary.uploader.upload(fileBase64, {
-        folder: 'service_integral',
+        folder: carpeta,
         transformation: [
             { width: 800, height: 800, crop: "limit" },
             { quality: "auto" },
@@ -1300,12 +1366,28 @@ app.post('/api/delete-image', verificarToken, requiereAdmin, (req, res) => {
         return res.status(400).json({ error: 'La URL no pertenece a Cloudinary' });
     }
 
-    cloudinary.uploader.destroy(publicId, (err, result) => {
-        if (err) {
-            console.error('❌ Error al borrar en Cloudinary:', err);
-            return res.status(500).json({ error: 'No se pudo eliminar de la nube' });
+    // Solo se borra una imagen que ESTA empresa tenga en sus datos. La consulta
+    // corre en la base del token (tenant), asi que la URL de otra empresa no
+    // aparece y no se puede borrar. Cubre tambien las URLs legacy guardadas
+    // antes de las carpetas por empresa. Si no es suya: 404, que no confirma
+    // que exista (mismo criterio que el resto del aislamiento entre empresas).
+    const sql = 'SELECT 1 FROM productos WHERE imagen_1 = ? OR imagen_2 = ? OR imagen_3 = ? LIMIT 1';
+    db.query(sql, [imageUrl, imageUrl, imageUrl], (errVerificar, filas) => {
+        if (errVerificar) {
+            console.error('❌ Error al verificar la imagen antes de borrar:', errVerificar);
+            return res.status(500).json({ error: 'No se pudo verificar la imagen' });
         }
-        res.json({ mensaje: 'Imagen eliminada de la nube con éxito', resultado: result });
+        if (!filas || filas.length === 0) {
+            return res.status(404).json({ error: 'La imagen no pertenece a esta empresa' });
+        }
+
+        cloudinary.uploader.destroy(publicId, (err, result) => {
+            if (err) {
+                console.error('❌ Error al borrar en Cloudinary:', err);
+                return res.status(500).json({ error: 'No se pudo eliminar de la nube' });
+            }
+            res.json({ mensaje: 'Imagen eliminada de la nube con éxito', resultado: result });
+        });
     });
 });
 
@@ -3672,7 +3754,10 @@ function rutaAdmin(fn) {
     };
 }
 
-const ipDe = (req) => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || null;
+// IP para la auditoria. Antes tomaba la entrada IZQUIERDA de X-Forwarded-For,
+// que el cliente puede forjar; ahora sale del helper (CF-Connecting-IP solo si
+// el socket es loopback, si no la IP del socket).
+const ipDe = (req) => ipCliente(req);
 
 // --- listado ---------------------------------------------------------------
 
@@ -4411,10 +4496,19 @@ app.post('/api/admin/subir-logo', verificarSuperAdmin, rutaAdmin(async (req, res
     const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
 
     const url = await new Promise((resolve, reject) => {
+        // Carpeta por empresa cuando el slug se conoce (edicion: el panel lo
+        // manda y el servidor lo valida a `[a-z0-9-]`). En el ALTA la fila
+        // todavia no existe y el slug final puede llevar sufijo (`slugLibre`
+        // agrega `-2`), asi que ahi cae en la carpeta de plataforma. Los logos
+        // viejos de `service_integral/logos` no se mueven: sus URLs siguen
+        // funcionando.
+        const slugEmpresa = slugParaCarpeta(req.body.slug);
+        const carpetaLogo = slugEmpresa ? `aexia/${slugEmpresa}/logos` : 'aexia/_plataforma/logos';
+
         cloudinary.uploader.upload(fileBase64, {
             // Carpeta propia: un logo de empresa no se confunde nunca con una
             // foto de producto si alguna vez hay que depurar el lado del CDN.
-            folder: 'service_integral/logos',
+            folder: carpetaLogo,
             transformation: [
                 // El logo se imprime chico en el encabezado del presupuesto, asi
                 // que se limita el ancho. `limit` con las dos medidas mantiene la
@@ -4455,26 +4549,42 @@ app.post('/api/admin/subir-logo', verificarSuperAdmin, rutaAdmin(async (req, res
    ========================================================================== */
 
 const respaldo = require('./src/jobs/backup');
+const { nombreCentral } = require('./src/db/conexiones');
 
 async function realizarBackup() {
     const carpeta = path.join(__dirname, 'backups');
-    console.log('💾 Iniciando backup automático de la base de datos...');
+    console.log('💾 Iniciando backup automático (central + empresas)...');
 
     try {
-        const r = await respaldo.ejecutarDump({ carpetaDestino: carpeta });
+        // La lista de bases SALE de la central, nunca hardcodeada: cada
+        // empresa con nombre_db propio recibe su propio archivo. Si la
+        // consulta a la central falla, no se dumpera nada (mejor que
+        // respaldar a ciegas una lista equivocada).
+        const filas = await central.query(
+            `SELECT nombre_db FROM empresas WHERE nombre_db IS NOT NULL AND nombre_db <> ''`
+        );
+        const bases = [nombreCentral(), ...filas.map((f) => f.nombre_db)];
+        console.log(`   Bases a respaldar (${bases.length}): ${bases.join(', ')}`);
 
-        console.log(`✅ Backup VERIFICADO: ${r.nombreArchivo}`);
-        console.log(`   ${(r.bytes / 1024).toFixed(2)} KB · ${r.tablas} tablas · ${r.duracionSeg}s`);
+        const res = await respaldo.ejecutarBackupCompleto({ carpetaDestino: carpeta, bases });
 
-        const off = respaldo.copiarOffsite(r.ruta, r.nombreArchivo);
-        if (off.ok) {
-            console.log(`☁️  Copia externa: ${off.destino}`);
-        } else if (off.motivo !== 'BACKUP_OFFSITE_DIR no configurado') {
-            console.error(`⚠️  No se pudo copiar la copia externa: ${off.motivo}`);
+        for (const r of res.resultados) {
+            if (r.ok) {
+                console.log(`✅ ${r.archivo} · ${(r.bytes / 1024).toFixed(2)} KB · ${r.tablas} tablas · ${r.duracionSeg}s`);
+                if (r.offsite && r.offsite.ok) {
+                    console.log(`   ☁️  Copia externa: ${r.offsite.destino}`);
+                } else if (r.offsite && r.offsite.motivo !== 'BACKUP_OFFSITE_DIR no configurado') {
+                    console.error(`   ⚠️  Sin copia externa para ${r.base}: ${r.offsite.motivo}`);
+                }
+            } else {
+                console.error(`❌ ${r.base}: ${r.error}`);
+            }
         }
 
-        const borrados = respaldo.limpiarBackupsViejos(carpeta, respaldo.RETENCION_DIAS_DEFAULT);
-        if (borrados) console.log(`🧹 ${borrados} backup(s) antiguo(s) eliminado(s)`);
+        console.log(`   Resumen: ${res.listos}/${res.total} base(s) respaldadas`);
+        if (res.fallidos.length) {
+            console.error(`   Fallaron: ${res.fallidos.map((f) => f.base).join(', ')}`);
+        }
 
     } catch (err) {
         // Este mensaje va a stderr -> logs/errores.log
@@ -4530,7 +4640,7 @@ cron.schedule('*/5 * * * *', () => {
    13. INICIALIZACIÓN Y PUESTA EN MARCHA DEL SERVIDOR
    ========================================================================== */
 const servidor = app.listen(PORT, HOST, () => {
-    console.log(`🚀 Servidor de Service Integral activo.`);
+    console.log(`🚀 Servidor de ${PLATAFORMA_NOMBRE} activo.`);
     console.log(`🔒 Escuchando en el puerto ${PORT}.`);
 });
 

@@ -259,7 +259,10 @@ btnCopiar.addEventListener('click', () => {
         return;
     }
 
-    let textoFormateado = `🛠️ *PEDIDO DE REPUESTOS - SERVICE INTEGRAL*\n`;
+    // El encabezado del pedido lo firma la EMPRESA, no la plataforma: sale de
+    // `window.MARCA_ACTUAL` (lo deja `marca.js`), nunca de un literal fijo.
+    const nombreComercio = (window.MARCA_ACTUAL && window.MARCA_ACTUAL.nombre) || '';
+    let textoFormateado = `🛠️ *PEDIDO DE REPUESTOS${nombreComercio ? ' - ' + nombreComercio.toUpperCase() : ''}*\n`;
     textoFormateado += `-----------------------------------------------\n`;
 
     listaPedidoActual.forEach(item => {

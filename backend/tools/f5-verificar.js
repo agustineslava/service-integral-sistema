@@ -27,7 +27,7 @@
  *
  * LAS TRES COSAS QUE SE COMPRUEBAN Y QUE ANTES NO PASABAN
  *   1. `/api/config-comercio` con token devuelve la fila de ESA empresa.
- *   2. Sin token, ni con token roto, devuelve la marca de entorno y NO filtra
+ *   2. Sin token, ni con token roto, devuelve la marca de la plataforma y NO filtra
  *      la marca de ninguna empresa: la pantalla de login es pública.
  *   3. Los tres endpoints que arman la marca (config-comercio, mi-empresa y
  *      el comprobante) devuelven el MISMO conjunto de campos. Antes cada uno
@@ -54,6 +54,11 @@ const { configAdmin, nombreCentral } = require('../src/db/conexiones');
 const PUERTO = process.env.PORT || 3000;
 const BASE_URL = `http://127.0.0.1:${PUERTO}`;
 
+// La marca de la plataforma sale de `PLATAFORMA_*` (el mismo valor por defecto
+// que usa el servidor). Es lo que ve una pantalla que no es de ninguna empresa:
+// login antes de escribir el correo, superadmin y token roto.
+const NOMBRE_PLATAFORMA = process.env.PLATAFORMA_NOMBRE || 'Aexia';
+
 const PREFIJO = 'f5-prueba';
 const CLAVE = 'F5ClaveDePrueba123';
 
@@ -73,7 +78,8 @@ const EMPRESAS = {
         marca: {
             subtitulo: 'Motos y Maquinas',
             // OJO: los tres logos tienen que ser DISTINTOS entre si y
-            // distintos del `COMERCIO_LOGO` del `.env`. El detector de fugas
+            // distintos del `PLATAFORMA_LOGO` por defecto (`logos/aexia.svg`).
+            // El detector de fugas
             // compara valores exactos, asi que si dos comparten logo no puede
             // distinguir "le robe el logo al otro" de "coinciden": marca un
             // falso positivo y hace dudar de un acierto. Un color repetido
@@ -295,13 +301,13 @@ async function main() {
         const tokenS = firmar({ id: S.idUsuario, nombre: 'S', rol: 'ADMIN' }, S.idEmpresa);
 
         // -------------------------------------------------------------------
-        titulo('1. SIN SESION: LA MARCA DE ENTORNO, Y NO LA DE NADIE');
+        titulo('1. SIN SESION: LA MARCA DE LA PLATAFORMA, Y NO LA DE NADIE');
 
         const sinSesion = await pedir('/api/config-comercio');
         comprobar(sinSesion.estado === 200, 'Sin token responde 200, no 401', sinSesion);
         comprobar(
-            sinSesion.cuerpo && sinSesion.cuerpo.nombre === (process.env.COMERCIO_NOMBRE || 'Sistema de Gestión'),
-            'Sin token sale la marca de las variables de entorno',
+            sinSesion.cuerpo && sinSesion.cuerpo.nombre === NOMBRE_PLATAFORMA,
+            'Sin token sale la marca de la plataforma (PLATAFORMA_NOMBRE)',
             sinSesion.cuerpo
         );
 
@@ -358,7 +364,7 @@ async function main() {
         }
 
         // -------------------------------------------------------------------
-        titulo('4. TOKENS ROTOS: CAEN A LA MARCA DE ENTORNO, SIN ERROR');
+        titulo('4. TOKENS ROTOS: CAEN A LA MARCA DE LA PLATAFORMA, SIN ERROR');
 
         const rotos = [
             ['texto que no es un token', 'esto-no-es-un-jwt'],
@@ -370,8 +376,8 @@ async function main() {
             const r = await pedir('/api/config-comercio', token);
             comprobar(r.estado === 200, `${desc}: responde 200 y no 500`, r);
             comprobar(
-                r.cuerpo && r.cuerpo.nombre === (process.env.COMERCIO_NOMBRE || 'Sistema de Gestión'),
-                `${desc}: cae a la marca de entorno`,
+                r.cuerpo && r.cuerpo.nombre === NOMBRE_PLATAFORMA,
+                `${desc}: cae a la marca de la plataforma`,
                 r.cuerpo && r.cuerpo.nombre
             );
         }
@@ -444,7 +450,7 @@ async function main() {
         comprobar(rS.estado === 200, 'La empresa suspendida recibe 200 en config-comercio', rS.estado);
         comprobar(
             rS.cuerpo && rS.cuerpo.nombre === EMPRESAS.s.nombre,
-            'Y ve su propia marca, no la de entorno',
+            'Y ve su propia marca, no la de la plataforma',
             rS.cuerpo && rS.cuerpo.nombre
         );
         comprobar(

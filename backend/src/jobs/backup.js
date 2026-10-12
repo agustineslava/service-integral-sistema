@@ -148,6 +148,10 @@ function ejecutarDump(opciones = {}) {
     const rutaTmp    = rutaFinal + '.tmp';
 
     // --single-transaction : snapshot consistente, NO requiere LOCK TABLES
+    // --skip-add-locks     : NO emite LOCK/UNLOCK TABLES en el .sql. Restaurar
+    //                        un dump con esas lineas exige el privilegio LOCK
+    //                        TABLES, que la wildcard si_tenant_% no otorga a
+    //                        si_tenant_admin (solo el grant explicito por base).
     // --no-tablespaces     : NO requiere el privilegio PROCESS
     // --set-gtid-purged=OFF: evita warnings y hace el dump portable
     // --triggers           : los triggers van incluidos (no exige privilegio extra)
@@ -156,6 +160,7 @@ function ejecutarDump(opciones = {}) {
     const args = [
         `-h${dbHost}`, `-P${dbPort}`, `-u${dbUser}`,
         '--single-transaction',
+        '--skip-add-locks',
         '--no-tablespaces',
         '--set-gtid-purged=OFF',
         '--triggers',
@@ -288,6 +293,88 @@ function copiarOffsite(rutaOrigen, nombreArchivo) {
 }
 
 /**
+ * BACKUP MULTI-BASE: la central + todas las bases de empresa.
+ *
+ * La lista de bases la arma quien llama (server.js en el cron, tools/backup.js
+ * en el CLI) consultando `si_central.empresas.nombre_db`. Aca no se consulta
+ * nada: el job solo recibe nombres y respalda.
+ *
+ * Regla del incidente 30/09: un backup NUNCA puede tirar el proceso. Por eso
+ * cada base corre en su propio try/catch y esto devuelve un resumen, no lanza,
+ * salvo que la lista quede vacia (ahí sí devuelve { ok:false }).
+ *
+ * Usuario de mysqldump: BACKUP_DB_USER / BACKUP_DB_PASSWORD si están
+ * configurados (usuario de SOLO LECTURA); si no, DB_USER / DB_PASSWORD
+ * (comportamiento anterior). Los permisos mínimos del usuario de backup están
+ * documentados en backend/.env.example.
+ */
+async function ejecutarBackupCompleto({ carpetaDestino, bases = [], dias } = {}) {
+    const usuarioDump = process.env.BACKUP_DB_USER || process.env.DB_USER;
+    const claveDump   = process.env.BACKUP_DB_PASSWORD || process.env.DB_PASSWORD;
+    const retencion   = dias || Number(process.env.BACKUP_DIAS_RETENCION) || RETENCION_DIAS_DEFAULT;
+
+    // Normalizar a minúsculas, dedupe y descartar vacíos. En Linux MySQL
+    // distingue mayúsculas y `si_central` guarda `nombre_db` en minúsculas;
+    // en Windows 'ServiceIntegralsistema' y 'serviceintegralsistema' son la
+    // misma base. Ver normalizarBase() en src/db/conexiones.js.
+    const vistos = new Set();
+    const basesFinales = [];
+    for (const b of bases) {
+        if (!b || typeof b !== 'string') continue;
+        const nombre = b.trim().toLowerCase();
+        if (!nombre || vistos.has(nombre)) continue;
+        vistos.add(nombre);
+        basesFinales.push(nombre);
+    }
+
+    if (basesFinales.length === 0) {
+        return {
+            ok: false,
+            total: 0,
+            listos: 0,
+            fallidos: [{ base: '(sin bases)', error: 'La lista de bases quedó vacía.' }],
+            resultados: []
+        };
+    }
+
+    const resultados = [];
+    for (const base of basesFinales) {
+        try {
+            const r = await ejecutarDump({
+                dbName: base,
+                dbUser: usuarioDump,
+                dbPassword: claveDump,
+                carpetaDestino
+            });
+            const off = copiarOffsite(r.ruta, r.nombreArchivo);
+            resultados.push({
+                base,
+                ok: true,
+                archivo: r.nombreArchivo,
+                bytes: r.bytes,
+                tablas: r.tablas,
+                duracionSeg: r.duracionSeg,
+                offsite: off
+            });
+        } catch (e) {
+            resultados.push({ base, ok: false, error: e.message, stderr: e.stderr || null });
+        }
+    }
+
+    // Una sola pasada de retención al final (elimina .sql viejos de cualquier base).
+    limpiarBackupsViejos(carpetaDestino, retencion);
+
+    const fallidos = resultados.filter((r) => !r.ok);
+    return {
+        ok: fallidos.length === 0,
+        total: resultados.length,
+        listos: resultados.length - fallidos.length,
+        fallidos,
+        resultados
+    };
+}
+
+/**
  * Corrige el desfase de zona horaria: los nombres viejos dicen 23:00:00
  * pero el backup se genera a las 20:00 hora local.
  */
@@ -306,6 +393,7 @@ function renombrarBackupsConZonaIncorrecta(carpetaDestino) {
 
 module.exports = {
     ejecutarDump,
+    ejecutarBackupCompleto,
     limpiarBackupsViejos,
     copiarOffsite,
     renombrarBackupsConZonaIncorrecta,

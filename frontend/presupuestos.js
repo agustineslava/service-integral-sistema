@@ -508,7 +508,7 @@ function dibujarComprobante() {
     const contacto = [empresa.direccion, empresa.telefono, empresa.email_contacto, empresa.cuit]
         .filter(Boolean);
 
-    // El logo viene de la central como `logos/logo.jpg`. Si no hay, no se
+    // El logo viene de la central (la marca de la empresa). Si no hay, no se
     // muestra un ícono roto: la hoja sale sin logo y sigue siendo válida.
     let logo = '';
     if (empresa.logo_url) {

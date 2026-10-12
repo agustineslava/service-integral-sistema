@@ -49,9 +49,14 @@ const bcrypt = require('bcryptjs');
 const central = require('../db/central');
 const migraciones = require('../db/migrations');
 const { configAdmin, nombreCentral } = require('../db/conexiones');
+const { concederPermisosApp, nombreDeBaseValido, prefijoTenant } = require('../db/permisos');
 
-/** Prefijo de las bases de los clientes. `si_tenant_admin` solo tiene permisos aca. */
-const PREFIJO_DB = 'si_tenant_';
+/**
+ * Prefijo de las bases de los clientes. Sale de `PREFIJO_TENANT` (ver
+ * `src/db/permisos.js`): el admin de bases solo tiene permisos bajo ese patron.
+ * Se calcula al cargar el modulo, despues de `dotenv`.
+ */
+const PREFIJO_DB = prefijoTenant();
 
 
 /**
@@ -103,17 +108,8 @@ const noEncontrado = (mensaje) => conEstado(mensaje, 404);
  */
 const RUTA_ESQUEMA = path.join(__dirname, '..', '..', 'schema', 'base.sql');
 
-/**
- * Un nombre de base solo puede llevar letras, numeros y guion bajo.
- *
- * No es paranoia: el nombre va metido en un `CREATE DATABASE \`...\`` que no
- * se puede preparar como un `?`. El nombre lo genera este archivo, pero si
- * someday se acepta de afuera, un nombre con un acento grave seria inyeccion
- * de SQL. Se valida igual.
- */
-function nombreDeBaseValido(nombre) {
-    return typeof nombre === 'string' && /^[A-Za-z0-9_]+$/.test(nombre) && nombre.length <= 64;
-}
+// `nombreDeBaseValido` y el SQL de los GRANT viven en `../db/permisos`: un solo
+// lugar para lo que no se puede parametrizar con `?`.
 
 /**
  * "Taller Don Carlos" -> "taller-don-carlos"
@@ -236,9 +232,7 @@ async function darPermisos(nombreDb) {
     const usuarioApp = process.env.DB_USER || 'service_integral_app';
     const admin = await mysql.createConnection(configAdmin(nombreCentral()));
     try {
-        await admin.query(
-            `GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES ON \`${nombreDb}\`.* TO '${usuarioApp}'@'localhost'`
-        );
+        await concederPermisosApp(admin, nombreDb);
     } catch (err) {
         // Este es EL error que aparece mientras falte correr `permisos-alta`,
         // asi que dice que hacer. "Access denied" a secas, sin mas, deja al

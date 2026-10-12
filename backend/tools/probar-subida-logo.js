@@ -38,9 +38,10 @@ const PNG_1X1 = Buffer.from(
     'base64'
 );
 
-async function subir(tok, nombre, contenido, tipo) {
+async function subir(tok, nombre, contenido, tipo, slug) {
     const fd = new FormData();
     fd.append('imagen', new Blob([contenido], { type: tipo }), nombre);
+    if (slug) fd.append('slug', slug);
     const r = await fetch(`${API}/api/admin/subir-logo`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${tok}` },
@@ -65,8 +66,8 @@ function publicIdDe(url) {
 
 /* `--limpiar <url>` borra de Cloudinary una imagen que ya no se usa.
    Existe porque cada prueba de subida deja un archivo real en el CDN, y sin
-   esto la carpeta `service_integral/logos` se llena de imagenes de prueba que
-   alguien tiene que adivinar cuales son. */
+   esto la carpeta de logos se llena de imagenes de prueba que alguien tiene
+   que adivinar cuales son. */
 async function limpiar(url) {
     const publicId = publicIdDe(url);
     if (!publicId) {
@@ -138,15 +139,16 @@ if (process.argv[2] === '--limpiar') {
         { estado: gigante.estado, error: gigante.cuerpo && gigante.cuerpo.error });
 
     console.log('\n[3] La subida real');
-    const buena = await subir(tokSuper, 'service-integral-test.png', PNG_1X1, 'image/png');
+    const SLUG_PRUEBA = 'prueba-subida';
+    const buena = await subir(tokSuper, 'service-integral-test.png', PNG_1X1, 'image/png', SLUG_PRUEBA);
     const okPng = buena.estado === 200
         && typeof buena.cuerpo.url === 'string'
         && buena.cuerpo.url.startsWith('https://');
     comprobar(okPng, 'un PNG valido -> 200 con la URL de Cloudinary', buena);
 
     if (okPng) {
-        comprobar(buena.cuerpo.url.includes('service_integral/logos'),
-            'la URL cae en la carpeta propia de logos (no se confunde con fotos de producto)',
+        comprobar(buena.cuerpo.url.includes(`aexia/${SLUG_PRUEBA}/logos`),
+            'la URL cae en la carpeta de logos de la empresa (no se confunde con fotos de producto)',
             buena.cuerpo.url);
 
         // Y que la URL se pueda pedir de verdad. Si el CDN devuelve 404, el logo

@@ -23,47 +23,18 @@ const mysql = require('mysql2/promise');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
 
 const { configAdmin, nombreCentral } = require('../src/db/conexiones');
 const migraciones = require('../src/db/migrations');
+const { prefijoTenant, patronDeBase, verificarPrefijoTenant } = require('../src/db/permisos');
+// La creacion del SuperAdmin y la entrada interactiva viven en un solo lugar
+// (superadmin.js); f1 solo las reutiliza para no tener dos versiones.
+const { preguntar, buscarPorEmail, crearSuperadmin } = require('./superadmin');
 
 const RUTA_ENV = path.join(__dirname, '..', '.env');
 const USUARIO_TENANT_ADMIN = process.env.DB_ADMIN_USER || 'si_tenant_admin';
 const APP_USER = process.env.DB_USER;
 const DB_ACTUAL = process.env.DB_NAME;
-
-// --------------------------------------------------------------------------
-// Entrada interactiva
-// --------------------------------------------------------------------------
-function preguntar(texto, { oculto = false } = {}) {
-    return new Promise((resolve) => {
-        process.stdout.write(texto);
-
-        if (!oculto || !process.stdin.isTTY) {
-            const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
-            rl.question('', (r) => { rl.close(); resolve(r.trim()); });
-            return;
-        }
-
-        const stdin = process.stdin;
-        let buf = '';
-        const alRecibir = (chunk) => {
-            for (const ch of chunk.toString('utf8')) {
-                if (ch === '\r' || ch === '\n') {
-                    stdin.setRawMode(false); stdin.pause();
-                    stdin.removeListener('data', alRecibir);
-                    process.stdout.write('\n');
-                    return resolve(buf);
-                }
-                if (ch === '\u0003') { process.stdout.write('\n'); process.exit(130); }
-                if (ch === '\u007F' || ch === '\b') buf = buf.slice(0, -1);
-                else buf += ch;
-            }
-        };
-        stdin.setRawMode(true); stdin.resume(); stdin.on('data', alRecibir);
-    });
-}
 
 /** Reescribe .env preservando todo lo demas, y respalda el anterior. */
 function actualizarEnv(cambios) {
@@ -92,14 +63,36 @@ function actualizarEnv(cambios) {
 (async () => {
     const CENTRAL = nombreCentral();
 
+    // Si el prefijo esta mal, el comodin del GRANT no cubriria las bases que
+    // crea el alta. Mejor fallar antes de tocar MySQL.
+    let PATRON_TENANT;
+    try {
+        PATRON_TENANT = patronDeBase(verificarPrefijoTenant());
+    } catch (e) {
+        console.error(`\n❌ ${e.message}`);
+        console.error('   Revisa PREFIJO_TENANT en backend/.env (default: si_tenant_).\n');
+        process.exit(1);
+    }
+
     console.log('='.repeat(70));
     console.log(' F1 - INSTALACION DE LA BASE CENTRAL');
     console.log('='.repeat(70));
     console.log(` Base central        : ${CENTRAL}`);
     console.log(` Base actual         : ${DB_ACTUAL}`);
+    console.log(` Prefijo empresas    : ${prefijoTenant()}`);
     console.log(` Usuario aplicacion  : ${APP_USER}`);
     console.log(` Usuario admin bases : ${USUARIO_TENANT_ADMIN}`);
     console.log('='.repeat(70) + '\n');
+
+    // DB_NAME es legado: es la base de la empresa #1, NO la plataforma. Este
+    // instalador todavia lo usa para dar permisos a la base legada (se
+    // desacopla en un paso siguiente del plan). Solo se avisa; el .env no se
+    // toca y el comportamiento no cambia.
+    if (process.env.DB_NAME) {
+        console.log(`  [!] DB_NAME=${process.env.DB_NAME} es legado (base de la empresa #1, no de la plataforma).`);
+        console.log('      `install:plataforma` no deberia depender de el. Para importar esa empresa:');
+        console.log(`        npm run importar-empresa -- --nombre "..." --slug ... --base ${process.env.DB_NAME}\n`);
+    }
 
     const rootUser = (await preguntar('Usuario administrador de MySQL [root]: ')) || 'root';
     const rootPass = await preguntar(`Contrasena de ${rootUser}: `, { oculto: true });
@@ -170,8 +163,8 @@ function actualizarEnv(cambios) {
     const permisos = [
         [`ALL sobre la base central (${CENTRAL})`,
          `GRANT ALL PRIVILEGES ON \`${CENTRAL}\`.* TO ?@'localhost'`],
-        ['ALL sobre las bases de las empresas (si_tenant_*)',
-         `GRANT ALL PRIVILEGES ON \`si_tenant_%\`.* TO ?@'localhost'`],
+        ['ALL sobre las bases de las empresas (' + prefijoTenant() + '*)',
+         `GRANT ALL PRIVILEGES ON \`${PATRON_TENANT}%\`.* TO ?@'localhost'`],
         [`ALL sobre la base actual (${DB_ACTUAL})`,
          `GRANT ALL PRIVILEGES ON \`${DB_ACTUAL}\`.* TO ?@'localhost'`],
         ['recargar privilegios', 'FLUSH PRIVILEGES']
@@ -214,7 +207,7 @@ function actualizarEnv(cambios) {
     }
 
     try {
-        // Las bases de las empresas se llaman si_tenant_*. Este permiso comodín
+        // Las bases de las empresas se llaman <PREFIJO_TENANT>*. Este permiso comodín
         // se da UNA sola vez y cubre a todas las empresas, presentes y futuras:
         // así, dar de alta un cliente nuevo no tiene que tocar privilegios de
         // MySQL (que requeriría GRANT OPTION y es un paso más donde fallar).
@@ -227,13 +220,13 @@ function actualizarEnv(cambios) {
         // src/db/tenant.js y src/servicios/registro.js). Lo que lo prueba es
         // `npm run f2:verificar`.
         //
-        // La base del taller actual no se llama si_tenant_* (se dejó con su
+        // La base del taller actual no se llama <PREFIJO_TENANT>* (se dejó con su
         // nombre original para no renombrarla), así que lleva su permiso aparte.
         await raiz.query(
-            `GRANT SELECT, INSERT, UPDATE, DELETE ON \`si_tenant_%\`.* TO ?@'localhost'`,
+            `GRANT SELECT, INSERT, UPDATE, DELETE ON \`${PATRON_TENANT}%\`.* TO ?@'localhost'`,
             [APP_USER]
         );
-        anotar(true, `${APP_USER} puede leer/escribir las bases de las empresas (si_tenant_*)`);
+        anotar(true, `${APP_USER} puede leer/escribir las bases de las empresas (${prefijoTenant()}*)`);
     } catch (e) {
         anotar(false, `permisos de ${APP_USER} sobre las bases de las empresas`, e.message);
     }
@@ -293,9 +286,7 @@ function actualizarEnv(cambios) {
         console.log('  [SKIP]  email invalido: no se creo el SuperAdmin');
         console.log('          Podes crearlo despues con: npm run superadmin');
     } else {
-        const [[existente]] = await centralAdmin.query(
-            'SELECT id, nombre FROM usuarios_globales WHERE email = ?', [emailSuper]
-        );
+        const existente = await buscarPorEmail(centralAdmin, emailSuper);
         if (existente) {
             anotar(true, `ya existe un usuario con ${emailSuper} (no se modifico)`);
         } else {
@@ -305,12 +296,7 @@ function actualizarEnv(cambios) {
                 passSuper = crypto.randomBytes(12).toString('base64url').slice(0, 16);
                 generada = true;
             }
-            const hash = await bcrypt.hash(passSuper, 10);
-            await centralAdmin.query(
-                `INSERT INTO usuarios_globales (empresa_id, email, password_hash, nombre, rol, activo)
-                 VALUES (NULL, ?, ?, 'SuperAdmin', 'SUPERADMIN', 1)`,
-                [emailSuper, hash]
-            );
+            await crearSuperadmin(centralAdmin, emailSuper, passSuper);
             anotar(true, `SuperAdmin ${emailSuper} creado`);
             if (generada) {
                 console.log('\n  ' + '='.repeat(62));

@@ -19,7 +19,7 @@
  *
  * NO deja basura: la empresa y la base de prueba se borran siempre.
  */
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env'), quiet: true });
+require('../src/config/entorno');
 
 const fs = require('fs');
 const path = require('path');
@@ -27,11 +27,14 @@ const mysql = require('mysql2/promise');
 const jwt = require('jsonwebtoken');
 const { configApp, configAdmin, nombreCentral } = require('../src/db/conexiones');
 const central = require('../src/db/central');
+const { prefijoTenant } = require('../src/db/permisos');
+
+const PREFIJO_TENANT = prefijoTenant();
 
 const PUERTO = process.env.PORT || 3000;
 const BASE_URL = `http://127.0.0.1:${PUERTO}`;
 const DB_TALLER = process.env.DB_NAME;
-const DB_PRUEBA = 'si_tenant_prueba_aislamiento';
+const DB_PRUEBA = `${PREFIJO_TENANT}prueba_aislamiento`;
 const SLUG_PRUEBA = 'prueba-aislamiento';
 const PRODUCTO_PRUEBA = 'PRODUCTO-DE-OTRA-EMPRESA';
 
@@ -366,12 +369,19 @@ async function main() {
     titulo('4. Aislamiento: una empresa no ve los datos de otra');
 
     // Antes de crear nada: el usuario de la app necesita el permiso comodín
-    // sobre las bases de las empresas (si_tenant_*). Se da una sola vez, en la
-    // instalación. Si falta, se dice qué hacer y no se ensucia nada.
+    // sobre las bases de las empresas (<PREFIJO_TENANT>*). Se da una sola vez,
+    // en la instalación. Si falta, se dice qué hacer y no se ensucia nada.
     const appCon = await mysql.createConnection(configApp(nombreCentral()));
     const [grantsApp] = await appCon.query('SHOW GRANTS');
     await appCon.end();
-    const tieneComodin = grantsApp.some((g) => /si_tenant_%/.test(Object.values(g)[0]));
+    // SHOW GRANTS puede mostrar el comodin escapado (`si\_tenant\_%`) o sin
+    // escapar (`si_tenant_%`), segun como se otorgo. Se normaliza quitando las
+    // barras y se busca el token completo (con los backticks y el %), no el
+    // prefijo suelto, para no confundirlo con una base puntual.
+    const comodinGrant = `\`${PREFIJO_TENANT}%\``;
+    const tieneComodin = grantsApp.some((g) =>
+        String(Object.values(g)[0]).replace(/\\/g, '').includes(comodinGrant)
+    );
 
     if (!tieneComodin) {
         console.log('');
@@ -381,7 +391,7 @@ async function main() {
         await cerrarYResumir();
         return;
     }
-    console.log('  [OK]    la app tiene permiso sobre las bases si_tenant_*');
+    console.log(`  [OK]    la app tiene permiso sobre las bases ${PREFIJO_TENANT}*`);
 
     const admin = await mysql.createConnection(configAdmin(nombreCentral()));
     let empresaPruebaId = null;
